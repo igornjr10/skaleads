@@ -14,16 +14,395 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ad_sets: {
+        Row: {
+          campaign_id: string
+          clicks: number
+          created_at: string
+          id: string
+          impressions: number
+          meta_adset_id: string | null
+          name: string
+          spend: number
+          status: string
+        }
+        Insert: {
+          campaign_id: string
+          clicks?: number
+          created_at?: string
+          id?: string
+          impressions?: number
+          meta_adset_id?: string | null
+          name: string
+          spend?: number
+          status?: string
+        }
+        Update: {
+          campaign_id?: string
+          clicks?: number
+          created_at?: string
+          id?: string
+          impressions?: number
+          meta_adset_id?: string | null
+          name?: string
+          spend?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_sets_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads: {
+        Row: {
+          ad_set_id: string
+          clicks: number
+          created_at: string
+          id: string
+          impressions: number
+          meta_ad_id: string | null
+          name: string
+          spend: number
+          status: string
+        }
+        Insert: {
+          ad_set_id: string
+          clicks?: number
+          created_at?: string
+          id?: string
+          impressions?: number
+          meta_ad_id?: string | null
+          name: string
+          spend?: number
+          status?: string
+        }
+        Update: {
+          ad_set_id?: string
+          clicks?: number
+          created_at?: string
+          id?: string
+          impressions?: number
+          meta_ad_id?: string | null
+          name?: string
+          spend?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_ad_set_id_fkey"
+            columns: ["ad_set_id"]
+            isOneToOne: false
+            referencedRelation: "ad_sets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alert_events: {
+        Row: {
+          alert_id: string
+          campaign_id: string | null
+          id: string
+          metric_value: number
+          status: string
+          triggered_at: string
+        }
+        Insert: {
+          alert_id: string
+          campaign_id?: string | null
+          id?: string
+          metric_value: number
+          status?: string
+          triggered_at?: string
+        }
+        Update: {
+          alert_id?: string
+          campaign_id?: string | null
+          id?: string
+          metric_value?: number
+          status?: string
+          triggered_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alert_events_alert_id_fkey"
+            columns: ["alert_id"]
+            isOneToOne: false
+            referencedRelation: "alerts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "alert_events_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      alerts: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          metric: string
+          name: string
+          operator: string
+          threshold: number
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          metric: string
+          name: string
+          operator: string
+          threshold: number
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          metric?: string
+          name?: string
+          operator?: string
+          threshold?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "alerts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaign_daily_metrics: {
+        Row: {
+          clicks: number
+          client_id: string
+          date: string
+          id: string
+          impressions: number
+          spend: number
+        }
+        Insert: {
+          clicks?: number
+          client_id: string
+          date: string
+          id?: string
+          impressions?: number
+          spend?: number
+        }
+        Update: {
+          clicks?: number
+          client_id?: string
+          date?: string
+          id?: string
+          impressions?: number
+          spend?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_daily_metrics_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campaigns: {
+        Row: {
+          clicks: number
+          client_id: string
+          conversions: number
+          cpc: number
+          cpm: number
+          created_at: string
+          ctr: number
+          id: string
+          impressions: number
+          meta_campaign_id: string | null
+          name: string
+          objective: string | null
+          spend: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          clicks?: number
+          client_id: string
+          conversions?: number
+          cpc?: number
+          cpm?: number
+          created_at?: string
+          ctr?: number
+          id?: string
+          impressions?: number
+          meta_campaign_id?: string | null
+          name: string
+          objective?: string | null
+          spend?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          clicks?: number
+          client_id?: string
+          conversions?: number
+          cpc?: number
+          cpm?: number
+          created_at?: string
+          ctr?: number
+          id?: string
+          impressions?: number
+          meta_campaign_id?: string | null
+          name?: string
+          objective?: string | null
+          spend?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaigns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          created_at: string
+          id: string
+          meta_access_token: string | null
+          meta_ad_account_id: string | null
+          meta_connected_at: string | null
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          meta_access_token?: string | null
+          meta_ad_account_id?: string | null
+          meta_connected_at?: string | null
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          meta_access_token?: string | null
+          meta_ad_account_id?: string | null
+          meta_connected_at?: string | null
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          read?: boolean
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin_or_owner: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "owner" | "admin" | "analyst" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +529,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["owner", "admin", "analyst", "viewer"],
+    },
   },
 } as const
