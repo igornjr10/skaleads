@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip as ReTooltip, CartesianGrid } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { runAudit, loadLatestAudit, loadAuditHistory } from "@/lib/audit/runner";
+import { prioritizeAuditActions } from "@/lib/ai-service";
 import type { AuditCategory, AuditCheckResult, AuditReport } from "@/lib/audit/types";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -16,8 +18,9 @@ import { ptBR } from "date-fns/locale";
 import {
   AlertTriangle, CheckCircle, XCircle, SkipForward, RefreshCw, FileText,
   ArrowLeft, ShieldCheck, Zap, LayoutGrid, PaintBucket, DollarSign, Building2,
-  ChevronDown, ChevronUp, Info,
+  ChevronDown, ChevronUp, Info, Brain, Loader2, Copy,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -270,6 +273,10 @@ export default function ClientAudit() {
   const [progress, setProgress] = useState({ done: 0, total: 0, name: '' });
   const [filter, setFilter] = useState<'all' | 'fail' | 'warn' | 'pass' | 'skip'>('all');
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const [showPrioritization, setShowPrioritization] = useState(false);
+  const [prioritization, setPrioritization] = useState<string | null>(null);
+  const [prioritizationLoading, setPrioritizationLoading] = useState(false);
+  const [prioritizationUsage, setPrioritizationUsage] = useState<{ tokens: { input: number; output: number }; cost: number; cached: boolean } | null>(null);
 
   useEffect(() => {
     if (!clientId) return;
@@ -304,6 +311,41 @@ export default function ClientAudit() {
     }
   }
 
+  async function handlePrioritizeAudit() {
+    if (!report) return;
+
+    setPrioritizationLoading(true);
+    try {
+      const auditData = report.results.map(r => ({
+        id: r.id,
+        name: r.name,
+        status: r.status,
+        severity: r.severity,
+        details: r.details,
+      }));
+
+      const result = await prioritizeAuditActions({ auditResults: auditData });
+      setPrioritization(result.prioritization);
+      setPrioritizationUsage({
+        tokens: result.tokens,
+        cost: result.cost,
+        cached: result.cached,
+      });
+      toast.success(`Priorização concluída ${result.cached ? "(em cache)" : ""}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao priorizar ações");
+    } finally {
+      setPrioritizationLoading(false);
+    }
+  }
+
+  function copyPrioritizationToClipboard() {
+    if (prioritization) {
+      navigator.clipboard.writeText(prioritization);
+      toast.success("Priorização copiada para clipboard");
+    }
+  }
+
   const filtered = report?.results.filter(r => filter === 'all' || r.status === filter) ?? [];
   const issueCount = report?.results.filter(r => r.status === 'fail' || r.status === 'warn').length ?? 0;
   const failCount  = report?.results.filter(r => r.status === 'fail').length ?? 0;
@@ -333,9 +375,14 @@ export default function ClientAudit() {
         </div>
         <div className="flex gap-2">
           {report && (
-            <Button variant="outline" onClick={() => printReport(report, client?.name ?? '')}>
-              <FileText className="mr-2 h-4 w-4" />Gerar PDF
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => printReport(report, client?.name ?? '')}>
+                <FileText className="mr-2 h-4 w-4" />Gerar PDF
+              </Button>
+              <Button variant="outline" onClick={() => { setPrioritization(null); setShowPrioritization(true); }}>
+                <Brain className="mr-2 h-4 w-4" />Análise IA
+              </Button>
+            </>
           )}
           <Button onClick={handleRunAudit} disabled={running}>
             <RefreshCw className={`mr-2 h-4 w-4 ${running ? 'animate-spin' : ''}`} />
@@ -528,6 +575,84 @@ export default function ClientAudit() {
           </TabsContent>
         </Tabs>
       )}
+
+      {/* AI Prioritization Dialog */}
+      <Dialog open={showPrioritization} onOpenChange={setShowPrioritization}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-purple-500" />
+              Priorização Inteligente de Ações — {client?.name}
+            </DialogTitle>
+            <DialogDescription>
+              IA analisa esforço vs impacto para sugerir ordem de priorização
+            </DialogDescription>
+          </DialogHeader>
+
+          {prioritization ? (
+            <div className="space-y-4">
+              <Card>
+                <CardContent className="pt-4">
+                  <div className="prose prose-sm max-w-none dark:prose-invert text-sm">
+                    <ReactMarkdown>{prioritization}</ReactMarkdown>
+                  </div>
+
+                  {prioritizationUsage && (
+                    <div className="mt-4 pt-4 border-t text-xs text-muted-foreground">
+                      <div className="flex justify-between">
+                        <span>Tokens: {prioritizationUsage.tokens.input} in / {prioritizationUsage.tokens.output} out</span>
+                        <span>Custo: ${prioritizationUsage.cost.toFixed(6)}</span>
+                        {prioritizationUsage.cached && <span>📦 Em cache</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    size="sm"
+                    onClick={copyPrioritizationToClipboard}
+                    className="w-full mt-4"
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Copiar priorização
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            <Card className="bg-muted/30">
+              <CardContent className="py-8 text-center">
+                {prioritizationLoading ? (
+                  <div className="flex flex-col items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                    <p className="text-xs text-muted-foreground">Analisando com IA...</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Clique em "Priorizar com IA" para gerar análise</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          <Button
+            onClick={handlePrioritizeAudit}
+            disabled={prioritizationLoading || !report}
+            className="w-full"
+          >
+            {prioritizationLoading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Analisando...
+              </>
+            ) : (
+              <>
+                <Brain className="mr-2 h-4 w-4" />
+                Priorizar com IA
+              </>
+            )}
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
