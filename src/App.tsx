@@ -14,6 +14,9 @@ import Alerts from "./pages/Alerts";
 import Settings from "./pages/Settings";
 import Andromeda from "./pages/Andromeda";
 import ClientAudit from "./pages/ClientAudit";
+import ClientReports from "./pages/ClientReports";
+import ReportShare from "./pages/ReportShare";
+import ReportSchedules from "./pages/ReportSchedules";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,8 +37,11 @@ const App = () => (
               <Route path="/alerts" element={<Alerts />} />
               <Route path="/andromeda" element={<Andromeda />} />
               <Route path="/clients/:id/audit" element={<ClientAudit />} />
+              <Route path="/clients/:id/reports" element={<ClientReports />} />
+              <Route path="/report-schedules" element={<ReportSchedules />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
+            <Route path="/share/reports/:token" element={<ReportShare />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

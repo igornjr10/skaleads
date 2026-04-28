@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Link2, RefreshCw, Facebook, ShieldCheck } from "lucide-react";
+import { Plus, Link2, RefreshCw, Facebook, ShieldCheck, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -412,6 +412,9 @@ export default function Clients() {
                           )}
                           <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${c.id}/audit`)}>
                             <ShieldCheck className="mr-2 h-3 w-3" />Auditar
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${c.id}/reports`)}>
+                            <FileText className="mr-2 h-3 w-3" />Relatórios
                           </Button>
                         </div>
                       )}

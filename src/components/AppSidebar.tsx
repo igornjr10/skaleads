@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Megaphone, Bell, Settings, Flame, Brain } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Bell, Settings, Flame, Brain, FileText, Calendar } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -22,6 +22,7 @@ const items = [
   { title: "Campanhas", url: "/campaigns", icon: Megaphone },
   { title: "Alertas", url: "/alerts", icon: Bell },
   { title: "Andromeda", url: "/andromeda", icon: Brain },
+  { title: "Agendamentos", url: "/report-schedules", icon: Calendar },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 
