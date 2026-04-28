@@ -37,13 +37,15 @@ export async function getBreakdown(
   dimension: Dimension
 ): Promise<BreakdownRow[]> {
   const dateStart = format(subDays(new Date(), days), "yyyy-MM-dd");
+  const dateStop = format(new Date(), "yyyy-MM-dd");
 
   const { data, error } = await supabase
     .from("ad_breakdowns")
     .select("dimension_value, impressions, clicks, spend, conversions, reach")
     .eq("client_id", clientId)
     .eq("dimension", dimension)
-    .gte("date_start", dateStart);
+    .lte("date_start", dateStop)
+    .gte("date_stop", dateStart);
 
   if (error) throw error;
 

@@ -353,7 +353,24 @@ export async function syncAdDailyMetrics(
 }
 
 // ── Extended sync: audience breakdowns ───────────────────────────────────────
-const DIMENSIONS = ["age", "gender", "placement", "device_platform", "publisher_platform", "country"] as const;
+const DIMENSIONS = ["age", "gender", "placement", "device_platform", "publisher_platform", "country", "region"] as const;
+
+function resolveDatePresetRange(datePreset: string): { dateStart: string; dateStop: string } {
+  const today = new Date();
+  const dateStop = today.toISOString().split("T")[0];
+
+  const presetDays: Record<string, number> = {
+    last_7d: 7,
+    last_14d: 14,
+    last_30d: 30,
+    last_90d: 90,
+  };
+
+  const days = presetDays[datePreset] ?? 30;
+  const dateStart = new Date(today.getTime() - days * 86400000).toISOString().split("T")[0];
+
+  return { dateStart, dateStop };
+}
 
 export async function syncAudienceBreakdowns(
   clientId: string,
@@ -365,6 +382,7 @@ export async function syncAudienceBreakdowns(
   const accountId = normalizeAccountId(adAccountId);
   const token = accessToken.trim();
   let total = 0;
+  const { dateStart, dateStop } = resolveDatePresetRange(datePreset);
 
   for (const dimension of DIMENSIONS) {
     onProgress?.(`Buscando breakdown: ${dimension}...`);
@@ -377,11 +395,6 @@ export async function syncAudienceBreakdowns(
         access_token: token,
         limit: "500",
       });
-
-      const today = new Date();
-      const dateStop = today.toISOString().split("T")[0];
-      const dateStart = new Date(today.getTime() - 30 * 86400000).toISOString().split("T")[0];
-
       for (const row of rows) {
         const dimValue = (row as any)[dimension] as string | undefined;
         if (!dimValue) continue;

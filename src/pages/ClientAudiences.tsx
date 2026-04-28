@@ -68,6 +68,24 @@ interface BreakdownTabProps {
   metric: keyof BreakdownRow;
 }
 
+function getBreakdownErrorMessage(error: unknown): string {
+  if (typeof error === "object" && error && "message" in error) {
+    const message = String(error.message);
+
+    if (
+      message.includes('relation "public.ad_breakdowns" does not exist') ||
+      message.includes("Could not find the table 'public.ad_breakdowns'") ||
+      message.includes("schema cache")
+    ) {
+      return 'Tabela de breakdown não encontrada no Supabase. Aplique a migration "creative_analytics" no banco.';
+    }
+
+    return `Erro ao carregar breakdown: ${message}`;
+  }
+
+  return "Erro ao carregar breakdown";
+}
+
 function BreakdownTab({ clientId, dimension, days, metric }: BreakdownTabProps) {
   const [rows, setRows] = useState<BreakdownRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +94,7 @@ function BreakdownTab({ clientId, dimension, days, metric }: BreakdownTabProps) 
     setLoading(true);
     getBreakdown(clientId, days, dimension)
       .then(setRows)
-      .catch(() => toast.error("Erro ao carregar breakdown"))
+      .catch((error) => toast.error(getBreakdownErrorMessage(error)))
       .finally(() => setLoading(false));
   }, [clientId, dimension, days]);
 
