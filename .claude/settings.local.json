@@ -4,7 +4,9 @@
       "Bash(git push *)",
       "Bash(node -e ' *)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "PowerShell(scoop install *)",
+      "PowerShell(supabase functions *)"
     ]
   }
 }

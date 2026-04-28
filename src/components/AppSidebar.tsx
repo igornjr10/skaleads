@@ -38,18 +38,39 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       {/* ── Header ─────────────────────────────────────────── */}
-      <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-3 px-2 py-3">
-          <MarketProLogo size={38} className="shrink-0 rounded-lg shadow-glow" />
-          {!collapsed && (
-            <div className="flex flex-col leading-tight">
-              <span className="text-[15px] font-bold tracking-tight text-sidebar-foreground">
-                MarketProAds
-              </span>
-              <span className="text-[11px] text-muted-foreground">Meta Ads Manager</span>
+      <SidebarHeader className="border-b border-sidebar-border bg-gradient-to-b from-[#0a0a0a] to-[#111111]">
+        {collapsed ? (
+          <div className="flex items-center justify-center py-4">
+            <div className="relative">
+              <div className="absolute inset-0 rounded-xl bg-orange-500/20 blur-md" />
+              <MarketProLogo size={36} className="relative shrink-0 rounded-xl ring-1 ring-orange-500/30" />
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3 px-3 py-5">
+            {/* Logo com glow */}
+            <div className="relative">
+              <div className="absolute inset-0 rounded-2xl bg-orange-500/25 blur-lg scale-110" />
+              <MarketProLogo
+                size={64}
+                className="relative shrink-0 rounded-2xl ring-1 ring-orange-500/40 shadow-[0_0_24px_rgba(249,115,22,0.25)]"
+              />
+            </div>
+
+            {/* Brand name */}
+            <div className="flex flex-col items-center gap-0.5 text-center">
+              <span className="text-[17px] font-extrabold tracking-tight text-white leading-none">
+                MarketPro<span className="text-orange-400">Ads</span>
+              </span>
+              <span className="text-[10px] font-medium tracking-[0.22em] uppercase text-orange-500/80">
+                Manager
+              </span>
+            </div>
+
+            {/* Linha decorativa */}
+            <div className="w-full h-px bg-gradient-to-r from-transparent via-orange-500/40 to-transparent" />
+          </div>
+        )}
       </SidebarHeader>
 
       {/* ── Nav ────────────────────────────────────────────── */}
