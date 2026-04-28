@@ -12,6 +12,7 @@ import Clients from "./pages/Clients";
 import Campaigns from "./pages/Campaigns";
 import Alerts from "./pages/Alerts";
 import Settings from "./pages/Settings";
+import Andromeda from "./pages/Andromeda";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
               <Route path="/clients" element={<Clients />} />
               <Route path="/campaigns" element={<Campaigns />} />
               <Route path="/alerts" element={<Alerts />} />
+              <Route path="/andromeda" element={<Andromeda />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
