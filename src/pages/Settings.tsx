@@ -139,7 +139,7 @@ export default function Settings() {
                 </a>
               </li>
               <li>Em <strong className="text-foreground">Configurações → Básico</strong>, adicione em <em>Domínios do App</em> o domínio onde o app estará hospedado (ex: <code className="rounded bg-muted px-1 font-mono text-xs">localhost</code> para dev)</li>
-              <li>Em <strong className="text-foreground">Facebook Login → Configurações</strong>, adicione nas <em>URIs de redirecionamento OAuth válidas</em>: <code className="rounded bg-muted px-1 font-mono text-xs">https://seu-dominio.com</code> e <code className="rounded bg-muted px-1 font-mono text-xs">http://localhost:5173</code></li>
+              <li>Em <strong className="text-foreground">Facebook Login → Configurações</strong>, adicione nas <em>URIs de redirecionamento OAuth válidas</em>: <code className="rounded bg-muted px-1 font-mono text-xs">https://ad-campaign-hub-one.vercel.app/</code> e <code className="rounded bg-muted px-1 font-mono text-xs">http://localhost:5173</code></li>
               <li>Certifique-se de que o produto <strong className="text-foreground">Marketing API</strong> está adicionado ao App</li>
             </ol>
           </div>
