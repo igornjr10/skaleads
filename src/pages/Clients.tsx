@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Plus, Link2, RefreshCw, Facebook } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Link2, RefreshCw, Facebook, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -33,6 +34,7 @@ interface Client {
 export default function Clients() {
   const { role } = useAuth();
   const canManage = role === "owner" || role === "admin";
+  const navigate = useNavigate();
 
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
@@ -408,6 +410,9 @@ export default function Clients() {
                               {syncingId === c.id ? syncProgress || "Sincronizando..." : "Sincronizar"}
                             </Button>
                           )}
+                          <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${c.id}/audit`)}>
+                            <ShieldCheck className="mr-2 h-3 w-3" />Auditar
+                          </Button>
                         </div>
                       )}
                     </TableCell>
