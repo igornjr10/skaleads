@@ -101,6 +101,8 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   const coverStyle = { ...styles.cover, backgroundColor: primary };
 
   const campaigns = data.topCampaigns.slice(0, 10);
+  const hasRevenueData = data.summary.revenue > 0 || campaigns.some(c => c.revenue > 0);
+  const recommendationPage = campaigns.length > 0 ? 4 : 3;
 
   return (
     <Document title={`Relatório — ${data.client.name}`} author={data.branding.agencyName || "MarketProAds"}>
@@ -134,17 +136,21 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
               <Text style={styles.kpiValue}>{fmtCurrency(data.summary.spend)}</Text>
             </View>
             <View style={styles.kpiBox}>
-              <Text style={styles.kpiLabel}>Receita</Text>
-              <Text style={styles.kpiValue}>{fmtCurrency(data.summary.revenue)}</Text>
-            </View>
-            <View style={styles.kpiBox}>
-              <Text style={styles.kpiLabel}>ROAS</Text>
-              <Text style={styles.kpiValue}>{data.summary.roas.toFixed(2)}x</Text>
-            </View>
-            <View style={styles.kpiBox}>
               <Text style={styles.kpiLabel}>Conversões</Text>
               <Text style={styles.kpiValue}>{fmtNum(data.summary.conversions)}</Text>
             </View>
+            {hasRevenueData && (
+              <View style={styles.kpiBox}>
+                <Text style={styles.kpiLabel}>Receita</Text>
+                <Text style={styles.kpiValue}>{fmtCurrency(data.summary.revenue)}</Text>
+              </View>
+            )}
+            {hasRevenueData && (
+              <View style={styles.kpiBox}>
+                <Text style={styles.kpiLabel}>ROAS</Text>
+                <Text style={styles.kpiValue}>{data.summary.roas.toFixed(2)}x</Text>
+              </View>
+            )}
           </View>
 
           <View style={[styles.kpiRow, { marginBottom: 0 }]}>
@@ -183,8 +189,8 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
             <View style={styles.tableHeader}>
               <Text style={[styles.tableHeaderCell, styles.colName]}>Campanha</Text>
               <Text style={[styles.tableHeaderCell, styles.colNum]}>Investimento</Text>
-              <Text style={[styles.tableHeaderCell, styles.colNum]}>Receita</Text>
-              <Text style={[styles.tableHeaderCell, styles.colNum]}>ROAS</Text>
+              {hasRevenueData && <Text style={[styles.tableHeaderCell, styles.colNum]}>Receita</Text>}
+              {hasRevenueData && <Text style={[styles.tableHeaderCell, styles.colNum]}>ROAS</Text>}
               <Text style={[styles.tableHeaderCell, styles.colNum]}>Conversões</Text>
               <Text style={[styles.tableHeaderCell, styles.colStatus]}>Status</Text>
             </View>
@@ -193,8 +199,8 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
               <View key={i} style={[styles.tableRow, i % 2 === 1 && styles.tableRowAlt]}>
                 <Text style={[styles.tableCell, styles.colName]} numberOfLines={2}>{c.name}</Text>
                 <Text style={[styles.tableCell, styles.colNum]}>{fmtCurrency(c.spend)}</Text>
-                <Text style={[styles.tableCell, styles.colNum]}>{fmtCurrency(c.revenue)}</Text>
-                <Text style={[styles.tableCell, styles.colNum]}>{c.roas.toFixed(2)}x</Text>
+                {hasRevenueData && <Text style={[styles.tableCell, styles.colNum]}>{fmtCurrency(c.revenue)}</Text>}
+                {hasRevenueData && <Text style={[styles.tableCell, styles.colNum]}>{c.roas.toFixed(2)}x</Text>}
                 <Text style={[styles.tableCell, styles.colNum]}>{fmtNum(c.conversions)}</Text>
                 <Text style={[styles.tableCell, styles.colStatus]}>{c.status}</Text>
               </View>
@@ -211,7 +217,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
           <View style={styles.divider} />
           <Text style={styles.recText}>{data.recommendations || "Nenhuma recomendação registrada para este período."}</Text>
         </View>
-        <Footer agency={data.branding.agencyName} page={campaigns.length > 0 ? 4 : 3} />
+        <Footer agency={data.branding.agencyName} page={recommendationPage} />
       </Page>
     </Document>
   );

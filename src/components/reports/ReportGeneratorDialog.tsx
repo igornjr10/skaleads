@@ -57,45 +57,42 @@ export function ReportGeneratorDialog({
   }
 
   async function buildReportData(): Promise<ReportData> {
-    const { data: metricsRaw } = await supabase
+    const { data: metricsRaw, error: metricsError } = await supabase
       .from("campaign_daily_metrics")
-      .select("spend, revenue, impressions, clicks, conversions, campaigns(name, status, client_id)")
+      .select("spend, impressions, clicks")
+      .eq("client_id", clientId)
       .gte("date", startDate)
       .lte("date", endDate);
 
-    const metrics = (metricsRaw || []).filter(
-      (m: any) => m.campaigns?.client_id === clientId
-    );
+    if (metricsError) throw metricsError;
+
+    const { data: campaignsRaw, error: campaignsError } = await supabase
+      .from("campaigns")
+      .select("name, status, spend, conversions")
+      .eq("client_id", clientId);
+
+    if (campaignsError) throw campaignsError;
+
+    const metrics = metricsRaw || [];
+    const campaigns = campaignsRaw || [];
 
     const summary = metrics.reduce(
       (acc: any, m: any) => ({
         spend: acc.spend + (m.spend || 0),
-        revenue: acc.revenue + (m.revenue || 0),
+        revenue: acc.revenue,
         impressions: acc.impressions + (m.impressions || 0),
         clicks: acc.clicks + (m.clicks || 0),
-        conversions: acc.conversions + (m.conversions || 0),
+        conversions: acc.conversions,
       }),
       { spend: 0, revenue: 0, impressions: 0, clicks: 0, conversions: 0 }
     );
 
+    summary.conversions = campaigns.reduce((total: number, campaign: any) => total + (campaign.conversions || 0), 0);
     summary.roas = summary.spend > 0 ? summary.revenue / summary.spend : 0;
     summary.ctr = summary.impressions > 0 ? (summary.clicks / summary.impressions) * 100 : 0;
 
-    // Aggregate per campaign
-    const campaignMap = new Map<string, any>();
-    for (const m of metrics as any[]) {
-      const name = m.campaigns?.name || "Desconhecida";
-      const status = m.campaigns?.status || "—";
-      if (!campaignMap.has(name)) {
-        campaignMap.set(name, { name, status, spend: 0, revenue: 0, conversions: 0 });
-      }
-      const c = campaignMap.get(name)!;
-      c.spend += m.spend || 0;
-      c.revenue += m.revenue || 0;
-      c.conversions += m.conversions || 0;
-    }
-    const topCampaigns = Array.from(campaignMap.values())
-      .map(c => ({ ...c, roas: c.spend > 0 ? c.revenue / c.spend : 0 }))
+    const topCampaigns = campaigns
+      .map(c => ({ ...c, revenue: 0, roas: 0 }))
       .sort((a, b) => b.roas - a.roas)
       .slice(0, 10);
 
