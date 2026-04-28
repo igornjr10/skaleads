@@ -81,8 +81,8 @@ async function callClaudeWithRetry(
     : [{ role: "user", content: prompt }];
 
   const body = {
-    model: "claude-3-5-sonnet-20241022",
-    max_tokens: 1024,
+    model: "claude-sonnet-4-6",
+    max_tokens: 4096,
     system: systemPrompt,
     messages: finalMessages,
   };

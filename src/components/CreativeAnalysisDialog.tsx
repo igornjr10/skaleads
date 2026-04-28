@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Loader2, Zap, Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 import { analyzeCreatives } from "@/lib/ai-service";
-import { ReactMarkdown } from "react-markdown";
+import ReactMarkdown from "react-markdown";
 
 interface Creative {
   id: string;

@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, Wand2, Copy, Plus, History } from "lucide-react";
 import { toast } from "sonner";
 import { generateCopy } from "@/lib/ai-service";
-import { ReactMarkdown } from "react-markdown";
+import ReactMarkdown from "react-markdown";
 
 interface CopyGenerationDialogProps {
   isOpen: boolean;
