@@ -124,17 +124,61 @@ export default function Settings() {
 
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle>Integração Meta Ads</CardTitle>
-          <CardDescription>Configure o app Meta para conectar contas de anúncio</CardDescription>
+          <CardTitle>Integração Meta Ads — App configurado</CardTitle>
+          <CardDescription>App ID: 2156684861751630</CardDescription>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Para ativar a conexão OAuth com o Facebook/Instagram, crie um app no{" "}
-            <a href="https://developers.facebook.com/" target="_blank" rel="noreferrer" className="text-primary underline">
-              Facebook Developers
-            </a>
-            , adicione o produto "Marketing API" e nos forneça o App ID e App Secret. Vamos te guiar nesse setup quando estiver pronto.
-          </p>
+        <CardContent className="space-y-5 text-sm text-muted-foreground">
+
+          <div className="space-y-2">
+            <p className="font-medium text-foreground">1. Configurar o App no Meta Developers</p>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>
+                Acesse{" "}
+                <a href="https://developers.facebook.com/apps/2156684861751630/settings/basic/" target="_blank" rel="noreferrer" className="text-primary underline">
+                  developers.facebook.com → seu App
+                </a>
+              </li>
+              <li>Em <strong className="text-foreground">Configurações → Básico</strong>, adicione em <em>Domínios do App</em> o domínio onde o app estará hospedado (ex: <code className="rounded bg-muted px-1 font-mono text-xs">localhost</code> para dev)</li>
+              <li>Em <strong className="text-foreground">Facebook Login → Configurações</strong>, adicione nas <em>URIs de redirecionamento OAuth válidas</em>: <code className="rounded bg-muted px-1 font-mono text-xs">https://seu-dominio.com</code> e <code className="rounded bg-muted px-1 font-mono text-xs">http://localhost:5173</code></li>
+              <li>Certifique-se de que o produto <strong className="text-foreground">Marketing API</strong> está adicionado ao App</li>
+            </ol>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-foreground">2. Implantar a Edge Function no Supabase</p>
+            <p>A Edge Function <code className="rounded bg-muted px-1 font-mono text-xs">meta-exchange-token</code> faz a troca segura do token (sem expor o App Secret no frontend). Para implantá-la:</p>
+            <ol className="list-decimal space-y-1 pl-5">
+              <li>
+                Acesse{" "}
+                <a href="https://supabase.com/dashboard/project/npfcxgijwrxrssinpkdw/functions" target="_blank" rel="noreferrer" className="text-primary underline">
+                  Supabase → Edge Functions
+                </a>
+                {" "}e crie uma nova função chamada <code className="rounded bg-muted px-1 font-mono text-xs">meta-exchange-token</code>
+              </li>
+              <li>Cole o conteúdo de <code className="rounded bg-muted px-1 font-mono text-xs">supabase/functions/meta-exchange-token/index.ts</code></li>
+              <li>
+                Em{" "}
+                <a href="https://supabase.com/dashboard/project/npfcxgijwrxrssinpkdw/settings/vault" target="_blank" rel="noreferrer" className="text-primary underline">
+                  Supabase → Settings → Edge Function Secrets
+                </a>
+                , adicione as variáveis:
+                <br />
+                <code className="rounded bg-muted px-1 font-mono text-xs">META_APP_ID</code> = <code className="rounded bg-muted px-1 font-mono text-xs">2156684861751630</code>
+                <br />
+                <code className="rounded bg-muted px-1 font-mono text-xs">META_APP_SECRET</code> = (sua chave secreta)
+              </li>
+            </ol>
+          </div>
+
+          <div className="space-y-2">
+            <p className="font-medium text-foreground">3. Conectar clientes</p>
+            <p>
+              Com a Edge Function implantada, vá em{" "}
+              <strong className="text-foreground">Clientes → Conectar Meta → aba "Via Facebook"</strong>{" "}
+              para conectar cada cliente via popup OAuth. O fluxo manual (token de sistema) também continua disponível na aba "Token manual".
+            </p>
+          </div>
+
         </CardContent>
       </Card>
     </div>
