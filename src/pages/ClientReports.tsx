@@ -58,6 +58,7 @@ export default function ClientReports() {
   const [client, setClient] = useState<Client | null>(null);
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -75,13 +76,21 @@ export default function ClientReports() {
 
   async function fetchReports() {
     setLoading(true);
+    setLoadError(null);
     const { data, error } = await supabase
       .from("reports")
       .select("id, name, period, status, share_token, share_expires_at, view_count, created_at, data")
       .eq("client_id", clientId!)
       .order("created_at", { ascending: false });
 
-    if (error) toast.error("Erro ao carregar relatórios");
+    if (error) {
+      const message = error.message.includes("permission denied")
+        ? "Sem permissao para ler relatorios no Supabase. Aplique a migration de grants."
+        : `Erro ao carregar relatorios: ${error.message}`;
+      setLoadError(message);
+      toast.error(message);
+    }
+
     setReports((data as any) || []);
     setLoading(false);
   }
@@ -148,6 +157,17 @@ export default function ClientReports() {
         <div className="space-y-3">
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
         </div>
+      ) : loadError ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+            <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+            <p className="font-medium">Nao foi possivel carregar os relatorios</p>
+            <p className="text-sm text-muted-foreground mt-1">{loadError}</p>
+            <Button className="mt-4" variant="outline" onClick={fetchReports}>
+              Tentar novamente
+            </Button>
+          </CardContent>
+        </Card>
       ) : reports.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
