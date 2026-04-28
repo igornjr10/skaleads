@@ -1,8 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Link2, RefreshCw, Facebook, ShieldCheck, FileText, Image, Users } from "lucide-react";
+import {
+  Plus,
+  Link2,
+  RefreshCw,
+  Facebook,
+  ShieldCheck,
+  FileText,
+  Image as ImageIcon,
+  Users,
+  Search,
+  LayoutGrid,
+  Table2,
+  Sparkles,
+  CheckCircle2,
+  Clock3,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,9 +25,11 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { syncClientData } from "@/lib/meta-api";
 import { loadFacebookSDK, facebookLogin, type MetaAdAccount } from "@/lib/facebook-sdk";
@@ -25,10 +42,39 @@ interface Client {
   id: string;
   name: string;
   status: string;
+  logo_url: string | null;
   meta_ad_account_id: string | null;
   meta_access_token: string | null;
   meta_connected_at: string | null;
   created_at: string;
+}
+
+interface ReportRow {
+  client_id: string;
+  created_at: string;
+}
+
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function getAvatarTone(name: string) {
+  const tones = [
+    "bg-rose-100 text-rose-700",
+    "bg-amber-100 text-amber-700",
+    "bg-emerald-100 text-emerald-700",
+    "bg-sky-100 text-sky-700",
+    "bg-indigo-100 text-indigo-700",
+    "bg-fuchsia-100 text-fuchsia-700",
+  ];
+
+  const score = Array.from(name).reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return tones[score % tones.length];
 }
 
 export default function Clients() {
@@ -38,20 +84,21 @@ export default function Clients() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState("gallery");
+  const [reportStats, setReportStats] = useState<Record<string, { count: number; latest: string | null }>>({});
 
-  // New client dialog
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newLogoUrl, setNewLogoUrl] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Connect Meta dialog
   const [connectClient, setConnectClient] = useState<Client | null>(null);
   const [adAccountId, setAdAccountId] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [syncProgress, setSyncProgress] = useState("");
 
-  // OAuth state
   const [oauthLoading, setOauthLoading] = useState(false);
   const [adAccounts, setAdAccounts] = useState<MetaAdAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
@@ -59,24 +106,46 @@ export default function Clients() {
 
   async function load() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("clients")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error) toast.error(error.message);
-    setClients((data as Client[]) ?? []);
+    const [{ data: clientsData, error: clientsError }, { data: reportsData, error: reportsError }] = await Promise.all([
+      supabase.from("clients").select("*").order("created_at", { ascending: false }),
+      supabase.from("reports").select("client_id, created_at"),
+    ]);
+
+    if (clientsError) toast.error(clientsError.message);
+    if (reportsError) toast.error(reportsError.message);
+
+    setClients((clientsData as Client[]) ?? []);
+
+    const stats: Record<string, { count: number; latest: string | null }> = {};
+    ((reportsData as ReportRow[]) ?? []).forEach((report) => {
+      const current = stats[report.client_id] ?? { count: 0, latest: null };
+      current.count += 1;
+      if (!current.latest || new Date(report.created_at) > new Date(current.latest)) {
+        current.latest = report.created_at;
+      }
+      stats[report.client_id] = current;
+    });
+    setReportStats(stats);
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
-  function openConnectDialog(c: Client) {
-    setAdAccountId(c.meta_ad_account_id ?? "");
-    setAccessToken(c.meta_access_token ?? "");
+  const filteredClients = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return clients;
+    return clients.filter((client) => client.name.toLowerCase().includes(term));
+  }, [clients, search]);
+
+  function openConnectDialog(client: Client) {
+    setAdAccountId(client.meta_ad_account_id ?? "");
+    setAccessToken(client.meta_access_token ?? "");
     setAdAccounts([]);
     setSelectedAccountId("");
     setLongLivedToken("");
-    setConnectClient(c);
+    setConnectClient(client);
   }
 
   function closeConnectDialog() {
@@ -86,7 +155,6 @@ export default function Clients() {
     setLongLivedToken("");
   }
 
-  // ── OAuth flow ──────────────────────────────────────────────────────────────
   async function handleFacebookLogin() {
     setOauthLoading(true);
     try {
@@ -114,24 +182,23 @@ export default function Clients() {
         setSelectedAccountId(data.ad_accounts[0].id.replace("act_", ""));
       }
 
-      toast.success(`${data.ad_accounts?.length ?? 0} conta(s) de anúncio encontrada(s)`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro no login com Facebook");
+      toast.success(`${data.ad_accounts?.length ?? 0} conta(s) de anuncio encontrada(s)`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro no login com Facebook");
     } finally {
       setOauthLoading(false);
       setSyncProgress("");
     }
   }
 
-  async function handleSaveOAuth(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSaveOAuth(event: React.FormEvent) {
+    event.preventDefault();
     if (!connectClient || !selectedAccountId || !longLivedToken) return;
     await saveAndSync(connectClient, selectedAccountId, longLivedToken);
   }
 
-  // ── Manual token flow ───────────────────────────────────────────────────────
-  async function handleConnectManual(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleConnectManual(event: React.FormEvent) {
+    event.preventDefault();
     if (!connectClient || !adAccountId.trim() || !accessToken.trim()) {
       toast.error("Preencha o ID da conta e o token de acesso");
       return;
@@ -139,10 +206,9 @@ export default function Clients() {
     await saveAndSync(connectClient, adAccountId, accessToken);
   }
 
-  // ── Shared save + sync ──────────────────────────────────────────────────────
   async function saveAndSync(client: Client, accountId: string, token: string) {
     setSyncingId(client.id);
-    setSyncProgress("Salvando configurações...");
+    setSyncProgress("Salvando configuracoes...");
     try {
       const { error } = await supabase
         .from("clients")
@@ -156,68 +222,106 @@ export default function Clients() {
 
       const result = await syncClientData(client.id, accountId, token, setSyncProgress);
       toast.success(
-        `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anúncios`,
+        `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anuncios`,
         { duration: 6000 }
       );
       closeConnectDialog();
       load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao salvar");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar");
     } finally {
       setSyncingId(null);
       setSyncProgress("");
     }
   }
 
-  async function handleQuickSync(c: Client) {
-    if (!c.meta_ad_account_id || !c.meta_access_token) {
+  async function handleQuickSync(client: Client) {
+    if (!client.meta_ad_account_id || !client.meta_access_token) {
       toast.error("Configure a conta Meta antes de sincronizar");
       return;
     }
-    setSyncingId(c.id);
+    setSyncingId(client.id);
     try {
-      const result = await syncClientData(
-        c.id, c.meta_ad_account_id, c.meta_access_token, setSyncProgress
-      );
+      const result = await syncClientData(client.id, client.meta_ad_account_id, client.meta_access_token, setSyncProgress);
       toast.success(
-        `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anúncios`,
+        `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anuncios`,
         { duration: 6000 }
       );
       load();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro na sincronização");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro na sincronizacao");
     } finally {
       setSyncingId(null);
       setSyncProgress("");
     }
   }
 
-  async function createClient(e: React.FormEvent) {
-    e.preventDefault();
+  async function createClient(event: React.FormEvent) {
+    event.preventDefault();
     setSaving(true);
-    const { error } = await supabase.from("clients").insert({ name: newName, status: "active" });
+    const { error } = await supabase.from("clients").insert({
+      name: newName.trim(),
+      status: "active",
+      logo_url: newLogoUrl.trim() || null,
+    });
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success("Cliente criado");
     setNewName("");
+    setNewLogoUrl("");
     setCreateOpen(false);
     load();
   }
 
-  async function toggleStatus(c: Client) {
+  async function toggleStatus(client: Client) {
     const { error } = await supabase
       .from("clients")
-      .update({ status: c.status === "active" ? "inactive" : "active" })
-      .eq("id", c.id);
+      .update({ status: client.status === "active" ? "inactive" : "active" })
+      .eq("id", client.id);
     if (error) return toast.error(error.message);
     load();
   }
 
   const isSyncing = syncingId !== null;
+  const activeCount = clients.filter((client) => client.status === "active").length;
+  const connectedCount = clients.filter((client) => client.meta_ad_account_id).length;
+
+  function renderClientActions(client: Client, compact = false) {
+    return (
+      <div className={`flex ${compact ? "flex-wrap" : "justify-end"} gap-2`}>
+        {canManage && (
+          <>
+            <Button variant="outline" size="sm" onClick={() => openConnectDialog(client)} disabled={syncingId === client.id}>
+              <Link2 className="mr-2 h-3 w-3" />
+              {client.meta_ad_account_id ? "Reconfigurar" : "Conectar Meta"}
+            </Button>
+            {client.meta_ad_account_id && client.meta_access_token && (
+              <Button variant="outline" size="sm" onClick={() => handleQuickSync(client)} disabled={isSyncing}>
+                <RefreshCw className={`mr-2 h-3 w-3 ${syncingId === client.id ? "animate-spin" : ""}`} />
+                {syncingId === client.id ? "Sincronizando..." : "Sincronizar"}
+              </Button>
+            )}
+          </>
+        )}
+        <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/audit`)}>
+          <ShieldCheck className="mr-2 h-3 w-3" />Auditar
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/reports`)}>
+          <FileText className="mr-2 h-3 w-3" />Relatorios
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/creatives`)}>
+          <ImageIcon className="mr-2 h-3 w-3" />Criativos
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/audiences`)}>
+          <Users className="mr-2 h-3 w-3" />Publicos
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
           <p className="text-sm text-muted-foreground">Gerencie as empresas anunciantes da sua plataforma</p>
@@ -232,7 +336,11 @@ export default function Clients() {
               <form onSubmit={createClient} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome do cliente</Label>
-                  <Input id="name" value={newName} onChange={(e) => setNewName(e.target.value)} required placeholder="Ex: Loja Aurora" />
+                  <Input id="name" value={newName} onChange={(event) => setNewName(event.target.value)} required placeholder="Ex: Loja Aurora" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="logoUrl">Foto ou logo (URL)</Label>
+                  <Input id="logoUrl" value={newLogoUrl} onChange={(event) => setNewLogoUrl(event.target.value)} placeholder="https://..." />
                 </div>
                 <DialogFooter>
                   <Button type="submit" disabled={saving}>{saving ? "Salvando..." : "Criar"}</Button>
@@ -243,11 +351,10 @@ export default function Clients() {
         )}
       </div>
 
-      {/* Connect Meta dialog */}
-      <Dialog open={!!connectClient} onOpenChange={(o) => !o && closeConnectDialog()}>
+      <Dialog open={!!connectClient} onOpenChange={(open) => !open && closeConnectDialog()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Conectar Meta Ads — {connectClient?.name}</DialogTitle>
+            <DialogTitle>Conectar Meta Ads - {connectClient?.name}</DialogTitle>
           </DialogHeader>
 
           <Tabs defaultValue="oauth">
@@ -256,13 +363,12 @@ export default function Clients() {
               <TabsTrigger value="manual" className="flex-1">Token manual</TabsTrigger>
             </TabsList>
 
-            {/* OAuth tab */}
             <TabsContent value="oauth" className="space-y-4 pt-2">
               {adAccounts.length === 0 ? (
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
-                    Clique no botão abaixo para autorizar o acesso via sua conta do Facebook.
-                    Um popup será aberto para confirmar as permissões necessárias.
+                    Clique no botao abaixo para autorizar o acesso via sua conta do Facebook.
+                    Um popup sera aberto para confirmar as permissoes necessarias.
                   </p>
                   <Button
                     className="w-full bg-[#1877F2] hover:bg-[#166fe5] text-white"
@@ -277,15 +383,15 @@ export default function Clients() {
               ) : (
                 <form onSubmit={handleSaveOAuth} className="space-y-4">
                   <div className="space-y-2">
-                    <Label>Conta de anúncios</Label>
+                    <Label>Conta de anuncios</Label>
                     <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione a conta..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {adAccounts.map((a) => (
-                          <SelectItem key={a.id} value={a.id.replace("act_", "")}>
-                            {a.name} ({a.id})
+                        {adAccounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id.replace("act_", "")}>
+                            {account.name} ({account.id})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -304,26 +410,25 @@ export default function Clients() {
               )}
             </TabsContent>
 
-            {/* Manual tab */}
             <TabsContent value="manual">
               <form onSubmit={handleConnectManual} className="space-y-4 pt-2">
                 <div className="space-y-2">
-                  <Label htmlFor="adAccountId">ID da conta de anúncios</Label>
+                  <Label htmlFor="adAccountId">ID da conta de anuncios</Label>
                   <Input
                     id="adAccountId"
                     value={adAccountId}
-                    onChange={(e) => setAdAccountId(e.target.value)}
+                    onChange={(event) => setAdAccountId(event.target.value)}
                     placeholder="act_123456789 ou 123456789"
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="accessToken">Token de acesso (System User)</Label>
+                  <Label htmlFor="accessToken">Token de acesso</Label>
                   <Input
                     id="accessToken"
                     type="password"
                     value={accessToken}
-                    onChange={(e) => setAccessToken(e.target.value)}
+                    onChange={(event) => setAccessToken(event.target.value)}
                     placeholder="EAAxxxxxxxx..."
                     required
                   />
@@ -343,90 +448,194 @@ export default function Clients() {
         </DialogContent>
       </Dialog>
 
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-slate-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-orange-100 p-3 text-orange-600">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Total de clientes</p>
+                <p className="text-2xl font-bold">{clients.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-600">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Clientes ativos</p>
+                <p className="text-2xl font-bold">{activeCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="rounded-2xl bg-sky-100 p-3 text-sky-600">
+                <Clock3 className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Meta conectada</p>
+                <p className="text-2xl font-bold">{connectedCount}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle>Lista de clientes</CardTitle>
-          <CardDescription>{clients.length} cliente(s) cadastrado(s)</CardDescription>
+        <CardHeader className="gap-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <CardTitle>Base de clientes</CardTitle>
+              <CardDescription>{filteredClients.length} cliente(s) exibido(s)</CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative w-[260px]">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar cliente..." className="pl-9" />
+              </div>
+              <Tabs value={view} onValueChange={setView}>
+                <TabsList>
+                  <TabsTrigger value="gallery"><LayoutGrid className="mr-2 h-4 w-4" />Cards</TabsTrigger>
+                  <TabsTrigger value="table"><Table2 className="mr-2 h-4 w-4" />Tabela</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="px-0">
+        <CardContent>
           {loading ? (
             <div className="p-8 text-center text-sm text-muted-foreground">Carregando...</div>
-          ) : clients.length === 0 ? (
+          ) : filteredClients.length === 0 ? (
             <div className="p-12 text-center">
-              <p className="text-sm text-muted-foreground">Nenhum cliente cadastrado ainda.</p>
-              {canManage && <p className="mt-1 text-xs text-muted-foreground">Clique em "Novo cliente" para começar.</p>}
+              <p className="text-sm text-muted-foreground">Nenhum cliente encontrado.</p>
+            </div>
+          ) : view === "gallery" ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {filteredClients.map((client) => {
+                const stats = reportStats[client.id] ?? { count: 0, latest: null };
+                const latestText = stats.latest
+                  ? `Ultimo relatorio gerado ${formatDistanceToNow(new Date(stats.latest), { addSuffix: true, locale: ptBR })}`
+                  : "Nenhum relatorio gerado ainda";
+
+                return (
+                  <Card key={client.id} className="overflow-hidden border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                    <CardContent className="p-5">
+                      <div className="flex items-start gap-4">
+                        <Avatar className="h-14 w-14 border border-slate-200">
+                          {client.logo_url && <AvatarImage src={client.logo_url} alt={client.name} />}
+                          <AvatarFallback className={`${getAvatarTone(client.name)} text-sm font-semibold`}>
+                            {getInitials(client.name)}
+                          </AvatarFallback>
+                        </Avatar>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="truncate text-sm font-bold uppercase tracking-tight">{client.name}</p>
+                              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className={`inline-flex rounded-full px-2 py-0.5 font-medium ${client.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
+                                  {client.status === "active" ? "Ativo" : "Inativo"}
+                                </span>
+                                {client.meta_ad_account_id && (
+                                  <span className="inline-flex rounded-full bg-sky-100 px-2 py-0.5 font-medium text-sky-700">
+                                    Meta OK
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 text-sky-600">
+                              <Facebook className="h-3.5 w-3.5" />
+                              <span className="text-[11px] font-semibold">Meta</span>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 space-y-1.5">
+                            <p className="text-xs text-slate-700">
+                              <span className="font-semibold">{stats.count}</span> {stats.count === 1 ? "relatorio" : "relatorios"}
+                            </p>
+                            <p className="text-[11px] text-sky-700">{latestText}</p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Criado em {format(new Date(client.created_at), "dd/MM/yyyy")}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 flex flex-wrap gap-2">
+                        {renderClientActions(client, true)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
+                  <TableHead>Cliente</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Meta Ads</TableHead>
-                  <TableHead>Última sync</TableHead>
+                  <TableHead>Relatorios</TableHead>
+                  <TableHead>Ultima sync</TableHead>
                   <TableHead>Criado em</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead className="text-right">Acoes</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {clients.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={c.status === "active"}
-                          onCheckedChange={() => canManage && toggleStatus(c)}
-                          disabled={!canManage}
-                        />
-                        <span className="text-xs text-muted-foreground">
-                          {c.status === "active" ? "Ativo" : "Inativo"}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {c.meta_ad_account_id ? (
-                        <span className="text-xs font-medium text-success">Conectado · {c.meta_ad_account_id}</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Não conectado</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {c.meta_connected_at ? format(new Date(c.meta_connected_at), "dd/MM/yyyy HH:mm") : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {format(new Date(c.created_at), "dd/MM/yyyy")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {canManage && (
-                        <div className="flex justify-end gap-2">
-                          <Button variant="outline" size="sm" onClick={() => openConnectDialog(c)} disabled={syncingId === c.id}>
-                            <Link2 className="mr-2 h-3 w-3" />
-                            {c.meta_ad_account_id ? "Reconfigurar" : "Conectar Meta"}
-                          </Button>
-                          {c.meta_ad_account_id && c.meta_access_token && (
-                            <Button variant="outline" size="sm" onClick={() => handleQuickSync(c)} disabled={isSyncing}>
-                              <RefreshCw className={`mr-2 h-3 w-3 ${syncingId === c.id ? "animate-spin" : ""}`} />
-                              {syncingId === c.id ? syncProgress || "Sincronizando..." : "Sincronizar"}
-                            </Button>
-                          )}
-                          <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${c.id}/audit`)}>
-                            <ShieldCheck className="mr-2 h-3 w-3" />Auditar
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${c.id}/reports`)}>
-                            <FileText className="mr-2 h-3 w-3" />Relatórios
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${c.id}/creatives`)}>
-                            <Image className="mr-2 h-3 w-3" />Criativos
-                          </Button>
-                          <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${c.id}/audiences`)}>
-                            <Users className="mr-2 h-3 w-3" />Públicos
-                          </Button>
+                {filteredClients.map((client) => {
+                  const stats = reportStats[client.id] ?? { count: 0, latest: null };
+                  return (
+                    <TableRow key={client.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10 border border-slate-200">
+                            {client.logo_url && <AvatarImage src={client.logo_url} alt={client.name} />}
+                            <AvatarFallback className={`${getAvatarTone(client.name)} text-xs font-semibold`}>
+                              {getInitials(client.name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium">{client.name}</p>
+                            <p className="text-xs text-muted-foreground">{client.meta_ad_account_id ? `CA ${client.meta_ad_account_id}` : "Sem conta conectada"}</p>
+                          </div>
                         </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Switch checked={client.status === "active"} onCheckedChange={() => canManage && toggleStatus(client)} disabled={!canManage} />
+                          <span className="text-xs text-muted-foreground">{client.status === "active" ? "Ativo" : "Inativo"}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {client.meta_ad_account_id ? (
+                          <span className="text-xs font-medium text-emerald-600">Conectado</span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Nao conectado</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {stats.count} {stats.count === 1 ? "relatorio" : "relatorios"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {client.meta_connected_at ? format(new Date(client.meta_connected_at), "dd/MM/yyyy HH:mm") : "-"}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {format(new Date(client.created_at), "dd/MM/yyyy")}
+                      </TableCell>
+                      <TableCell className="text-right">{renderClientActions(client)}</TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

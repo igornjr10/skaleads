@@ -286,6 +286,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          logo_url: string | null
           meta_access_token: string | null
           meta_ad_account_id: string | null
           meta_connected_at: string | null
@@ -296,6 +297,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          logo_url?: string | null
           meta_access_token?: string | null
           meta_ad_account_id?: string | null
           meta_connected_at?: string | null
@@ -306,6 +308,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          logo_url?: string | null
           meta_access_token?: string | null
           meta_ad_account_id?: string | null
           meta_connected_at?: string | null
