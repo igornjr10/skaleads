@@ -34,7 +34,49 @@ interface MetaAd {
   name: string;
   status: string;
   adset_id: string;
+  creative?: {
+    thumbnail_url?: string;
+    image_url?: string;
+    body?: string;
+    title?: string;
+    object_type?: string;
+    video_id?: string;
+  };
   insights?: { data: MetaInsight[] };
+}
+
+interface MetaAdInsightRow {
+  ad_id: string;
+  date_start: string;
+  impressions?: string;
+  clicks?: string;
+  spend?: string;
+  reach?: string;
+  frequency?: string;
+  conversions?: string;
+  video_thruplay_watched_actions?: Array<{ action_type: string; value: string }>;
+  video_p25_watched_actions?: Array<{ action_type: string; value: string }>;
+  video_p75_watched_actions?: Array<{ action_type: string; value: string }>;
+  video_view_by_age_bucket_and_gender?: Array<{ action_type: string; value: string }>;
+}
+
+interface MetaBreakdownRow {
+  age?: string;
+  gender?: string;
+  placement?: string;
+  device_platform?: string;
+  publisher_platform?: string;
+  country?: string;
+  region?: string;
+  impressions?: string;
+  clicks?: string;
+  spend?: string;
+  reach?: string;
+  conversions?: string;
+}
+
+function extractAction(actions?: Array<{ action_type: string; value: string }>, type = "video_view"): number {
+  return parseInt(actions?.find(a => a.action_type === type)?.value ?? "0") || 0;
 }
 
 interface MetaPagedResponse<T> {
@@ -168,7 +210,7 @@ export async function syncClientData(
   // ── 3. Ads ───────────────────────────────────────────────────────────────────
   onProgress?.("Buscando anúncios...");
   const metaAds = await metaFetchAll<MetaAd>(`act_${accountId}/ads`, {
-    fields: "id,name,status,adset_id,insights.date_preset(last_30d){spend,impressions,clicks}",
+    fields: "id,name,status,adset_id,creative{thumbnail_url,image_url,body,title,object_type,video_id},insights.date_preset(last_30d){spend,impressions,clicks}",
     limit: "500",
     access_token: token,
   });
@@ -185,6 +227,8 @@ export async function syncClientData(
     const adSetInternalId = adSetMap.get(ad.adset_id);
     if (!adSetInternalId) continue;
     const ins = ad.insights?.data?.[0];
+    const cr = ad.creative;
+    const creativeType = cr?.object_type === "VIDEO" || cr?.video_id ? "video" : "image";
     const payload = {
       ad_set_id: adSetInternalId,
       meta_ad_id: ad.id,
@@ -193,12 +237,21 @@ export async function syncClientData(
       spend: n(ins?.spend),
       impressions: ni(ins?.impressions),
       clicks: ni(ins?.clicks),
+      thumbnail_url: cr?.thumbnail_url ?? null,
+      image_url: cr?.image_url ?? null,
+      video_id: cr?.video_id ?? null,
+      body: cr?.body ?? null,
+      title: cr?.title ?? null,
+      creative_type: creativeType,
+      creative_synced_at: new Date().toISOString(),
     };
     const existingId = adMap.get(ad.id);
     if (existingId) {
       await supabase.from("ads").update(payload).eq("id", existingId);
+      adMap.set(ad.id, existingId);
     } else {
-      await supabase.from("ads").insert(payload);
+      const { data: newAd } = await supabase.from("ads").insert(payload).select("id").single();
+      if (newAd) adMap.set(ad.id, newAd.id);
     }
   }
 
@@ -240,4 +293,120 @@ export async function syncClientData(
     ads: metaAds.length,
     days: dailyData.length,
   };
+}
+
+// ── Extended sync: per-ad daily metrics (fatigue detection) ───────────────────
+export async function syncAdDailyMetrics(
+  clientId: string,
+  adAccountId: string,
+  accessToken: string,
+  datePreset = "last_30d",
+  onProgress?: (msg: string) => void
+): Promise<number> {
+  const accountId = normalizeAccountId(adAccountId);
+  const token = accessToken.trim();
+
+  onProgress?.("Buscando métricas diárias por anúncio...");
+
+  const insights = await metaFetchAll<MetaAdInsightRow>(`act_${accountId}/insights`, {
+    fields: "ad_id,impressions,clicks,spend,reach,frequency,video_thruplay_watched_actions,video_p25_watched_actions,video_p75_watched_actions",
+    level: "ad",
+    time_increment: "1",
+    date_preset: datePreset,
+    access_token: token,
+    limit: "500",
+  });
+
+  // Map meta_ad_id → internal ad id
+  const metaAdIds = [...new Set(insights.map(r => r.ad_id).filter(Boolean))];
+  const { data: adsData } = metaAdIds.length
+    ? await supabase.from("ads").select("id, meta_ad_id").in("meta_ad_id", metaAdIds)
+    : { data: [] as { id: string; meta_ad_id: string | null }[] };
+
+  const adIdMap = new Map<string, string>();
+  (adsData || []).forEach((a) => { if (a.meta_ad_id) adIdMap.set(a.meta_ad_id, a.id); });
+
+  let inserted = 0;
+  for (const row of insights) {
+    const internalId = adIdMap.get(row.ad_id);
+    if (!internalId) continue;
+
+    await supabase.from("ad_daily_metrics").upsert(
+      {
+        ad_id: internalId,
+        date: row.date_start,
+        impressions: ni(row.impressions),
+        clicks: ni(row.clicks),
+        spend: n(row.spend),
+        reach: ni(row.reach),
+        frequency: n(row.frequency),
+        video_thruplay: extractAction(row.video_thruplay_watched_actions),
+        video_p25_views: extractAction(row.video_p25_watched_actions),
+        video_p75_views: extractAction(row.video_p75_watched_actions),
+      },
+      { onConflict: "ad_id,date" }
+    );
+    inserted++;
+  }
+
+  return inserted;
+}
+
+// ── Extended sync: audience breakdowns ───────────────────────────────────────
+const DIMENSIONS = ["age", "gender", "placement", "device_platform", "publisher_platform", "country"] as const;
+
+export async function syncAudienceBreakdowns(
+  clientId: string,
+  adAccountId: string,
+  accessToken: string,
+  datePreset = "last_30d",
+  onProgress?: (msg: string) => void
+): Promise<number> {
+  const accountId = normalizeAccountId(adAccountId);
+  const token = accessToken.trim();
+  let total = 0;
+
+  for (const dimension of DIMENSIONS) {
+    onProgress?.(`Buscando breakdown: ${dimension}...`);
+    try {
+      const rows = await metaFetchAll<MetaBreakdownRow>(`act_${accountId}/insights`, {
+        fields: "impressions,clicks,spend,reach",
+        breakdowns: dimension,
+        date_preset: datePreset,
+        level: "account",
+        access_token: token,
+        limit: "500",
+      });
+
+      const today = new Date();
+      const dateStop = today.toISOString().split("T")[0];
+      const dateStart = new Date(today.getTime() - 30 * 86400000).toISOString().split("T")[0];
+
+      for (const row of rows) {
+        const dimValue = (row as any)[dimension] as string | undefined;
+        if (!dimValue) continue;
+
+        await supabase.from("ad_breakdowns").upsert(
+          {
+            client_id: clientId,
+            date_start: dateStart,
+            date_stop: dateStop,
+            dimension,
+            dimension_value: dimValue,
+            impressions: ni(row.impressions),
+            clicks: ni(row.clicks),
+            spend: n(row.spend),
+            reach: ni(row.reach),
+            conversions: 0,
+          },
+          { onConflict: "client_id,date_start,date_stop,dimension,dimension_value" }
+        );
+        total++;
+      }
+    } catch {
+      // Some dimensions may not be available; continue with others
+    }
+  }
+
+  return total;
 }
