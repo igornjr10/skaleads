@@ -19,6 +19,8 @@ import ReportShare from "./pages/ReportShare";
 import ReportSchedules from "./pages/ReportSchedules";
 import ClientCreatives from "./pages/ClientCreatives";
 import ClientAudiences from "./pages/ClientAudiences";
+import AlertBuilder from "./pages/AlertBuilder";
+import AlertEvents from "./pages/AlertEvents";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +44,9 @@ const App = () => (
               <Route path="/clients/:id/reports" element={<ClientReports />} />
               <Route path="/clients/:id/creatives" element={<ClientCreatives />} />
               <Route path="/clients/:id/audiences" element={<ClientAudiences />} />
+              <Route path="/alerts/new" element={<AlertBuilder />} />
+              <Route path="/alerts/:id/edit" element={<AlertBuilder />} />
+              <Route path="/alert-events" element={<AlertEvents />} />
               <Route path="/report-schedules" element={<ReportSchedules />} />
               <Route path="/settings" element={<Settings />} />
             </Route>
