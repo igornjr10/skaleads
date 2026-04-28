@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Megaphone, Bell, Settings, Flame, Brain, FileText, Calendar } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Bell, Settings, Brain, LogOut } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -15,15 +15,15 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { MarketProLogo } from "./MarketProLogo";
 
 const items = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard },
-  { title: "Clientes", url: "/clients", icon: Users },
-  { title: "Campanhas", url: "/campaigns", icon: Megaphone },
-  { title: "Alertas", url: "/alerts", icon: Bell },
-  { title: "Andromeda", url: "/andromeda", icon: Brain },
-  { title: "Agendamentos", url: "/report-schedules", icon: Calendar },
-  { title: "Configurações", url: "/settings", icon: Settings },
+  { title: "Dashboard",      url: "/",           icon: LayoutDashboard },
+  { title: "Clientes",       url: "/clients",    icon: Users },
+  { title: "Campanhas",      url: "/campaigns",  icon: Megaphone },
+  { title: "Alertas",        url: "/alerts",     icon: Bell },
+  { title: "Andromeda IA",   url: "/andromeda",  icon: Brain },
+  { title: "Configurações",  url: "/settings",   icon: Settings },
 ];
 
 export function AppSidebar() {
@@ -37,31 +37,45 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
+      {/* ── Header ─────────────────────────────────────────── */}
       <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-2 px-2 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-primary shadow-glow">
-            <Flame className="h-5 w-5 text-white" />
-          </div>
+        <div className="flex items-center gap-3 px-2 py-3">
+          <MarketProLogo size={38} className="shrink-0 rounded-lg shadow-glow" />
           {!collapsed && (
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold tracking-tight">MarketProAds</span>
-              <span className="text-xs text-muted-foreground">Meta Ads Manager</span>
+            <div className="flex flex-col leading-tight">
+              <span className="text-[15px] font-bold tracking-tight text-sidebar-foreground">
+                MarketProAds
+              </span>
+              <span className="text-[11px] text-muted-foreground">Meta Ads Manager</span>
             </div>
           )}
         </div>
       </SidebarHeader>
 
+      {/* ── Nav ────────────────────────────────────────────── */}
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navegação</SidebarGroupLabel>
+          {!collapsed && (
+            <SidebarGroupLabel className="text-[10px] uppercase tracking-widest text-muted-foreground/60 px-3 mb-1">
+              Navegação
+            </SidebarGroupLabel>
+          )}
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={isActive(item.url)}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.url)}
+                    className={
+                      isActive(item.url)
+                        ? "relative text-primary font-semibold before:absolute before:left-0 before:inset-y-1 before:w-[3px] before:rounded-full before:bg-primary"
+                        : "text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                    }
+                  >
                     <NavLink to={item.url} end={item.url === "/"}>
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      {!collapsed && <span className="text-[13px]">{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -71,25 +85,42 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
+      {/* ── Footer ─────────────────────────────────────────── */}
       <SidebarFooter className="border-t border-sidebar-border">
         {!collapsed ? (
           <div className="flex flex-col gap-2 p-2">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-xs font-semibold text-primary">
+            <div className="flex items-center gap-2 rounded-lg bg-sidebar-accent px-2 py-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/20 text-xs font-bold text-primary">
                 {user?.email?.[0]?.toUpperCase() ?? "U"}
               </div>
               <div className="flex min-w-0 flex-1 flex-col">
-                <span className="truncate text-xs font-medium">{user?.email}</span>
-                <span className="text-[10px] uppercase text-muted-foreground">{role}</span>
+                <span className="truncate text-[11px] font-medium text-sidebar-foreground">
+                  {user?.email}
+                </span>
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground/70">
+                  {role}
+                </span>
               </div>
             </div>
-            <Button variant="ghost" size="sm" className="justify-start" onClick={signOut}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="justify-start gap-2 text-muted-foreground hover:text-foreground"
+              onClick={signOut}
+            >
+              <LogOut className="h-3.5 w-3.5" />
               Sair
             </Button>
           </div>
         ) : (
-          <Button variant="ghost" size="icon" onClick={signOut} className="mx-auto my-2">
-            <span className="text-xs">⏻</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={signOut}
+            className="mx-auto my-2 text-muted-foreground hover:text-foreground"
+            title="Sair"
+          >
+            <LogOut className="h-4 w-4" />
           </Button>
         )}
       </SidebarFooter>
