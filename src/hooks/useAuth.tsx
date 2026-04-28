@@ -42,15 +42,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function fetchRole(userId: string) {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .order("role", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    setRole((data?.role as AppRole) ?? "viewer");
+  async function fetchRole(_userId: string) {
+    const { data } = await supabase.rpc("get_my_role");
+    setRole((data as AppRole) ?? "viewer");
   }
 
   async function signOut() {
