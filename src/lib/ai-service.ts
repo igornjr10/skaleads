@@ -15,24 +15,28 @@ async function callEdgeFunction<T>(
   payload: Record<string, unknown>
 ): Promise<{ data: T; tokens: { input: number; output: number }; cost: number; cached: boolean }> {
   const { data: user } = await supabase.auth.getUser();
-  if (!user?.user?.id) throw new Error("Usuário não autenticado");
+  if (!user?.user?.id) throw new Error("Usuario nao autenticado");
 
-  // Add tenant ID to payload
   const fullPayload = { ...payload, tenantId: user.user.id };
 
   const { data, error } = await supabase.functions.invoke(functionName, {
     body: fullPayload,
   });
 
-  if (error || !data.success) {
-    throw new Error(data?.error || "Erro ao chamar função de IA");
+  const response = data as EdgeFunctionResponse<T> | null;
+
+  if (error || !response?.success) {
+    throw new Error(response?.error || error?.message || `Erro ao chamar funcao de IA (${functionName})`);
   }
 
+  const inferredKey =
+    Object.keys(response).find((key) => !["success", "tokens", "cost_usd", "cached", "error"].includes(key)) || "data";
+
   return {
-    data: data.data || data[Object.keys(data).find(k => k !== "success" && k !== "tokens" && k !== "cost_usd" && k !== "cached" && k !== "error") || "data"] as T,
-    tokens: data.tokens || { input: 0, output: 0 },
-    cost: parseFloat(data.cost_usd || "0"),
-    cached: data.cached || false,
+    data: (response.data ?? response[inferredKey]) as T,
+    tokens: response.tokens || { input: 0, output: 0 },
+    cost: parseFloat(response.cost_usd || "0"),
+    cached: response.cached || false,
   };
 }
 
@@ -56,7 +60,7 @@ export async function analyzeCreatives(
   });
 
   return {
-    analysis: response.data as unknown as string,
+    analysis: response.data as string,
     tokens: response.tokens,
     cost: response.cost,
     cached: response.cached,
@@ -83,7 +87,7 @@ export async function generateCopy(payload: CopyGenerationInput): Promise<{
   const response = await callEdgeFunction<string>("generate-copy", payload);
 
   return {
-    copy: response.data as unknown as string,
+    copy: response.data as string,
     tokens: response.tokens,
     cost: response.cost,
     cached: response.cached,
@@ -108,7 +112,7 @@ export async function summarizePeriod(payload: ReportSummaryInput): Promise<{
   const response = await callEdgeFunction<string>("summarize-period", payload);
 
   return {
-    summary: response.data as unknown as string,
+    summary: response.data as string,
     tokens: response.tokens,
     cost: response.cost,
     cached: response.cached,
@@ -138,7 +142,7 @@ export async function prioritizeAuditActions(payload: AuditActionInput): Promise
   const response = await callEdgeFunction<string>("prioritize-audit", payload);
 
   return {
-    prioritization: response.data as unknown as string,
+    prioritization: response.data as string,
     tokens: response.tokens,
     cost: response.cost,
     cached: response.cached,

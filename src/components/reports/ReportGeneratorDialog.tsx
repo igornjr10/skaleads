@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { format, subDays, startOfMonth, endOfMonth } from "date-fns";
+import { useEffect, useMemo, useState } from "react";
+import { endOfMonth, format, startOfMonth, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, FileText, Download } from "lucide-react";
+import { Download, FileText, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { pdf } from "@react-pdf/renderer";
-import { ReportPdfTemplate, type ReportData } from "./ReportPdfTemplate";
+import type { ReportData } from "@/lib/report-types";
+import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
+import { summarizePeriod } from "@/lib/ai-service";
 
 interface ReportGeneratorDialogProps {
   isOpen: boolean;
@@ -29,6 +30,48 @@ const PERIOD_PRESETS = [
   { label: "Este mes", days: 0 },
 ];
 
+const META_BASE = "https://graph.facebook.com/v21.0";
+
+function normalizeAccountId(id: string) {
+  return id.startsWith("act_") ? id.slice(4) : id.trim();
+}
+
+function extractMessagesStarted(actions?: Array<{ action_type?: string; value?: string }>) {
+  if (!actions?.length) return 0;
+
+  return actions.reduce((total, action) => {
+    const type = action.action_type ?? "";
+    if (!type.includes("messaging_conversation_started")) return total;
+    return total + (parseInt(action.value ?? "0", 10) || 0);
+  }, 0);
+}
+
+function buildFallbackRecommendations(data: ReportData) {
+  const ctr = data.summary.ctr;
+  const cpc = data.summary.cpc;
+  const conversions = data.summary.conversions;
+  const spend = data.summary.spend;
+  const messagesStarted = data.summary.messagesStarted || 0;
+  const topCampaign = data.topCampaigns[0];
+
+  const strength =
+    ctr >= 1.5
+      ? "O periodo mostrou boa capacidade de gerar interesse, com CTR saudavel e volume consistente de cliques."
+      : "O periodo mostrou entrega, mas o nivel de interesse ainda pode evoluir, com CTR abaixo do ideal para escalar com seguranca.";
+
+  const warning =
+    conversions > 0 || messagesStarted > 0
+      ? "O principal foco agora deve ser aumentar a eficiencia do que ja converte, concentrando verba nos conjuntos e criativos com melhor resposta."
+      : "O principal ponto de atencao e transformar trafego em resultado, porque houve consumo de verba sem conversoes ou conversas suficientes.";
+
+  const action =
+    topCampaign
+      ? `Como proximo passo, vale priorizar a campanha ${topCampaign.name} como referencia de otimizacao, revisar segmentacoes de baixo desempenho e testar novas variacoes de criativo para reduzir CPC e elevar conversao.`
+      : "Como proximo passo, vale revisar segmentacoes, criativos e pagina de destino para reduzir CPC e melhorar a taxa de resposta do periodo.";
+
+  return `${strength} Foram investidos ${spend.toFixed(2)} no periodo, com CPC medio de ${cpc.toFixed(2)} e ${conversions} conversoes registradas. ${warning} ${action}`;
+}
+
 export function ReportGeneratorDialog({
   isOpen,
   onClose,
@@ -41,8 +84,11 @@ export function ReportGeneratorDialog({
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [recommendations, setRecommendations] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [recommendationSource, setRecommendationSource] = useState<"empty" | "ai" | "manual">("empty");
   const [primaryColor, setPrimaryColor] = useState("#2563eb");
   const [agencyName, setAgencyName] = useState("MarketProAds");
+  const recommendationKey = useMemo(() => `${clientId}:${startDate}:${endDate}`, [clientId, startDate, endDate]);
 
   function applyPreset(value: string) {
     setPreset(value);
@@ -56,10 +102,35 @@ export function ReportGeneratorDialog({
     }
   }
 
+  async function fetchMessagesStarted(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
+    if (!metaAdAccountId || !metaAccessToken) return 0;
+
+    const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
+      fields: "actions",
+      level: "account",
+      time_range: JSON.stringify({ since: startDate, until: endDate }),
+      access_token: metaAccessToken.trim(),
+    })}`;
+
+    const response = await fetch(url);
+    const json = await response.json();
+
+    if (!response.ok || json.error) {
+      throw new Error(json.error?.message || "Erro ao buscar mensagens iniciadas na Meta");
+    }
+
+    const rows = Array.isArray(json.data) ? json.data : [];
+    return rows.reduce(
+      (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) =>
+        total + extractMessagesStarted(row.actions),
+      0
+    );
+  }
+
   async function buildReportData(): Promise<ReportData> {
     const { data: clientRaw, error: clientError } = await supabase
       .from("clients")
-      .select("name, meta_ad_account_id")
+      .select("name, meta_ad_account_id, meta_access_token")
       .eq("id", clientId)
       .single();
 
@@ -83,13 +154,20 @@ export function ReportGeneratorDialog({
 
     const { data: adsRaw, error: adsError } = await supabase
       .from("ads")
-      .select("name, spend, impressions, clicks, status, ad_sets(campaigns(client_id))");
+      .select("name, spend, impressions, clicks, status, thumbnail_url, image_url, creative_type, ad_sets(campaigns(client_id))");
 
     if (adsError) throw adsError;
 
     const metrics = metricsRaw || [];
     const campaigns = campaignsRaw || [];
     const ads = (adsRaw || []).filter((ad: any) => ad.ad_sets?.campaigns?.client_id === clientId);
+
+    let messagesStarted = 0;
+    try {
+      messagesStarted = await fetchMessagesStarted(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+    } catch {
+      messagesStarted = 0;
+    }
 
     const summary = metrics.reduce(
       (acc: any, item: any) => ({
@@ -98,8 +176,9 @@ export function ReportGeneratorDialog({
         impressions: acc.impressions + (item.impressions || 0),
         clicks: acc.clicks + (item.clicks || 0),
         conversions: acc.conversions,
+        messagesStarted: acc.messagesStarted,
       }),
-      { spend: 0, revenue: 0, impressions: 0, clicks: 0, conversions: 0 }
+      { spend: 0, revenue: 0, impressions: 0, clicks: 0, conversions: 0, messagesStarted }
     );
 
     summary.conversions = campaigns.reduce((total: number, campaign: any) => total + (campaign.conversions || 0), 0);
@@ -127,6 +206,8 @@ export function ReportGeneratorDialog({
         impressions: ad.impressions || 0,
         clicks: ad.clicks || 0,
         status: ad.status || "ACTIVE",
+        previewUrl: ad.thumbnail_url || ad.image_url || null,
+        creativeType: ad.creative_type || "image",
         ctr: ad.impressions > 0 ? ((ad.clicks || 0) / ad.impressions) * 100 : 0,
         cpc: ad.clicks > 0 ? (ad.spend || 0) / ad.clicks : 0,
         cpm: ad.impressions > 0 ? ((ad.spend || 0) / ad.impressions) * 1000 : 0,
@@ -153,10 +234,92 @@ export function ReportGeneratorDialog({
     };
   }
 
+  async function generateAiRecommendations() {
+    setAiLoading(true);
+    try {
+      const reportData = await buildReportData();
+      const activeCampaigns = reportData.topCampaigns.filter((campaign) => campaign.status === "ACTIVE").length;
+      const activeAds = reportData.topAds.filter((ad) => ad.status === "ACTIVE").length;
+      const topCampaign = reportData.topCampaigns[0];
+      const topAd = reportData.topAds[0];
+
+      const result = await summarizePeriod({
+        period: { start: startDate, end: endDate },
+        metrics: {
+          spend: reportData.summary.spend,
+          impressions: reportData.summary.impressions,
+          clicks: reportData.summary.clicks,
+          ctr: reportData.summary.ctr,
+          cpc: reportData.summary.cpc,
+          cpm: reportData.summary.cpm,
+          conversions: reportData.summary.conversions,
+          messages_started: reportData.summary.messagesStarted || 0,
+          active_campaigns: activeCampaigns,
+          active_ads: activeAds,
+          top_campaign_spend: topCampaign?.spend || 0,
+          top_campaign_conversions: topCampaign?.conversions || 0,
+          top_ad_ctr: topAd?.ctr || 0,
+          top_ad_clicks: topAd?.clicks || 0,
+        },
+      });
+
+      setRecommendations(result.summary);
+      setRecommendationSource("ai");
+    } catch (error) {
+      const reportData = await buildReportData();
+      const fallback = buildFallbackRecommendations(reportData);
+      setRecommendations(fallback);
+      setRecommendationSource("ai");
+      toast.warning(
+        error instanceof Error
+          ? `${error.message}. Usando recomendacao local.`
+          : "IA indisponivel no momento. Usando recomendacao local."
+      );
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (recommendationSource === "manual") return;
+    void generateAiRecommendations();
+  }, [isOpen, recommendationKey]);
+
   async function handleGenerate(download: boolean) {
     setLoading(true);
     try {
+      let finalRecommendations = recommendations;
+
+      if (!finalRecommendations.trim()) {
+        const reportPreview = await buildReportData();
+        try {
+          const result = await summarizePeriod({
+            period: { start: startDate, end: endDate },
+            metrics: {
+              spend: reportPreview.summary.spend,
+              impressions: reportPreview.summary.impressions,
+              clicks: reportPreview.summary.clicks,
+              ctr: reportPreview.summary.ctr,
+              cpc: reportPreview.summary.cpc,
+              cpm: reportPreview.summary.cpm,
+              conversions: reportPreview.summary.conversions,
+              messages_started: reportPreview.summary.messagesStarted || 0,
+            },
+          });
+
+          finalRecommendations = result.summary;
+          setRecommendations(result.summary);
+          setRecommendationSource("ai");
+        } catch {
+          finalRecommendations = buildFallbackRecommendations(reportPreview);
+          setRecommendations(finalRecommendations);
+          setRecommendationSource("ai");
+        }
+      }
+
       const data = await buildReportData();
+      data.recommendations = finalRecommendations;
 
       const { data: session } = await supabase.auth.getSession();
       const tenantId = session.session?.user.id;
@@ -165,16 +328,10 @@ export function ReportGeneratorDialog({
       const periodLabel = data.period.label;
       const reportName = `${clientName} - ${periodLabel}`;
 
-      let fileUrl: string | null = null;
-
       if (download) {
-        const blob = await pdf(<ReportPdfTemplate data={data} />).toBlob();
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = `relatorio-${clientName.toLowerCase().replace(/\s+/g, "-")}-${startDate}.pdf`;
-        link.click();
-        URL.revokeObjectURL(url);
+        const blob = await buildReportPdfBlob(data);
+        const filename = `relatorio-${clientName.toLowerCase().replace(/\s+/g, "-")}-${startDate}.pdf`;
+        downloadBlob(blob, filename);
       }
 
       const shareToken = crypto.randomUUID();
@@ -186,7 +343,7 @@ export function ReportGeneratorDialog({
         period: { start: startDate, end: endDate, label: periodLabel },
         data,
         status: "ready",
-        file_url: fileUrl,
+        file_url: null,
         share_token: shareToken,
       });
 
@@ -204,7 +361,7 @@ export function ReportGeneratorDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
@@ -289,7 +446,7 @@ export function ReportGeneratorDialog({
                     value={primaryColor}
                     onChange={(event) => setPrimaryColor(event.target.value)}
                     placeholder="#2563eb"
-                    className="text-sm font-mono"
+                    className="font-mono text-sm"
                   />
                 </div>
               </div>
@@ -297,12 +454,28 @@ export function ReportGeneratorDialog({
           </Card>
 
           <div className="space-y-1">
-            <Label className="text-xs">Analise e recomendacoes</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label className="text-xs">Analise e recomendacoes</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void generateAiRecommendations()}
+                disabled={aiLoading || loading}
+                className="h-7 px-2 text-xs"
+              >
+                {aiLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
+                {recommendations ? "Regenerar com IA" : "Gerar com IA"}
+              </Button>
+            </div>
             <Textarea
               value={recommendations}
-              onChange={(event) => setRecommendations(event.target.value)}
-              placeholder="Descreva a leitura do periodo, destaques e proximos passos..."
-              className="text-sm min-h-[100px]"
+              onChange={(event) => {
+                setRecommendations(event.target.value);
+                setRecommendationSource(event.target.value.trim() ? "manual" : "empty");
+              }}
+              placeholder={aiLoading ? "A IA esta analisando o periodo e montando as recomendacoes..." : "A IA vai preencher este campo com base nas metricas do periodo."}
+              className="min-h-[100px] text-sm"
             />
           </div>
 
