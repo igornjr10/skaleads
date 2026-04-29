@@ -26,6 +26,9 @@ export interface ReportData {
     revenue: number;
     roas: number;
     conversions: number;
+    impressions?: number;
+    clicks?: number;
+    ctr?: number;
     status: string;
   }>;
   topAds: Array<{

@@ -36,16 +36,36 @@ const REPORT_METRIC_OPTIONS = [
   { key: "costPerPurchase", label: "Custo por compra", helper: "Investimento medio por compra" },
   { key: "spend", label: "Valor investido", helper: "Total gasto no periodo" },
   { key: "impressions", label: "Impressoes", helper: "Entrega total da conta" },
-  { key: "clicks", label: "Cliques", helper: "Interacoes de trafego" },
+  { key: "clicks", label: "Total de cliques no link", helper: "Cliques no link registrados no periodo" },
   { key: "messagesStarted", label: "Mensagens iniciadas", helper: "Conversas abertas no periodo" },
 ] as const;
 
 type ReportMetricPreference = (typeof REPORT_METRIC_OPTIONS)[number]["key"];
 
 const META_BASE = "https://graph.facebook.com/v21.0";
+const PURCHASE_ACTION_TYPES = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"] as const;
 
 function normalizeAccountId(id: string) {
   return id.startsWith("act_") ? id.slice(4) : id.trim();
+}
+
+async function fetchMetaCollection<T>(path: string, params: Record<string, string>) {
+  let url: string | undefined = `${META_BASE}/${path}?${new URLSearchParams(params)}`;
+  const rows: T[] = [];
+
+  while (url) {
+    const response = await fetch(url);
+    const json = await response.json();
+
+    if (!response.ok || json.error) {
+      throw new Error(json.error?.message || "Erro ao buscar dados na Meta");
+    }
+
+    rows.push(...(Array.isArray(json.data) ? json.data : []));
+    url = json.paging?.next;
+  }
+
+  return rows;
 }
 
 function extractMessagesStarted(actions?: Array<{ action_type?: string; value?: string }>) {
@@ -71,10 +91,29 @@ function extractActionTotal(
   }, 0);
 }
 
+function extractPrimaryActionMetric(
+  rows: Array<{ actions?: Array<{ action_type?: string; value?: string }>; action_values?: Array<{ action_type?: string; value?: string }> }>,
+  source: "actions" | "action_values",
+  acceptedTypes: readonly string[]
+) {
+  for (const type of acceptedTypes) {
+    const total = rows.reduce((sum, row) => {
+      const collection = source === "actions" ? row.actions : row.action_values;
+      return sum + extractActionTotal(collection, [type]);
+    }, 0);
+
+    if (total > 0) {
+      return { type, total };
+    }
+  }
+
+  return { type: acceptedTypes[0], total: 0 };
+}
+
 function buildFallbackRecommendations(data: ReportData) {
   const ctr = data.summary.ctr;
   const cpc = data.summary.cpc;
-  const conversions = data.summary.conversions;
+  const purchases = data.summary.purchases || data.summary.conversions;
   const spend = data.summary.spend;
   const messagesStarted = data.summary.messagesStarted || 0;
   const topCampaign = data.topCampaigns[0];
@@ -85,7 +124,7 @@ function buildFallbackRecommendations(data: ReportData) {
       : "O periodo mostrou entrega, mas o nivel de interesse ainda pode evoluir, com CTR abaixo do ideal para escalar com seguranca.";
 
   const warning =
-    conversions > 0 || messagesStarted > 0
+    purchases > 0 || messagesStarted > 0
       ? "O principal foco agora deve ser aumentar a eficiencia do que ja converte, concentrando verba nos conjuntos e criativos com melhor resposta."
       : "O principal ponto de atencao e transformar trafego em resultado, porque houve consumo de verba sem conversoes ou conversas suficientes.";
 
@@ -94,7 +133,7 @@ function buildFallbackRecommendations(data: ReportData) {
       ? `Como proximo passo, vale priorizar a campanha ${topCampaign.name} como referencia de otimizacao, revisar segmentacoes de baixo desempenho e testar novas variacoes de criativo para reduzir CPC e elevar conversao.`
       : "Como proximo passo, vale revisar segmentacoes, criativos e pagina de destino para reduzir CPC e melhorar a taxa de resposta do periodo.";
 
-  return `${strength} Foram investidos ${spend.toFixed(2)} no periodo, com CPC medio de ${cpc.toFixed(2)} e ${conversions} conversoes registradas. ${warning} ${action}`;
+  return `${strength} Foram investidos ${spend.toFixed(2)} no periodo, com CPC medio de ${cpc.toFixed(2)} e ${purchases} compras registradas. ${warning} ${action}`;
 }
 
 export function ReportGeneratorDialog({
@@ -158,11 +197,11 @@ export function ReportGeneratorDialog({
 
   async function fetchAccountConversionMetrics(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
     if (!metaAdAccountId || !metaAccessToken) {
-      return { messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0 };
+      return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0 };
     }
 
     const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
-      fields: "actions,action_values,spend",
+      fields: "actions,action_values,spend,impressions,inline_link_clicks",
       level: "account",
       time_range: JSON.stringify({ since: startDate, until: endDate }),
       access_token: metaAccessToken.trim(),
@@ -176,32 +215,131 @@ export function ReportGeneratorDialog({
     }
 
     const rows = Array.isArray(json.data) ? json.data : [];
-
-    const purchases = rows.reduce(
-      (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) =>
-        total + extractActionTotal(row.actions, ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"]),
-      0
-    );
-
-    const purchaseValue = rows.reduce(
-      (total: number, row: { action_values?: Array<{ action_type?: string; value?: string }> }) =>
-        total + extractActionTotal(row.action_values, ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"]),
-      0
-    );
-
+    const purchaseMetric = extractPrimaryActionMetric(rows, "actions", PURCHASE_ACTION_TYPES);
+    const purchaseValueMetric = extractPrimaryActionMetric(rows, "action_values", PURCHASE_ACTION_TYPES);
     const spend = rows.reduce((total: number, row: { spend?: string }) => total + (parseFloat(row.spend ?? "0") || 0), 0);
+    const impressions = rows.reduce((total: number, row: { impressions?: string }) => total + (parseInt(row.impressions ?? "0", 10) || 0), 0);
+    const clicks = rows.reduce(
+      (total: number, row: { inline_link_clicks?: string }) => total + (parseInt(row.inline_link_clicks ?? "0", 10) || 0),
+      0
+    );
     const messagesStarted = rows.reduce(
       (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) =>
         total + extractMessagesStarted(row.actions),
       0
     );
 
+    const purchases = purchaseMetric.total;
+    const purchaseValue = purchaseValueMetric.total;
+
     return {
+      spend,
+      impressions,
+      clicks,
       messagesStarted,
       purchases,
       purchaseValue,
       costPerPurchase: purchases > 0 ? spend / purchases : 0,
     };
+  }
+
+  async function fetchMetaCampaignSummaries(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
+    if (!metaAdAccountId || !metaAccessToken) return [];
+
+      const rows = await fetchMetaCollection<Array<{
+        name?: string;
+        status?: string;
+        insights?: {
+          data?: Array<{
+            spend?: string;
+            impressions?: string;
+            inline_link_clicks?: string;
+            actions?: Array<{ action_type?: string; value?: string }>;
+            action_values?: Array<{ action_type?: string; value?: string }>;
+          }>;
+        };
+      }>[number]>(`act_${normalizeAccountId(metaAdAccountId)}/campaigns`, {
+      fields: `name,status,insights.time_range(${JSON.stringify({ since: startDate, until: endDate })}){spend,impressions,inline_link_clicks,actions,action_values}`,
+      limit: "200",
+      access_token: metaAccessToken.trim(),
+    });
+
+    return rows
+      .map((campaign) => {
+        const insight = campaign.insights?.data?.[0];
+        const purchaseMetric = extractPrimaryActionMetric([{ actions: insight?.actions, action_values: insight?.action_values }], "actions", PURCHASE_ACTION_TYPES);
+        const purchaseValueMetric = extractPrimaryActionMetric([{ actions: insight?.actions, action_values: insight?.action_values }], "action_values", PURCHASE_ACTION_TYPES);
+        const purchases = purchaseMetric.total;
+        const purchaseValue = purchaseValueMetric.total;
+        const spend = parseFloat(insight?.spend ?? "0") || 0;
+        const impressions = parseInt((insight as { impressions?: string } | undefined)?.impressions ?? "0", 10) || 0;
+        const clicks = parseInt((insight as { inline_link_clicks?: string } | undefined)?.inline_link_clicks ?? "0", 10) || 0;
+
+        return {
+          name: campaign.name || "Campanha sem nome",
+          status: campaign.status || "ACTIVE",
+          spend,
+          conversions: purchases,
+          revenue: purchaseValue,
+          roas: spend > 0 ? purchaseValue / spend : 0,
+          impressions,
+          clicks,
+          ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+        };
+      })
+      .filter((campaign) => campaign.spend > 0 || campaign.conversions > 0 || campaign.revenue > 0)
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 10);
+  }
+
+  async function fetchMetaAdSummaries(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
+    if (!metaAdAccountId || !metaAccessToken) return [];
+
+    const rows = await fetchMetaCollection<Array<{
+      name?: string;
+      status?: string;
+      creative?: {
+        thumbnail_url?: string;
+        image_url?: string;
+        object_type?: string;
+        video_id?: string;
+      };
+      insights?: {
+        data?: Array<{
+          spend?: string;
+          impressions?: string;
+          inline_link_clicks?: string;
+        }>;
+      };
+    }>[number]>(`act_${normalizeAccountId(metaAdAccountId)}/ads`, {
+      fields: `name,status,creative{thumbnail_url,image_url,object_type,video_id},insights.time_range(${JSON.stringify({ since: startDate, until: endDate })}){spend,impressions,inline_link_clicks}`,
+      limit: "200",
+      access_token: metaAccessToken.trim(),
+    });
+
+    return rows
+      .map((ad) => {
+        const insight = ad.insights?.data?.[0];
+        const spend = parseFloat(insight?.spend ?? "0") || 0;
+        const impressions = parseInt(insight?.impressions ?? "0", 10) || 0;
+        const clicks = parseInt(insight?.inline_link_clicks ?? "0", 10) || 0;
+
+        return {
+          name: ad.name || "Anuncio sem nome",
+          spend,
+          impressions,
+          clicks,
+          status: ad.status || "ACTIVE",
+          previewUrl: ad.creative?.thumbnail_url || ad.creative?.image_url || null,
+          creativeType: ad.creative?.object_type === "VIDEO" || ad.creative?.video_id ? "video" : "image",
+          ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+          cpc: clicks > 0 ? spend / clicks : 0,
+          cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
+        };
+      })
+      .filter((ad) => ad.spend > 0 || ad.impressions > 0 || ad.clicks > 0)
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 12);
   }
 
   async function buildReportData(): Promise<ReportData> {
@@ -239,7 +377,7 @@ export function ReportGeneratorDialog({
     const campaigns = campaignsRaw || [];
     const ads = (adsRaw || []).filter((ad: any) => ad.ad_sets?.campaigns?.client_id === clientId);
 
-    let conversionMetrics = { messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0 };
+    let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0 };
     try {
       conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
     } catch {
@@ -262,7 +400,10 @@ export function ReportGeneratorDialog({
       { spend: 0, revenue: 0, impressions: 0, clicks: 0, conversions: 0, messagesStarted: conversionMetrics.messagesStarted }
     );
 
-    summary.conversions = campaigns.reduce((total: number, campaign: any) => total + (campaign.conversions || 0), 0);
+    summary.spend = conversionMetrics.spend || summary.spend;
+    summary.impressions = conversionMetrics.impressions || summary.impressions;
+    summary.clicks = conversionMetrics.clicks || summary.clicks;
+    summary.conversions = conversionMetrics.purchases || campaigns.reduce((total: number, campaign: any) => total + (campaign.conversions || 0), 0);
     summary.revenue = conversionMetrics.purchaseValue;
     summary.purchases = conversionMetrics.purchases;
     summary.purchaseValue = conversionMetrics.purchaseValue;
@@ -272,7 +413,7 @@ export function ReportGeneratorDialog({
     summary.cpc = summary.clicks > 0 ? summary.spend / summary.clicks : 0;
     summary.cpm = summary.impressions > 0 ? (summary.spend / summary.impressions) * 1000 : 0;
 
-    const topCampaigns = campaigns
+    let topCampaigns = campaigns
       .map((campaign: any) => ({
         name: campaign.name,
         status: campaign.status,
@@ -284,7 +425,16 @@ export function ReportGeneratorDialog({
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 10);
 
-    const topAds = ads
+    try {
+      const metaCampaigns = await fetchMetaCampaignSummaries(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      if (metaCampaigns.length > 0) {
+        topCampaigns = metaCampaigns;
+      }
+    } catch {
+      // Fallback para os dados locais se a consulta detalhada falhar.
+    }
+
+    let topAds = ads
       .map((ad: any) => ({
         name: ad.name,
         spend: ad.spend || 0,
@@ -299,6 +449,15 @@ export function ReportGeneratorDialog({
       }))
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 12);
+
+    try {
+      const metaAds = await fetchMetaAdSummaries(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      if (metaAds.length > 0) {
+        topAds = metaAds;
+      }
+    } catch {
+      // Fallback para anuncios salvos localmente se a consulta do periodo falhar.
+    }
 
     const start = new Date(startDate + "T00:00:00");
     const end = new Date(endDate + "T00:00:00");

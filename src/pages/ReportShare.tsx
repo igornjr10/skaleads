@@ -36,6 +36,45 @@ function fmtNum(value: number) {
   return value.toLocaleString("pt-BR");
 }
 
+function getPreferredMetrics(data: ReportData) {
+  const preferences = data.metricPreferences?.length
+    ? data.metricPreferences
+    : ["spend", "impressions", "clicks", "messagesStarted"];
+
+  const registry: Record<string, { label: string; value: string }> = {
+    spend: {
+      label: "Valor investido",
+      value: fmtCurrency(data.summary.spend),
+    },
+    impressions: {
+      label: "Impressoes totais",
+      value: fmtNum(data.summary.impressions),
+    },
+    clicks: {
+      label: "Total de cliques no link",
+      value: fmtNum(data.summary.clicks),
+    },
+    messagesStarted: {
+      label: "Mensagens iniciadas",
+      value: fmtNum(data.summary.messagesStarted || 0),
+    },
+    purchaseValue: {
+      label: "Valor da conversao da compra",
+      value: fmtCurrency(data.summary.purchaseValue || 0),
+    },
+    purchases: {
+      label: "Compras",
+      value: fmtNum(data.summary.purchases || 0),
+    },
+    costPerPurchase: {
+      label: "Custo por compra",
+      value: data.summary.purchases ? fmtCurrency(data.summary.costPerPurchase || 0) : "-",
+    },
+  };
+
+  return preferences.map((key) => registry[key]).filter(Boolean);
+}
+
 export default function ReportShare() {
   const { token } = useParams<{ token: string }>();
   const [report, setReport] = useState<SharedReport | null>(null);
@@ -112,6 +151,7 @@ export default function ReportShare() {
   const generatedAt = data?.generatedAt;
   const primaryColor = data?.branding?.primaryColor || "#6366f1";
   const agencyName = data?.branding?.agencyName || "MarketProAds";
+  const preferredMetrics = getPreferredMetrics(data);
 
   return (
     <div className="min-h-screen bg-muted/30">
@@ -134,20 +174,15 @@ export default function ReportShare() {
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">Resumo Executivo</h2>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <KpiCard label="Investimento" value={fmtCurrency(data.summary.spend)} />
-              <KpiCard label="Receita" value={fmtCurrency(data.summary.revenue)} />
-              <KpiCard label="ROAS" value={`${data.summary.roas.toFixed(2)}x`} />
-              <KpiCard label="Conversoes" value={fmtNum(data.summary.conversions)} />
+              {preferredMetrics.map((metric) => (
+                <KpiCard key={metric.label} label={metric.label} value={metric.value} />
+              ))}
             </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <KpiCard label="Impressoes" value={fmtNum(data.summary.impressions)} />
-              <KpiCard label="Cliques" value={fmtNum(data.summary.clicks)} />
-              <KpiCard label="Mensagens iniciadas" value={fmtNum(data.summary.messagesStarted || 0)} />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <KpiCard label="CTR" value={`${data.summary.ctr.toFixed(2)}%`} />
-              <KpiCard
-                label="CPA"
-                value={data.summary.conversions > 0 ? fmtCurrency(data.summary.spend / data.summary.conversions) : "-"}
-              />
+              <KpiCard label="CPC" value={fmtCurrency(data.summary.cpc)} />
+              <KpiCard label="CPM" value={fmtCurrency(data.summary.cpm)} />
+              <KpiCard label="ROAS" value={`${data.summary.roas.toFixed(2)}x`} />
             </div>
           </section>
         )}
@@ -164,7 +199,7 @@ export default function ReportShare() {
                         <th className="p-3 text-left font-medium">Campanha</th>
                         <th className="p-3 text-right font-medium">Investimento</th>
                         <th className="p-3 text-right font-medium">ROAS</th>
-                        <th className="p-3 text-right font-medium">Conversoes</th>
+                        <th className="p-3 text-right font-medium">Compras</th>
                       </tr>
                     </thead>
                     <tbody>

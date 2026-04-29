@@ -38,6 +38,16 @@ function fmtPct(v: number) {
   return `${v.toFixed(2)}%`;
 }
 
+function chunkMetrics<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
 function getPreferredMetrics(data: ReportData) {
   const preferences = data.metricPreferences?.length
     ? data.metricPreferences
@@ -55,9 +65,9 @@ function getPreferredMetrics(data: ReportData) {
       note: "Entrega acumulada",
     },
     clicks: {
-      label: "Cliques totais",
+      label: "Total de cliques no link",
       value: fmtNum(data.summary.clicks),
-      note: "Interacoes de trafego",
+      note: "Cliques no link no periodo",
     },
     messagesStarted: {
       label: "Mensagens iniciadas",
@@ -394,9 +404,9 @@ function SummaryTable({ data }: { data: ReportData }) {
         <View style={styles.tableHeader}>
           <Text style={[styles.tableHeaderCell, styles.colWide]}>Nome da campanha</Text>
           <Text style={[styles.tableHeaderCell, styles.colMetric]}>Investido</Text>
-          <Text style={[styles.tableHeaderCell, styles.colMetric]}>Conversoes</Text>
+          <Text style={[styles.tableHeaderCell, styles.colMetric]}>Compras</Text>
           <Text style={[styles.tableHeaderCell, styles.colMetric]}>CTR</Text>
-          <Text style={[styles.tableHeaderCell, styles.colMetric]}>CPA</Text>
+          <Text style={[styles.tableHeaderCell, styles.colMetric]}>Custo por compra</Text>
           <Text style={[styles.tableHeaderCell, styles.colMetric]}>Status</Text>
         </View>
         {campaigns.map((campaign, index) => (
@@ -404,7 +414,7 @@ function SummaryTable({ data }: { data: ReportData }) {
             <Text style={[styles.tableCell, styles.colWide]}>{sanitizePdfText(campaign.name)}</Text>
             <Text style={[styles.tableCell, styles.colMetric]}>{fmtCurrency(campaign.spend)}</Text>
             <Text style={[styles.tableCell, styles.colMetric]}>{fmtNum(campaign.conversions)}</Text>
-            <Text style={[styles.tableCell, styles.colMetric]}>{fmtPct(data.summary.ctr)}</Text>
+            <Text style={[styles.tableCell, styles.colMetric]}>{campaign.ctr !== undefined ? fmtPct(campaign.ctr) : "-"}</Text>
             <Text style={[styles.tableCell, styles.colMetric]}>
               {campaign.conversions > 0 ? fmtCurrency(campaign.spend / campaign.conversions) : "-"}
             </Text>
@@ -470,13 +480,13 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   const ads = data.topAds.slice(0, 10);
   const recommendationPage = ads.length > 0 ? 4 : 3;
   const preferredMetrics = getPreferredMetrics(data);
-  const topMetrics = preferredMetrics.slice(0, 4);
+  const metricRows = chunkMetrics(preferredMetrics, 4);
   const consolidatedMetrics = [
     ...preferredMetrics,
     { label: "CTR medio", value: fmtPct(data.summary.ctr), note: "Taxa de clique" },
     { label: "CPC medio", value: fmtCurrency(data.summary.cpc), note: "Custo por clique" },
     { label: "CPM medio", value: fmtCurrency(data.summary.cpm), note: "Custo por mil" },
-    { label: "Conversoes totais", value: fmtNum(data.summary.conversions), note: "Conversoes registradas" },
+    { label: "Compras totais", value: fmtNum(data.summary.purchases || data.summary.conversions), note: "Compras registradas" },
   ];
 
   return (
@@ -507,15 +517,17 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                 <Text style={styles.headerChip}>Periodo: {data.period.label}</Text>
               </View>
 
-              <View style={styles.metricsRow}>
-                {topMetrics.map((metric, index) => (
-                  <View key={metric.label} style={[styles.metricCell, index === topMetrics.length - 1 && { borderRightWidth: 0 }]}>
-                    <Text style={styles.metricLabel}>{metric.label}</Text>
-                    <Text style={styles.metricValue}>{metric.value}</Text>
-                    <Text style={styles.metricNote}>{metric.note}</Text>
-                  </View>
-                ))}
-              </View>
+              {metricRows.map((row, rowIndex) => (
+                <View key={rowIndex} style={styles.metricsRow}>
+                  {row.map((metric, index) => (
+                    <View key={metric.label} style={[styles.metricCell, index === row.length - 1 && { borderRightWidth: 0 }]}>
+                      <Text style={styles.metricLabel}>{metric.label}</Text>
+                      <Text style={styles.metricValue}>{metric.value}</Text>
+                      <Text style={styles.metricNote}>{metric.note}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
 
               <View style={styles.analysisBox}>
                 <Text style={styles.analysisLabel}>Analise</Text>
@@ -564,9 +576,9 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                 <View style={[styles.metricCell, { borderRightWidth: 0 }]}>
                   <Text style={styles.metricLabel}>CPA medio</Text>
                   <Text style={styles.metricValue}>
-                    {data.summary.conversions > 0 ? fmtCurrency(data.summary.spend / data.summary.conversions) : "-"}
+                    {data.summary.purchases ? fmtCurrency(data.summary.costPerPurchase || 0) : "-"}
                   </Text>
-                  <Text style={styles.metricNote}>Custo por conversao</Text>
+                  <Text style={styles.metricNote}>Custo por compra</Text>
                 </View>
               </View>
 
