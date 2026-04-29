@@ -30,6 +30,18 @@ const PERIOD_PRESETS = [
   { label: "Este mes", days: 0 },
 ];
 
+const REPORT_METRIC_OPTIONS = [
+  { key: "purchaseValue", label: "Valor de conversao de compras", helper: "Valor total gerado por compras" },
+  { key: "purchases", label: "Compras", helper: "Quantidade total de compras" },
+  { key: "costPerPurchase", label: "Custo por compra", helper: "Investimento medio por compra" },
+  { key: "spend", label: "Valor investido", helper: "Total gasto no periodo" },
+  { key: "impressions", label: "Impressoes", helper: "Entrega total da conta" },
+  { key: "clicks", label: "Cliques", helper: "Interacoes de trafego" },
+  { key: "messagesStarted", label: "Mensagens iniciadas", helper: "Conversas abertas no periodo" },
+] as const;
+
+type ReportMetricPreference = (typeof REPORT_METRIC_OPTIONS)[number]["key"];
+
 const META_BASE = "https://graph.facebook.com/v21.0";
 
 function normalizeAccountId(id: string) {
@@ -43,6 +55,19 @@ function extractMessagesStarted(actions?: Array<{ action_type?: string; value?: 
     const type = action.action_type ?? "";
     if (!type.includes("messaging_conversation_started")) return total;
     return total + (parseInt(action.value ?? "0", 10) || 0);
+  }, 0);
+}
+
+function extractActionTotal(
+  actions: Array<{ action_type?: string; value?: string }> | undefined,
+  acceptedTypes: string[]
+) {
+  if (!actions?.length) return 0;
+
+  return actions.reduce((total, action) => {
+    const type = action.action_type ?? "";
+    if (!acceptedTypes.includes(type)) return total;
+    return total + (parseFloat(action.value ?? "0") || 0);
   }, 0);
 }
 
@@ -86,8 +111,12 @@ export function ReportGeneratorDialog({
   const [recommendations, setRecommendations] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [recommendationSource, setRecommendationSource] = useState<"empty" | "ai" | "manual">("empty");
-  const [primaryColor, setPrimaryColor] = useState("#2563eb");
-  const [agencyName, setAgencyName] = useState("MarketProAds");
+  const [metricPreferences, setMetricPreferences] = useState<ReportMetricPreference[]>([
+    "purchaseValue",
+    "purchases",
+    "costPerPurchase",
+    "messagesStarted",
+  ]);
   const recommendationKey = useMemo(() => `${clientId}:${startDate}:${endDate}`, [clientId, startDate, endDate]);
 
   function applyPreset(value: string) {
@@ -127,6 +156,54 @@ export function ReportGeneratorDialog({
     );
   }
 
+  async function fetchAccountConversionMetrics(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
+    if (!metaAdAccountId || !metaAccessToken) {
+      return { messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0 };
+    }
+
+    const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
+      fields: "actions,action_values,spend",
+      level: "account",
+      time_range: JSON.stringify({ since: startDate, until: endDate }),
+      access_token: metaAccessToken.trim(),
+    })}`;
+
+    const response = await fetch(url);
+    const json = await response.json();
+
+    if (!response.ok || json.error) {
+      throw new Error(json.error?.message || "Erro ao buscar metricas de conversao na Meta");
+    }
+
+    const rows = Array.isArray(json.data) ? json.data : [];
+
+    const purchases = rows.reduce(
+      (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) =>
+        total + extractActionTotal(row.actions, ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"]),
+      0
+    );
+
+    const purchaseValue = rows.reduce(
+      (total: number, row: { action_values?: Array<{ action_type?: string; value?: string }> }) =>
+        total + extractActionTotal(row.action_values, ["purchase", "omni_purchase", "offsite_conversion.fb_pixel_purchase"]),
+      0
+    );
+
+    const spend = rows.reduce((total: number, row: { spend?: string }) => total + (parseFloat(row.spend ?? "0") || 0), 0);
+    const messagesStarted = rows.reduce(
+      (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) =>
+        total + extractMessagesStarted(row.actions),
+      0
+    );
+
+    return {
+      messagesStarted,
+      purchases,
+      purchaseValue,
+      costPerPurchase: purchases > 0 ? spend / purchases : 0,
+    };
+  }
+
   async function buildReportData(): Promise<ReportData> {
     const { data: clientRaw, error: clientError } = await supabase
       .from("clients")
@@ -162,11 +239,15 @@ export function ReportGeneratorDialog({
     const campaigns = campaignsRaw || [];
     const ads = (adsRaw || []).filter((ad: any) => ad.ad_sets?.campaigns?.client_id === clientId);
 
-    let messagesStarted = 0;
+    let conversionMetrics = { messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0 };
     try {
-      messagesStarted = await fetchMessagesStarted(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
     } catch {
-      messagesStarted = 0;
+      try {
+        conversionMetrics.messagesStarted = await fetchMessagesStarted(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      } catch {
+        conversionMetrics.messagesStarted = 0;
+      }
     }
 
     const summary = metrics.reduce(
@@ -178,10 +259,14 @@ export function ReportGeneratorDialog({
         conversions: acc.conversions,
         messagesStarted: acc.messagesStarted,
       }),
-      { spend: 0, revenue: 0, impressions: 0, clicks: 0, conversions: 0, messagesStarted }
+      { spend: 0, revenue: 0, impressions: 0, clicks: 0, conversions: 0, messagesStarted: conversionMetrics.messagesStarted }
     );
 
     summary.conversions = campaigns.reduce((total: number, campaign: any) => total + (campaign.conversions || 0), 0);
+    summary.revenue = conversionMetrics.purchaseValue;
+    summary.purchases = conversionMetrics.purchases;
+    summary.purchaseValue = conversionMetrics.purchaseValue;
+    summary.costPerPurchase = conversionMetrics.costPerPurchase;
     summary.roas = summary.spend > 0 ? summary.revenue / summary.spend : 0;
     summary.ctr = summary.impressions > 0 ? (summary.clicks / summary.impressions) * 100 : 0;
     summary.cpc = summary.clicks > 0 ? summary.spend / summary.clicks : 0;
@@ -230,8 +315,20 @@ export function ReportGeneratorDialog({
       topCampaigns,
       topAds,
       recommendations: recommendations || "Nenhuma recomendacao registrada para este periodo.",
-      branding: { primaryColor, agencyName },
+      metricPreferences,
+      branding: { primaryColor: "#2563eb", agencyName: "MarketProAds" },
     };
+  }
+
+  function toggleMetricPreference(metric: ReportMetricPreference) {
+    setMetricPreferences((current) => {
+      if (current.includes(metric)) {
+        if (current.length === 1) return current;
+        return current.filter((item) => item !== metric);
+      }
+
+      return [...current, metric];
+    });
   }
 
   async function generateAiRecommendations() {
@@ -421,35 +518,26 @@ export function ReportGeneratorDialog({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Branding</CardTitle>
+              <CardTitle className="text-sm">Preferencias do relatorio</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Nome da agencia</Label>
-                <Input
-                  value={agencyName}
-                  onChange={(event) => setAgencyName(event.target.value)}
-                  placeholder="MarketProAds"
-                  className="text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Cor principal</Label>
-                <div className="flex items-center gap-2">
+            <CardContent className="space-y-2">
+              {REPORT_METRIC_OPTIONS.map((option) => (
+                <label
+                  key={option.key}
+                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/30"
+                >
                   <input
-                    type="color"
-                    value={primaryColor}
-                    onChange={(event) => setPrimaryColor(event.target.value)}
-                    className="h-9 w-14 cursor-pointer rounded border"
+                    type="checkbox"
+                    checked={metricPreferences.includes(option.key)}
+                    onChange={() => toggleMetricPreference(option.key)}
+                    className="mt-1 h-4 w-4 rounded border"
                   />
-                  <Input
-                    value={primaryColor}
-                    onChange={(event) => setPrimaryColor(event.target.value)}
-                    placeholder="#2563eb"
-                    className="font-mono text-sm"
-                  />
-                </div>
-              </div>
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">{option.label}</div>
+                    <div className="text-xs text-muted-foreground">{option.helper}</div>
+                  </div>
+                </label>
+              ))}
             </CardContent>
           </Card>
 

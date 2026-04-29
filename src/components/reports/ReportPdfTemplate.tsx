@@ -38,6 +38,52 @@ function fmtPct(v: number) {
   return `${v.toFixed(2)}%`;
 }
 
+function getPreferredMetrics(data: ReportData) {
+  const preferences = data.metricPreferences?.length
+    ? data.metricPreferences
+    : ["spend", "impressions", "clicks", "messagesStarted"];
+
+  const registry: Record<string, { label: string; value: string; note: string }> = {
+    spend: {
+      label: "Valor investido",
+      value: fmtCurrency(data.summary.spend),
+      note: "No periodo selecionado",
+    },
+    impressions: {
+      label: "Impressoes totais",
+      value: fmtNum(data.summary.impressions),
+      note: "Entrega acumulada",
+    },
+    clicks: {
+      label: "Cliques totais",
+      value: fmtNum(data.summary.clicks),
+      note: "Interacoes de trafego",
+    },
+    messagesStarted: {
+      label: "Mensagens iniciadas",
+      value: fmtNum(data.summary.messagesStarted || 0),
+      note: "Conversas abertas no periodo",
+    },
+    purchaseValue: {
+      label: "Valor de compras",
+      value: fmtCurrency(data.summary.purchaseValue || 0),
+      note: "Conversao total registrada",
+    },
+    purchases: {
+      label: "Compras",
+      value: fmtNum(data.summary.purchases || 0),
+      note: "Quantidade total de compras",
+    },
+    costPerPurchase: {
+      label: "Custo por compra",
+      value: data.summary.purchases ? fmtCurrency(data.summary.costPerPurchase || 0) : "-",
+      note: "Investimento medio por compra",
+    },
+  };
+
+  return preferences.map((key) => registry[key]).filter(Boolean);
+}
+
 const styles = StyleSheet.create({
   page: {
     fontFamily: "Helvetica",
@@ -423,6 +469,15 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   const campaigns = data.topCampaigns.slice(0, 10);
   const ads = data.topAds.slice(0, 10);
   const recommendationPage = ads.length > 0 ? 4 : 3;
+  const preferredMetrics = getPreferredMetrics(data);
+  const topMetrics = preferredMetrics.slice(0, 4);
+  const consolidatedMetrics = [
+    ...preferredMetrics,
+    { label: "CTR medio", value: fmtPct(data.summary.ctr), note: "Taxa de clique" },
+    { label: "CPC medio", value: fmtCurrency(data.summary.cpc), note: "Custo por clique" },
+    { label: "CPM medio", value: fmtCurrency(data.summary.cpm), note: "Custo por mil" },
+    { label: "Conversoes totais", value: fmtNum(data.summary.conversions), note: "Conversoes registradas" },
+  ];
 
   return (
     <Document title={`Relatorio - ${sanitizePdfText(data.client.name)}`} author={sanitizePdfText(data.branding.agencyName) || "MarketProAds"}>
@@ -453,26 +508,13 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
               </View>
 
               <View style={styles.metricsRow}>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Valor investido</Text>
-                  <Text style={styles.metricValue}>{fmtCurrency(data.summary.spend)}</Text>
-                  <Text style={styles.metricNote}>No periodo selecionado</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Impressoes totais</Text>
-                  <Text style={styles.metricValue}>{fmtNum(data.summary.impressions)}</Text>
-                  <Text style={styles.metricNote}>Entrega acumulada</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Cliques totais</Text>
-                  <Text style={styles.metricValue}>{fmtNum(data.summary.clicks)}</Text>
-                  <Text style={styles.metricNote}>Interacoes de trafego</Text>
-                </View>
-                <View style={[styles.metricCell, { borderRightWidth: 0 }]}>
-                  <Text style={styles.metricLabel}>Mensagens iniciadas</Text>
-                  <Text style={styles.metricValue}>{fmtNum(data.summary.messagesStarted || 0)}</Text>
-                  <Text style={styles.metricNote}>No periodo selecionado</Text>
-                </View>
+                {topMetrics.map((metric, index) => (
+                  <View key={metric.label} style={[styles.metricCell, index === topMetrics.length - 1 && { borderRightWidth: 0 }]}>
+                    <Text style={styles.metricLabel}>{metric.label}</Text>
+                    <Text style={styles.metricValue}>{metric.value}</Text>
+                    <Text style={styles.metricNote}>{metric.note}</Text>
+                  </View>
+                ))}
               </View>
 
               <View style={styles.analysisBox}>
@@ -576,19 +618,10 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                   <Text style={[styles.tableHeaderCell, styles.colWide]}>Indicador</Text>
                   <Text style={[styles.tableHeaderCell, styles.colMetric]}>Valor</Text>
                 </View>
-                {[
-                  ["Investimento total", fmtCurrency(data.summary.spend)],
-                  ["Impressoes totais", fmtNum(data.summary.impressions)],
-                  ["Cliques totais", fmtNum(data.summary.clicks)],
-                  ["CTR medio", fmtPct(data.summary.ctr)],
-                  ["CPC medio", fmtCurrency(data.summary.cpc)],
-                  ["CPM medio", fmtCurrency(data.summary.cpm)],
-                  ["Mensagens iniciadas", fmtNum(data.summary.messagesStarted || 0)],
-                  ["Conversoes totais", fmtNum(data.summary.conversions)],
-                ].map(([label, value], index) => (
+                {consolidatedMetrics.map((metric, index) => (
                   <View key={index} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
-                    <Text style={[styles.tableCell, styles.colWide]}>{label}</Text>
-                    <Text style={[styles.tableCell, styles.colMetric]}>{value}</Text>
+                    <Text style={[styles.tableCell, styles.colWide]}>{metric.label}</Text>
+                    <Text style={[styles.tableCell, styles.colMetric]}>{metric.value}</Text>
                   </View>
                 ))}
               </View>

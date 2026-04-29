@@ -10,6 +10,9 @@ export interface ReportData {
     revenue: number;
     roas: number;
     conversions: number;
+    purchases?: number;
+    purchaseValue?: number;
+    costPerPurchase?: number;
     messagesStarted?: number;
     impressions: number;
     clicks: number;
@@ -38,5 +41,6 @@ export interface ReportData {
     status: string;
   }>;
   recommendations: string;
+  metricPreferences?: Array<"spend" | "impressions" | "clicks" | "messagesStarted" | "purchaseValue" | "purchases" | "costPerPurchase">;
   branding: { primaryColor: string; agencyName: string };
 }
