@@ -11,9 +11,9 @@ import { toast } from "sonner";
 
 const features = [
   { icon: BarChart3, text: "Dashboards em tempo real" },
-  { icon: Bell,      text: "Alertas inteligentes automáticos" },
-  { icon: Zap,       text: "Drill-down completo de campanhas" },
-  { icon: Shield,    text: "Auditoria avançada de conta Meta" },
+  { icon: Bell, text: "Alertas inteligentes automaticos" },
+  { icon: Zap, text: "Drill-down completo de campanhas" },
+  { icon: Shield, text: "Auditoria avancada de conta Meta" },
 ];
 
 export default function Auth() {
@@ -52,7 +52,7 @@ export default function Auth() {
     });
     setSubmitting(false);
     if (error) return toast.error(error.message);
-    toast.success("Conta criada! Você já pode entrar.");
+    toast.success("Conta criada! Voce ja pode entrar.");
   }
 
   const inputCls =
@@ -63,14 +63,9 @@ export default function Auth() {
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-[#080808]">
-
-      {/* ── Left brand panel ────────────────────────────── */}
       <div className="relative flex flex-col justify-between p-12 lg:w-1/2 xl:w-[55%] overflow-hidden min-h-[420px] lg:min-h-screen">
-
-        {/* Glow */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_25%_65%,rgba(249,115,22,0.13)_0%,transparent_70%)]" />
 
-        {/* Grid */}
         <div
           className="absolute inset-0 opacity-30"
           style={{
@@ -81,10 +76,8 @@ export default function Auth() {
           }}
         />
 
-        {/* Divider right */}
         <div className="absolute right-0 inset-y-0 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
 
-        {/* Brand mark */}
         <div className="relative flex items-center gap-3">
           <div className="relative">
             <div className="absolute inset-0 rounded-2xl bg-orange-500/30 blur-md scale-110" />
@@ -106,7 +99,6 @@ export default function Auth() {
           </div>
         </div>
 
-        {/* Hero */}
         <div className="relative space-y-6">
           <div className="inline-flex items-center gap-2 rounded-full border border-orange-500/20 bg-orange-500/10 px-3 py-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-orange-400 animate-pulse" />
@@ -116,8 +108,10 @@ export default function Auth() {
           </div>
 
           <h1 className="text-[32px] font-extrabold text-white leading-[1.2] tracking-tight">
-            Gerencie suas campanhas<br />
-            Meta Ads<br />
+            Gerencie suas campanhas
+            <br />
+            Meta Ads
+            <br />
             <span className="text-orange-400">como um profissional.</span>
           </h1>
 
@@ -136,15 +130,11 @@ export default function Auth() {
         <p className="relative text-[11px] text-white/25">© 2026 MarketProAds</p>
       </div>
 
-      {/* ── Right form panel ────────────────────────────── */}
       <div className="relative flex flex-1 flex-col justify-center items-center p-10 bg-[#0c0c0c]">
-
-        {/* Ambient */}
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_40%,rgba(249,115,22,0.05)_0%,transparent_70%)]" />
 
         <div className="relative w-full max-w-[360px]">
           <Tabs defaultValue="login" className="w-full">
-
             <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 rounded-xl p-1 mb-7 h-10">
               <TabsTrigger
                 value="login"
@@ -160,7 +150,6 @@ export default function Auth() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Login */}
             <TabsContent value="login" className="mt-0 space-y-5">
               <div className="space-y-1">
                 <h2 className="text-[22px] font-bold text-white tracking-tight">Bem-vindo de volta</h2>
@@ -170,7 +159,10 @@ export default function Auth() {
                 <div className="space-y-1.5">
                   <Label htmlFor="login-email" className={labelCls}>Email</Label>
                   <Input
-                    id="login-email" name="email" type="email" required
+                    id="login-email"
+                    name="email"
+                    type="email"
+                    required
                     placeholder="voce@empresa.com"
                     className={inputCls}
                   />
@@ -178,13 +170,18 @@ export default function Auth() {
                 <div className="space-y-1.5">
                   <Label htmlFor="login-password" className={labelCls}>Senha</Label>
                   <Input
-                    id="login-password" name="password" type="password" required minLength={6}
+                    id="login-password"
+                    name="password"
+                    type="password"
+                    required
+                    minLength={6}
                     placeholder="••••••••"
                     className={inputCls}
                   />
                 </div>
                 <Button
-                  type="submit" disabled={submitting}
+                  type="submit"
+                  disabled={submitting}
                   className="w-full h-11 bg-orange-500 hover:bg-orange-400 text-white font-bold rounded-xl shadow-lg hover:shadow-orange-500/40 transition-all duration-200 mt-1"
                 >
                   {submitting ? "Entrando..." : "Entrar"}
@@ -192,25 +189,29 @@ export default function Auth() {
               </form>
             </TabsContent>
 
-            {/* Signup */}
             <TabsContent value="signup" className="mt-0 space-y-5">
               <div className="space-y-1">
                 <h2 className="text-[22px] font-bold text-white tracking-tight">Criar conta</h2>
-                <p className="text-[13px] text-white/35">O primeiro usuário cadastrado vira Owner da plataforma.</p>
+                <p className="text-[13px] text-white/35">O primeiro usuario cadastrado vira Owner da plataforma.</p>
               </div>
               <form onSubmit={handleSignup} className="space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="signup-name" className={labelCls}>Nome completo</Label>
                   <Input
-                    id="signup-name" name="name" required
-                    placeholder="João Silva"
+                    id="signup-name"
+                    name="name"
+                    required
+                    placeholder="Joao Silva"
                     className={inputCls}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="signup-email" className={labelCls}>Email</Label>
                   <Input
-                    id="signup-email" name="email" type="email" required
+                    id="signup-email"
+                    name="email"
+                    type="email"
+                    required
                     placeholder="voce@empresa.com"
                     className={inputCls}
                   />
@@ -218,24 +219,27 @@ export default function Auth() {
                 <div className="space-y-1.5">
                   <Label htmlFor="signup-password" className={labelCls}>Senha</Label>
                   <Input
-                    id="signup-password" name="password" type="password" required minLength={6}
+                    id="signup-password"
+                    name="password"
+                    type="password"
+                    required
+                    minLength={6}
                     placeholder="••••••••"
                     className={inputCls}
                   />
                 </div>
                 <Button
-                  type="submit" disabled={submitting}
+                  type="submit"
+                  disabled={submitting}
                   className="w-full h-11 bg-orange-500 hover:bg-orange-400 text-white font-bold rounded-xl shadow-lg hover:shadow-orange-500/40 transition-all duration-200 mt-1"
                 >
                   {submitting ? "Criando..." : "Criar conta"}
                 </Button>
               </form>
             </TabsContent>
-
           </Tabs>
         </div>
       </div>
-
     </div>
   );
 }

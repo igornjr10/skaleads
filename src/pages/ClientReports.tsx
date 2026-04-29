@@ -1,9 +1,9 @@
-import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { Suspense, lazy, useEffect, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -22,12 +22,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, FileText, MoreHorizontal, Download, Link2, Trash2, Eye, ChevronLeft } from "lucide-react";
+import { ChevronLeft, Download, Eye, FileText, Link2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { pdf } from "@react-pdf/renderer";
-import { ReportPdfTemplate, type ReportData } from "@/components/reports/ReportPdfTemplate";
-import { ReportGeneratorDialog } from "@/components/reports/ReportGeneratorDialog";
+import type { ReportData } from "@/lib/report-types";
+import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
+
+const ReportGeneratorDialog = lazy(() =>
+  import("@/components/reports/ReportGeneratorDialog").then((module) => ({ default: module.ReportGeneratorDialog }))
+);
 
 interface Report {
   id: string;
@@ -91,23 +94,19 @@ export default function ClientReports() {
       toast.error(message);
     }
 
-    setReports((data as any) || []);
+    setReports((data as Report[]) || []);
     setLoading(false);
   }
 
   async function downloadPdf(report: Report) {
     if (!report.data) {
-      toast.error("Dados do relatório não disponíveis");
+      toast.error("Dados do relatorio nao disponiveis");
       return;
     }
+
     try {
-      const blob = await pdf(<ReportPdfTemplate data={report.data} />).toBlob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${report.name}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const blob = await buildReportPdfBlob(report.data);
+      downloadBlob(blob, `${report.name}.pdf`);
     } catch {
       toast.error("Erro ao gerar PDF");
     }
@@ -123,17 +122,16 @@ export default function ClientReports() {
   async function deleteReport(id: string) {
     const { error } = await supabase.from("reports").delete().eq("id", id);
     if (error) {
-      toast.error("Erro ao excluir relatório");
+      toast.error("Erro ao excluir relatorio");
     } else {
-      toast.success("Relatório excluído");
-      setReports(prev => prev.filter(r => r.id !== id));
+      toast.success("Relatorio excluido");
+      setReports((prev) => prev.filter((report) => report.id !== id));
     }
     setDeleteId(null);
   }
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" asChild>
@@ -142,27 +140,28 @@ export default function ClientReports() {
             </Link>
           </Button>
           <div>
-            <h1 className="text-2xl font-bold">Relatórios</h1>
+            <h1 className="text-2xl font-bold">Relatorios</h1>
             {client && <p className="text-sm text-muted-foreground">{client.name}</p>}
           </div>
         </div>
         <Button onClick={() => setShowGenerator(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          Novo Relatório
+          Novo Relatorio
         </Button>
       </div>
 
-      {/* List */}
       {loading ? (
         <div className="space-y-3">
-          {[1, 2, 3].map(i => <Skeleton key={i} className="h-24" />)}
+          {[1, 2, 3].map((item) => (
+            <Skeleton key={item} className="h-24" />
+          ))}
         </div>
       ) : loadError ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <FileText className="h-10 w-10 text-muted-foreground mb-3" />
+            <FileText className="mb-3 h-10 w-10 text-muted-foreground" />
             <p className="font-medium">Nao foi possivel carregar os relatorios</p>
-            <p className="text-sm text-muted-foreground mt-1">{loadError}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
             <Button className="mt-4" variant="outline" onClick={fetchReports}>
               Tentar novamente
             </Button>
@@ -171,34 +170,33 @@ export default function ClientReports() {
       ) : reports.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <FileText className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium">Nenhum relatório ainda</p>
-            <p className="text-sm text-muted-foreground mt-1">Crie o primeiro relatório para {client?.name}</p>
+            <FileText className="mb-3 h-10 w-10 text-muted-foreground" />
+            <p className="font-medium">Nenhum relatorio ainda</p>
+            <p className="mt-1 text-sm text-muted-foreground">Crie o primeiro relatorio para {client?.name}</p>
             <Button className="mt-4" onClick={() => setShowGenerator(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Gerar Relatório
+              Gerar Relatorio
             </Button>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-3">
-          {reports.map(report => {
+          {reports.map((report) => {
             const status = STATUS_LABELS[report.status] || STATUS_LABELS.pending;
-            const createdAt = format(new Date(report.created_at), "dd MMM yyyy 'às' HH:mm", { locale: ptBR });
+            const createdAt = format(new Date(report.created_at), "dd MMM yyyy 'as' HH:mm", { locale: ptBR });
+
             return (
               <Card key={report.id}>
                 <CardContent className="flex items-center gap-4 py-4">
-                  <FileText className="h-8 w-8 text-primary shrink-0" />
+                  <FileText className="h-8 w-8 shrink-0 text-primary" />
 
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{report.name}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{report.name}</p>
                     <p className="text-xs text-muted-foreground">{createdAt}</p>
-                    {report.period?.label && (
-                      <p className="text-xs text-muted-foreground">{report.period.label}</p>
-                    )}
+                    {report.period?.label && <p className="text-xs text-muted-foreground">{report.period.label}</p>}
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex shrink-0 items-center gap-2">
                     <Badge variant={status.variant}>{status.label}</Badge>
 
                     {report.view_count > 0 && (
@@ -244,23 +242,23 @@ export default function ClientReports() {
         </div>
       )}
 
-      {/* Generator dialog */}
       {showGenerator && client && (
-        <ReportGeneratorDialog
-          isOpen={showGenerator}
-          onClose={() => setShowGenerator(false)}
-          clientId={client.id}
-          clientName={client.name}
-          onReportCreated={fetchReports}
-        />
+        <Suspense fallback={null}>
+          <ReportGeneratorDialog
+            isOpen={showGenerator}
+            onClose={() => setShowGenerator(false)}
+            clientId={client.id}
+            clientName={client.name}
+            onReportCreated={fetchReports}
+          />
+        </Suspense>
       )}
 
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteId} onOpenChange={open => !open && setDeleteId(null)}>
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir relatório?</AlertDialogTitle>
-            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+            <AlertDialogTitle>Excluir relatorio?</AlertDialogTitle>
+            <AlertDialogDescription>Esta acao nao pode ser desfeita.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>

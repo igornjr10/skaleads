@@ -25,7 +25,7 @@ export function AppLayout() {
   const meta = getPageMeta(location.pathname);
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <div className="relative flex min-h-screen w-full bg-background">
         {/* Ambient glow */}
         <div className="pointer-events-none fixed inset-0 bg-gradient-glow" />
@@ -34,8 +34,8 @@ export function AppLayout() {
 
         <div className="relative flex min-h-screen flex-1 flex-col">
           {/* ── Top bar ───────────────────────────────────────── */}
-          <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md">
-            <SidebarTrigger className="shrink-0 text-muted-foreground hover:text-foreground" />
+          <header className="sticky top-0 z-30 mx-2 mt-2 flex h-14 items-center gap-3 rounded-2xl border border-white/[0.06] bg-background/65 px-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl">
+            <SidebarTrigger className="shrink-0 rounded-xl text-muted-foreground hover:bg-white/[0.04] hover:text-foreground" />
 
             {/* Divider */}
             <div className="h-5 w-px bg-border" />
@@ -66,12 +66,12 @@ export function AppLayout() {
           </header>
 
           {/* ── Page content ─────────────────────────────────── */}
-          <main className="flex-1 p-4 md:p-6 lg:p-8">
+          <main className="flex-1 px-4 pb-4 pt-4 md:px-6 md:pb-6 md:pt-5 lg:px-8 lg:pb-8 lg:pt-6">
             <Outlet />
           </main>
 
           {/* ── Footer ───────────────────────────────────────── */}
-          <footer className="flex items-center justify-between border-t border-border/50 px-6 py-2">
+          <footer className="mx-2 mb-2 flex items-center justify-between rounded-2xl border border-white/[0.05] bg-background/40 px-6 py-2 backdrop-blur-md">
             <span className="text-[10px] text-muted-foreground/40 tracking-wide uppercase">
               MarketProAds © {new Date().getFullYear()}
             </span>

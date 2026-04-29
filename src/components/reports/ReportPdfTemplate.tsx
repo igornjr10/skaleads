@@ -1,49 +1,29 @@
 import {
   Document,
+  Image,
   Page,
   Text,
   View,
   StyleSheet,
 } from "@react-pdf/renderer";
+import type { ReportData } from "@/lib/report-types";
 
-export interface ReportData {
-  generatedAt: string;
-  client: {
-    name: string;
-    adAccountLabel?: string;
-  };
-  period: { start: string; end: string; label: string };
-  summary: {
-    spend: number;
-    revenue: number;
-    roas: number;
-    conversions: number;
-    impressions: number;
-    clicks: number;
-    ctr: number;
-    cpc: number;
-    cpm: number;
-  };
-  topCampaigns: Array<{
-    name: string;
-    spend: number;
-    revenue: number;
-    roas: number;
-    conversions: number;
-    status: string;
-  }>;
-  topAds: Array<{
-    name: string;
-    spend: number;
-    impressions: number;
-    clicks: number;
-    ctr: number;
-    cpc: number;
-    cpm: number;
-    status: string;
-  }>;
-  recommendations: string;
-  branding: { primaryColor: string; agencyName: string };
+function sanitizePdfText(value?: string | null) {
+  if (!value) return "";
+
+  return value
+    .normalize("NFKD")
+    .replace(/[•·▪▫◦●]/g, "- ")
+    .replace(/[–—]/g, "-")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[✅✔]/g, "OK ")
+    .replace(/[❌✖]/g, "X ")
+    .replace(/[🔥🚀⭐✨💥🎯📈📊💬📣]/g, " ")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7E]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function fmtCurrency(v: number) {
@@ -275,6 +255,37 @@ const styles = StyleSheet.create({
     fontSize: 7.5,
     color: "#1f2937",
   },
+  adCell: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  adThumb: {
+    width: 34,
+    height: 34,
+    borderRadius: 6,
+    marginRight: 8,
+    objectFit: "cover",
+  },
+  adThumbFallback: {
+    width: 34,
+    height: 34,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: "#e2e8f0",
+    color: "#475569",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 8,
+    fontFamily: "Helvetica-Bold",
+  },
+  adNameWrap: {
+    flex: 1,
+  },
+  adTypeText: {
+    fontSize: 6.5,
+    color: "#64748b",
+    marginTop: 2,
+  },
   statusCell: {
     flex: 1.2,
     alignItems: "flex-end",
@@ -344,7 +355,7 @@ function SummaryTable({ data }: { data: ReportData }) {
         </View>
         {campaigns.map((campaign, index) => (
           <View key={index} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
-            <Text style={[styles.tableCell, styles.colWide]}>{campaign.name}</Text>
+            <Text style={[styles.tableCell, styles.colWide]}>{sanitizePdfText(campaign.name)}</Text>
             <Text style={[styles.tableCell, styles.colMetric]}>{fmtCurrency(campaign.spend)}</Text>
             <Text style={[styles.tableCell, styles.colMetric]}>{fmtNum(campaign.conversions)}</Text>
             <Text style={[styles.tableCell, styles.colMetric]}>{fmtPct(data.summary.ctr)}</Text>
@@ -380,7 +391,19 @@ function AdsTable({ data }: { data: ReportData }) {
         </View>
         {ads.map((ad, index) => (
           <View key={index} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>
-            <Text style={[styles.tableCell, styles.colWide]}>{ad.name}</Text>
+            <View style={[styles.colWide, styles.adCell]}>
+              {ad.previewUrl ? (
+                <Image src={ad.previewUrl} style={styles.adThumb} />
+              ) : (
+                <View style={styles.adThumbFallback}>
+                  <Text>AD</Text>
+                </View>
+              )}
+              <View style={styles.adNameWrap}>
+                <Text style={styles.tableCell}>{sanitizePdfText(ad.name)}</Text>
+                <Text style={styles.adTypeText}>{ad.creativeType === "video" ? "Video" : "Imagem"}</Text>
+              </View>
+            </View>
             <Text style={[styles.tableCell, styles.colNarrow]}>{fmtNum(ad.clicks)}</Text>
             <Text style={[styles.tableCell, styles.colNarrow]}>{fmtCurrency(ad.spend)}</Text>
             <Text style={[styles.tableCell, styles.colNarrow]}>{fmtNum(ad.impressions)}</Text>
@@ -402,14 +425,14 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   const recommendationPage = ads.length > 0 ? 4 : 3;
 
   return (
-    <Document title={`Relatorio - ${data.client.name}`} author={data.branding.agencyName || "MarketProAds"}>
+    <Document title={`Relatorio - ${sanitizePdfText(data.client.name)}`} author={sanitizePdfText(data.branding.agencyName) || "MarketProAds"}>
       <Page size="A4" style={styles.page}>
         <View style={styles.shell}>
           <View style={styles.cover}>
             <View style={styles.badgeCircle}>
-              <Text style={styles.badgeText}>{(data.client.name || "MP").slice(0, 2).toUpperCase()}</Text>
+              <Text style={styles.badgeText}>{sanitizePdfText(data.client.name || "MP").slice(0, 2).toUpperCase()}</Text>
             </View>
-            <Text style={styles.coverTitle}>Relatorio de {data.client.name}</Text>
+            <Text style={styles.coverTitle}>Relatorio de {sanitizePdfText(data.client.name)}</Text>
             <Text style={styles.coverSub}>Analise de desempenho</Text>
             <Text style={styles.coverMeta}>{introText}</Text>
             <Text style={styles.coverPill}>Gerado em {data.generatedAt}</Text>
@@ -423,7 +446,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                   <Text style={styles.networkDot}>M</Text>
                   <View>
                     <Text style={styles.sectionTitle}>Meta Ads</Text>
-                    <Text style={styles.sectionSub}>{data.client.adAccountLabel || "Conta Meta conectada"}</Text>
+                    <Text style={styles.sectionSub}>{sanitizePdfText(data.client.adAccountLabel) || "Conta Meta conectada"}</Text>
                   </View>
                 </View>
                 <Text style={styles.headerChip}>Periodo: {data.period.label}</Text>
@@ -446,9 +469,9 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                   <Text style={styles.metricNote}>Interacoes de trafego</Text>
                 </View>
                 <View style={[styles.metricCell, { borderRightWidth: 0 }]}>
-                  <Text style={styles.metricLabel}>Conversoes</Text>
-                  <Text style={styles.metricValue}>{fmtNum(data.summary.conversions)}</Text>
-                  <Text style={styles.metricNote}>Resultado principal</Text>
+                  <Text style={styles.metricLabel}>Mensagens iniciadas</Text>
+                  <Text style={styles.metricValue}>{fmtNum(data.summary.messagesStarted || 0)}</Text>
+                  <Text style={styles.metricNote}>No periodo selecionado</Text>
                 </View>
               </View>
 
@@ -474,7 +497,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                   <Text style={styles.networkDot}>M</Text>
                   <View>
                     <Text style={styles.sectionTitle}>Meta Ads</Text>
-                    <Text style={styles.sectionSub}>{data.client.adAccountLabel || "Conta Meta conectada"}</Text>
+                    <Text style={styles.sectionSub}>{sanitizePdfText(data.client.adAccountLabel) || "Conta Meta conectada"}</Text>
                   </View>
                 </View>
                 <Text style={styles.headerChip}>Resumo do periodo</Text>
@@ -531,6 +554,11 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                   <Text style={styles.metricNote}>Conjunto priorizado</Text>
                 </View>
                 <View style={styles.metricCell}>
+                  <Text style={styles.metricLabel}>Mensagens iniciadas</Text>
+                  <Text style={styles.metricValue}>{fmtNum(data.summary.messagesStarted || 0)}</Text>
+                  <Text style={styles.metricNote}>Conversas abertas no periodo</Text>
+                </View>
+                <View style={styles.metricCell}>
                   <Text style={styles.metricLabel}>Anuncios avaliados</Text>
                   <Text style={styles.metricValue}>{fmtNum(ads.length)}</Text>
                   <Text style={styles.metricNote}>Criativos sincronizados</Text>
@@ -555,6 +583,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                   ["CTR medio", fmtPct(data.summary.ctr)],
                   ["CPC medio", fmtCurrency(data.summary.cpc)],
                   ["CPM medio", fmtCurrency(data.summary.cpm)],
+                  ["Mensagens iniciadas", fmtNum(data.summary.messagesStarted || 0)],
                   ["Conversoes totais", fmtNum(data.summary.conversions)],
                 ].map(([label, value], index) => (
                   <View key={index} style={[styles.tableRow, index % 2 === 1 && styles.tableRowAlt]}>

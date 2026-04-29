@@ -13,10 +13,14 @@ import { ptBR } from "date-fns/locale";
 
 type Period = "7" | "14" | "30";
 
-interface Client { id: string; name: string }
+interface Client {
+  id: string;
+  name: string;
+}
 
 interface Campaign {
   id: string;
+  client_id: string;
   name: string;
   status: string;
   spend: number;
@@ -159,12 +163,12 @@ export default function Dashboard() {
   const prevCpm = prevAgg.impressions ? (prevAgg.spend / prevAgg.impressions) * 1000 : 0;
 
   const kpis = [
-    { label: "Gasto total", value: formatCurrency(kpiMetrics.spend), delta: pctDelta(currentAgg.spend, prevAgg.spend), icon: DollarSign },
-    { label: "Impressões", value: formatNumber(kpiMetrics.impressions), delta: pctDelta(currentAgg.impressions, prevAgg.impressions), icon: Eye },
-    { label: "Cliques", value: formatNumber(kpiMetrics.clicks), delta: pctDelta(currentAgg.clicks, prevAgg.clicks), icon: MousePointerClick },
-    { label: "CPM", value: formatCurrency(kpiMetrics.cpm), delta: pctDelta(kpiMetrics.cpm, prevCpm), icon: TrendingUp },
-    { label: "CPC", value: formatCurrency(kpiMetrics.cpc), delta: pctDelta(kpiMetrics.cpc, prevCpc), icon: Target },
-    { label: "CTR", value: formatPercent(kpiMetrics.ctr), delta: pctDelta(kpiMetrics.ctr, prevCtr), icon: Percent },
+    { label: "Gasto total", value: formatCurrency(kpiMetrics.spend), delta: pctDelta(currentAgg.spend, prevAgg.spend), icon: DollarSign, lowerIsBetter: false },
+    { label: "Impressões", value: formatNumber(kpiMetrics.impressions), delta: pctDelta(currentAgg.impressions, prevAgg.impressions), icon: Eye, lowerIsBetter: false },
+    { label: "Cliques", value: formatNumber(kpiMetrics.clicks), delta: pctDelta(currentAgg.clicks, prevAgg.clicks), icon: MousePointerClick, lowerIsBetter: false },
+    { label: "CPM", value: formatCurrency(kpiMetrics.cpm), delta: pctDelta(kpiMetrics.cpm, prevCpm), icon: TrendingUp, lowerIsBetter: true },
+    { label: "CPC", value: formatCurrency(kpiMetrics.cpc), delta: pctDelta(kpiMetrics.cpc, prevCpc), icon: Target, lowerIsBetter: true },
+    { label: "CTR", value: formatPercent(kpiMetrics.ctr), delta: pctDelta(kpiMetrics.ctr, prevCtr), icon: Percent, lowerIsBetter: false },
   ];
 
   // Chart series
@@ -231,8 +235,18 @@ export default function Dashboard() {
                   </div>
                   <div className="mt-2 text-xl font-semibold tabular-nums">{k.value}</div>
                   {k.delta !== 0 && (
-                    <div className={`mt-1 flex items-center gap-1 text-xs ${k.delta >= 0 ? "text-success" : "text-destructive"}`}>
-                      {k.delta >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                    <div
+                      className={`mt-1 flex items-center gap-1 text-xs ${
+                        (k.delta >= 0 && !k.lowerIsBetter) || (k.delta < 0 && k.lowerIsBetter)
+                          ? "text-success"
+                          : "text-destructive"
+                      }`}
+                    >
+                      {k.delta >= 0 ? (
+                        <ArrowUp className="h-3 w-3" />
+                      ) : (
+                        <ArrowDown className="h-3 w-3" />
+                      )}
                       {Math.abs(k.delta).toFixed(1)}% vs período anterior
                     </div>
                   )}
