@@ -37,7 +37,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { syncClientData, validateMetaConnection } from "@/lib/meta-api";
-import { loadFacebookSDK, facebookLogin, type MetaAdAccount } from "@/lib/facebook-sdk";
+import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaPage } from "@/lib/facebook-sdk";
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -150,7 +150,9 @@ export default function Clients() {
 
   const [oauthLoading, setOauthLoading] = useState(false);
   const [adAccounts, setAdAccounts] = useState<MetaAdAccount[]>([]);
+  const [pages, setPages] = useState<MetaPage[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
+  const [selectedPageId, setSelectedPageId] = useState("");
   const [longLivedToken, setLongLivedToken] = useState("");
 
   async function load() {
@@ -256,7 +258,9 @@ export default function Clients() {
     setAutoSyncEnabled(client.meta_auto_sync_enabled ?? false);
     setAutoSyncFrequencyHours(String(client.meta_auto_sync_frequency_hours ?? 24));
     setAdAccounts([]);
+    setPages([]);
     setSelectedAccountId("");
+    setSelectedPageId("");
     setLongLivedToken("");
     setConnectClient(client);
   }
@@ -264,10 +268,29 @@ export default function Clients() {
   function closeConnectDialog() {
     setConnectClient(null);
     setAdAccounts([]);
+    setPages([]);
     setSelectedAccountId("");
+    setSelectedPageId("");
     setLongLivedToken("");
     setAutoSyncEnabled(false);
     setAutoSyncFrequencyHours("24");
+  }
+
+  async function fetchFacebookPages(token: string) {
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({
+        fields: "id,name,picture.width(256).height(256)",
+        access_token: token,
+      })}`
+    );
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error?.message || "Erro ao buscar paginas do Facebook");
+    }
+
+    return (data.data as MetaPage[]) ?? [];
   }
 
   async function handleFacebookLogin() {
@@ -292,12 +315,17 @@ export default function Clients() {
 
       setLongLivedToken(data.access_token);
       setAdAccounts(data.ad_accounts ?? []);
+      const facebookPages = await fetchFacebookPages(data.access_token);
+      setPages(facebookPages);
 
       if (data.ad_accounts?.length === 1) {
         setSelectedAccountId(data.ad_accounts[0].id.replace("act_", ""));
       }
+      if (facebookPages.length === 1) {
+        setSelectedPageId(facebookPages[0].id);
+      }
 
-      toast.success(`${data.ad_accounts?.length ?? 0} conta(s) de anuncio encontrada(s)`);
+      toast.success(`${data.ad_accounts?.length ?? 0} conta(s) de anuncio e ${facebookPages.length} pagina(s) encontrada(s)`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro no login com Facebook");
     } finally {
@@ -309,7 +337,8 @@ export default function Clients() {
   async function handleSaveOAuth(event: React.FormEvent) {
     event.preventDefault();
     if (!connectClient || !selectedAccountId || !longLivedToken) return;
-    await saveAndSync(connectClient, selectedAccountId, longLivedToken);
+    const selectedPage = pages.find((page) => page.id === selectedPageId);
+    await saveAndSync(connectClient, selectedAccountId, longLivedToken, selectedPage);
   }
 
   async function handleConnectManual(event: React.FormEvent) {
@@ -321,7 +350,7 @@ export default function Clients() {
     await saveAndSync(connectClient, adAccountId, accessToken);
   }
 
-  async function saveAndSync(client: Client, accountId: string, token: string) {
+  async function saveAndSync(client: Client, accountId: string, token: string, selectedPage?: MetaPage) {
     setSyncingId(client.id);
     setSyncProgress("Salvando configuracoes...");
     try {
@@ -334,6 +363,7 @@ export default function Clients() {
           meta_auto_sync_frequency_hours: Number(autoSyncFrequencyHours),
           meta_last_sync_error: null,
           meta_sync_status: "connected",
+          logo_url: selectedPage?.picture?.data?.url || client.logo_url,
         })
         .eq("id", client.id);
 
@@ -648,6 +678,26 @@ export default function Clients() {
                       </SelectContent>
                     </Select>
                   </div>
+                  {pages.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Pagina do Facebook</Label>
+                      <Select value={selectedPageId} onValueChange={setSelectedPageId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a pagina para usar a logo..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pages.map((page) => (
+                            <SelectItem key={page.id} value={page.id}>
+                              {page.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        A foto da pagina selecionada sera usada como logo automatica do cliente.
+                      </p>
+                    </div>
+                  )}
                   <div className="rounded-xl border border-slate-200 p-3 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>

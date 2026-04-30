@@ -23,6 +23,16 @@ export interface MetaAdAccount {
   account_status: number;
 }
 
+export interface MetaPage {
+  id: string;
+  name: string;
+  picture?: {
+    data?: {
+      url?: string;
+    };
+  };
+}
+
 let sdkReady = false;
 
 export function loadFacebookSDK(appId: string): Promise<void> {
@@ -55,7 +65,7 @@ export function facebookLogin(): Promise<string> {
           reject(new Error("Login cancelado ou não autorizado pelo usuário"));
         }
       },
-      { scope: "ads_read,ads_management,business_management", auth_type: "rerequest" }
+      { scope: "ads_read,ads_management,business_management,pages_show_list,pages_read_engagement", auth_type: "rerequest" }
     );
   });
 }
