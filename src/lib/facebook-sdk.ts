@@ -26,6 +26,14 @@ export interface MetaAdAccount {
 export interface MetaPage {
   id: string;
   name: string;
+  access_token?: string;
+  fan_count?: number;
+  followers_count?: number;
+  instagram_business_account?: {
+    id: string;
+    username?: string;
+    profile_picture_url?: string;
+  };
   picture?: {
     data?: {
       url?: string;

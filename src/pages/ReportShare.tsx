@@ -157,8 +157,15 @@ export default function ReportShare() {
     <div className="min-h-screen bg-muted/30">
       <div style={{ backgroundColor: primaryColor }} className="px-8 py-6 text-white">
         <p className="mb-1 text-sm opacity-75">{agencyName}</p>
-        <h1 className="text-2xl font-bold">{data?.client?.name}</h1>
-        <p className="mt-1 text-sm opacity-85">Relatorio de Performance - Meta Ads</p>
+        <div className="flex items-center gap-4">
+          {data?.client?.logoUrl && (
+            <img src={data.client.logoUrl} alt={data.client.name} className="h-14 w-14 rounded-full border border-white/20 object-cover" />
+          )}
+          <div>
+            <h1 className="text-2xl font-bold">{data?.client?.name}</h1>
+            <p className="mt-1 text-sm opacity-85">Relatorio de Performance - Meta Ads</p>
+          </div>
+        </div>
         {data?.period?.label && <p className="mt-1 text-xs opacity-70">{data.period.label}</p>}
       </div>
 
@@ -184,6 +191,40 @@ export default function ReportShare() {
               <KpiCard label="CPM" value={fmtCurrency(data.summary.cpm)} />
               <KpiCard label="ROAS" value={`${data.summary.roas.toFixed(2)}x`} />
             </div>
+          </section>
+        )}
+
+        {data?.socialPresence?.enabled && data.socialPresence.metrics.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Marca e Presenca Digital</h2>
+            <Card>
+              <CardContent className="space-y-4 pt-5">
+                <div className="flex items-center gap-3">
+                  {data.socialPresence.logoUrl && (
+                    <img
+                      src={data.socialPresence.logoUrl}
+                      alt={data.socialPresence.profileName}
+                      className="h-12 w-12 rounded-full object-cover"
+                    />
+                  )}
+                  <div>
+                    <p className="font-medium">{data.socialPresence.profileName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {data.socialPresence.sourceLabels.length ? data.socialPresence.sourceLabels.join(" + ") : "Dados sociais"}
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {data.socialPresence.metrics.map((metric) => (
+                    <KpiCard
+                      key={metric.key}
+                      label={metric.label}
+                      value={metric.value === null ? "-" : fmtNum(metric.value)}
+                    />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </section>
         )}
 

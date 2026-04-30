@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Download, FileText, Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +22,19 @@ interface ReportGeneratorDialogProps {
   clientId: string;
   clientName: string;
   onReportCreated?: () => void;
+}
+
+interface SocialPresenceSnapshot {
+  enabled: boolean;
+  profileName: string;
+  logoUrl?: string | null;
+  sourceLabels: string[];
+  metrics: Array<{
+    key: SocialMetricPreference;
+    label: string;
+    value: number | null;
+    source: string;
+  }>;
 }
 
 const PERIOD_PRESETS = [
@@ -41,12 +55,29 @@ const REPORT_METRIC_OPTIONS = [
 ] as const;
 
 type ReportMetricPreference = (typeof REPORT_METRIC_OPTIONS)[number]["key"];
+type SocialMetricPreference = "followers" | "reach" | "engagement";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 const PURCHASE_ACTION_TYPES = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"] as const;
+const SOCIAL_METRIC_OPTIONS = [
+  { key: "followers", label: "Seguidores", helper: "Soma Facebook + Instagram quando disponivel" },
+  { key: "reach", label: "Alcance", helper: "Insights da Meta para o periodo do relatorio" },
+  { key: "engagement", label: "Engajamento", helper: "Interacoes retornadas pela Meta quando disponiveis" },
+] as const;
 
 function normalizeAccountId(id: string) {
   return id.startsWith("act_") ? id.slice(4) : id.trim();
+}
+
+async function fetchMetaJson<T>(path: string, params: Record<string, string>) {
+  const response = await fetch(`${META_BASE}/${path}?${new URLSearchParams(params)}`);
+  const json = await response.json();
+
+  if (!response.ok || json.error) {
+    throw new Error(json.error?.message || "Erro ao buscar dados na Meta");
+  }
+
+  return json as T;
 }
 
 async function fetchMetaCollection<T>(path: string, params: Record<string, string>) {
@@ -155,6 +186,12 @@ export function ReportGeneratorDialog({
     "purchases",
     "costPerPurchase",
     "messagesStarted",
+  ]);
+  const [includeSocialPresence, setIncludeSocialPresence] = useState(true);
+  const [socialMetricPreferences, setSocialMetricPreferences] = useState<SocialMetricPreference[]>([
+    "followers",
+    "reach",
+    "engagement",
   ]);
   const recommendationKey = useMemo(() => `${clientId}:${startDate}:${endDate}`, [clientId, startDate, endDate]);
 
@@ -342,10 +379,151 @@ export function ReportGeneratorDialog({
       .slice(0, 12);
   }
 
+  async function fetchFacebookPresence(metaPageId?: string | null, metaAccessToken?: string | null) {
+    if (!metaPageId || !metaAccessToken) {
+      return {
+        pageName: null,
+        followers: null,
+        reach: null,
+        engagement: null,
+        instagramAccountId: null,
+      };
+    }
+
+    const pageInfo = await fetchMetaJson<{
+      name?: string;
+      fan_count?: number;
+      followers_count?: number;
+      instagram_business_account?: { id?: string };
+    }>(metaPageId, {
+      fields: "name,fan_count,followers_count,instagram_business_account{id}",
+      access_token: metaAccessToken.trim(),
+    });
+
+    let reach: number | null = null;
+    let engagement: number | null = null;
+
+    try {
+      const insights = await fetchMetaJson<{
+        data?: Array<{ name?: string; values?: Array<{ value?: number }> }>;
+      }>(`${metaPageId}/insights`, {
+        metric: "page_impressions_unique,page_post_engagements",
+        since: startDate,
+        until: endDate,
+        access_token: metaAccessToken.trim(),
+      });
+
+      const rows = insights.data || [];
+      reach = rows.find((row) => row.name === "page_impressions_unique")?.values?.reduce((sum, item) => sum + (item.value || 0), 0) ?? null;
+      engagement =
+        rows.find((row) => row.name === "page_post_engagements")?.values?.reduce((sum, item) => sum + (item.value || 0), 0) ?? null;
+    } catch {
+      // Some page insights are unavailable depending on permissions or account setup.
+    }
+
+    return {
+      pageName: pageInfo.name || null,
+      followers: pageInfo.followers_count ?? pageInfo.fan_count ?? null,
+      reach,
+      engagement,
+      instagramAccountId: pageInfo.instagram_business_account?.id || null,
+    };
+  }
+
+  async function fetchInstagramPresence(metaInstagramAccountId?: string | null, metaAccessToken?: string | null) {
+    if (!metaInstagramAccountId || !metaAccessToken) {
+      return {
+        username: null,
+        followers: null,
+        reach: null,
+        engagement: null,
+      };
+    }
+
+    const profile = await fetchMetaJson<{ username?: string; followers_count?: number }>(metaInstagramAccountId, {
+      fields: "username,followers_count",
+      access_token: metaAccessToken.trim(),
+    });
+
+    let reach: number | null = null;
+    let engagement: number | null = null;
+
+    try {
+      const insights = await fetchMetaJson<{
+        data?: Array<{ name?: string; total_value?: { value?: number } }>;
+      }>(`${metaInstagramAccountId}/insights`, {
+        metric: "reach,accounts_engaged",
+        period: "day",
+        since: startDate,
+        until: endDate,
+        access_token: metaAccessToken.trim(),
+      });
+
+      const rows = insights.data || [];
+      reach = rows.find((row) => row.name === "reach")?.total_value?.value ?? null;
+      engagement = rows.find((row) => row.name === "accounts_engaged")?.total_value?.value ?? null;
+    } catch {
+      // Instagram insights can be unavailable for some accounts or permissions.
+    }
+
+    return {
+      username: profile.username || null,
+      followers: profile.followers_count ?? null,
+      reach,
+      engagement,
+    };
+  }
+
+  async function buildSocialPresence(client: {
+    name?: string | null;
+    logo_url?: string | null;
+    meta_page_id?: string | null;
+    meta_page_name?: string | null;
+    meta_instagram_account_id?: string | null;
+    meta_access_token?: string | null;
+  }): Promise<SocialPresenceSnapshot | undefined> {
+    if (!includeSocialPresence) return undefined;
+
+    const token = client.meta_access_token?.trim();
+    const pageResult = token ? await fetchFacebookPresence(client.meta_page_id, token).catch(() => null) : null;
+    const instagramAccountId = pageResult?.instagramAccountId || client.meta_instagram_account_id || null;
+    const instagramResult = token ? await fetchInstagramPresence(instagramAccountId, token).catch(() => null) : null;
+    const sourceLabels = [pageResult ? "Facebook" : null, instagramResult ? "Instagram" : null].filter(Boolean) as string[];
+    const sourceText = sourceLabels.length ? sourceLabels.join(" + ") : "Dados nao disponiveis";
+
+    const totals = {
+      followers:
+        (pageResult?.followers ?? 0) + (instagramResult?.followers ?? 0) > 0
+          ? (pageResult?.followers ?? 0) + (instagramResult?.followers ?? 0)
+          : null,
+      reach:
+        (pageResult?.reach ?? 0) + (instagramResult?.reach ?? 0) > 0
+          ? (pageResult?.reach ?? 0) + (instagramResult?.reach ?? 0)
+          : null,
+      engagement:
+        (pageResult?.engagement ?? 0) + (instagramResult?.engagement ?? 0) > 0
+          ? (pageResult?.engagement ?? 0) + (instagramResult?.engagement ?? 0)
+          : null,
+    };
+
+    return {
+      enabled: true,
+      profileName: client.meta_page_name || pageResult?.pageName || client.name || clientName,
+      logoUrl: client.logo_url || null,
+      sourceLabels,
+      metrics: socialMetricPreferences.map((key) => ({
+        key,
+        label: SOCIAL_METRIC_OPTIONS.find((option) => option.key === key)?.label || key,
+        value: totals[key],
+        source: sourceText,
+      })),
+    };
+  }
+
   async function buildReportData(): Promise<ReportData> {
     const { data: clientRaw, error: clientError } = await supabase
       .from("clients")
-      .select("name, meta_ad_account_id, meta_access_token")
+      .select("name, logo_url, meta_ad_account_id, meta_access_token, meta_page_id, meta_page_name, meta_instagram_account_id")
       .eq("id", clientId)
       .single();
 
@@ -462,15 +640,18 @@ export function ReportGeneratorDialog({
     const start = new Date(startDate + "T00:00:00");
     const end = new Date(endDate + "T00:00:00");
     const periodLabel = `${format(start, "dd MMM yyyy", { locale: ptBR })} ate ${format(end, "dd MMM yyyy", { locale: ptBR })}`;
+    const socialPresence = await buildSocialPresence(clientRaw);
 
     return {
       generatedAt: format(new Date(), "dd/MM/yyyy 'as' HH:mm"),
       client: {
         name: clientRaw.name || clientName,
         adAccountLabel: clientRaw.meta_ad_account_id ? `CA - ${clientRaw.meta_ad_account_id}` : "Conta Meta conectada",
+        logoUrl: clientRaw.logo_url || null,
       },
       period: { start: startDate, end: endDate, label: periodLabel },
       summary,
+      socialPresence,
       topCampaigns,
       topAds,
       recommendations: recommendations || "Nenhuma recomendacao registrada para este periodo.",
@@ -481,6 +662,17 @@ export function ReportGeneratorDialog({
 
   function toggleMetricPreference(metric: ReportMetricPreference) {
     setMetricPreferences((current) => {
+      if (current.includes(metric)) {
+        if (current.length === 1) return current;
+        return current.filter((item) => item !== metric);
+      }
+
+      return [...current, metric];
+    });
+  }
+
+  function toggleSocialMetricPreference(metric: SocialMetricPreference) {
+    setSocialMetricPreferences((current) => {
       if (current.includes(metric)) {
         if (current.length === 1) return current;
         return current.filter((item) => item !== metric);
@@ -697,6 +889,49 @@ export function ReportGeneratorDialog({
                   </div>
                 </label>
               ))}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Logo e presenca digital</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-3">
+                <div className="space-y-0.5">
+                  <div className="text-sm font-medium">Mostrar logo do cliente + nome</div>
+                  <div className="text-xs text-muted-foreground">
+                    Usa a logo salva quando a pagina do cliente e conectada na tela de clientes.
+                  </div>
+                </div>
+                <Switch checked={includeSocialPresence} onCheckedChange={setIncludeSocialPresence} />
+              </div>
+
+              {includeSocialPresence && (
+                <div className="space-y-2">
+                  {SOCIAL_METRIC_OPTIONS.map((option) => (
+                    <label
+                      key={option.key}
+                      className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/30"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={socialMetricPreferences.includes(option.key)}
+                        onChange={() => toggleSocialMetricPreference(option.key)}
+                        className="mt-1 h-4 w-4 rounded border"
+                      />
+                      <div className="space-y-0.5">
+                        <div className="text-sm font-medium">{option.label}</div>
+                        <div className="text-xs text-muted-foreground">{option.helper}</div>
+                      </div>
+                    </label>
+                  ))}
+
+                  <p className="text-xs text-muted-foreground">
+                    O sistema tenta buscar Facebook e Instagram automaticamente. Se algum dado nao estiver disponivel na Meta, o relatorio continua sendo gerado normalmente.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

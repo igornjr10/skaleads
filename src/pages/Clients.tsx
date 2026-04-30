@@ -50,6 +50,10 @@ interface Client {
   logo_url: string | null;
   meta_ad_account_id: string | null;
   meta_access_token: string | null;
+  meta_page_id: string | null;
+  meta_page_name: string | null;
+  meta_instagram_account_id: string | null;
+  meta_instagram_username: string | null;
   meta_auto_sync_enabled: boolean;
   meta_auto_sync_frequency_hours: number;
   meta_connected_at: string | null;
@@ -260,7 +264,7 @@ export default function Clients() {
     setAdAccounts([]);
     setPages([]);
     setSelectedAccountId("");
-    setSelectedPageId("");
+    setSelectedPageId(client.meta_page_id ?? "");
     setLongLivedToken("");
     setConnectClient(client);
   }
@@ -279,7 +283,7 @@ export default function Clients() {
   async function fetchFacebookPages(token: string) {
     const response = await fetch(
       `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({
-        fields: "id,name,picture.width(256).height(256)",
+        fields: "id,name,access_token,fan_count,followers_count,instagram_business_account{id,username,profile_picture_url},picture.width(256).height(256)",
         access_token: token,
       })}`
     );
@@ -359,6 +363,10 @@ export default function Clients() {
         .update({
           meta_ad_account_id: accountId.replace("act_", ""),
           meta_access_token: token.trim(),
+          meta_page_id: selectedPage?.id || client.meta_page_id,
+          meta_page_name: selectedPage?.name || client.meta_page_name,
+          meta_instagram_account_id: selectedPage?.instagram_business_account?.id || client.meta_instagram_account_id,
+          meta_instagram_username: selectedPage?.instagram_business_account?.username || client.meta_instagram_username,
           meta_auto_sync_enabled: autoSyncEnabled,
           meta_auto_sync_frequency_hours: Number(autoSyncFrequencyHours),
           meta_last_sync_error: null,

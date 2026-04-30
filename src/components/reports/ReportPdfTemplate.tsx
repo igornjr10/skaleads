@@ -38,6 +38,11 @@ function fmtPct(v: number) {
   return `${v.toFixed(2)}%`;
 }
 
+function fmtNullableNum(v?: number | null) {
+  if (v === null || v === undefined) return "-";
+  return fmtNum(v);
+}
+
 function chunkMetrics<T>(items: T[], size: number) {
   const chunks: T[][] = [];
 
@@ -128,6 +133,15 @@ const styles = StyleSheet.create({
     backgroundColor: "#f7efe3",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#eadcc8",
+  },
+  brandLogo: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    objectFit: "cover",
     marginBottom: 20,
     borderWidth: 1,
     borderColor: "#eadcc8",
@@ -360,6 +374,72 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: 12,
   },
+  socialCard: {
+    borderWidth: 1,
+    borderColor: "#dbe7f3",
+    backgroundColor: "#f8fbfd",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  socialHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  socialLogo: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    objectFit: "cover",
+    marginRight: 10,
+  },
+  socialLogoFallback: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    marginRight: 10,
+    backgroundColor: "#e2e8f0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  socialLogoFallbackText: {
+    fontSize: 11,
+    color: "#475569",
+    fontFamily: "Helvetica-Bold",
+  },
+  socialProfileName: {
+    fontSize: 11,
+    fontFamily: "Helvetica-Bold",
+  },
+  socialProfileMeta: {
+    fontSize: 8,
+    color: "#64748b",
+    marginTop: 2,
+  },
+  socialMetricsRow: {
+    flexDirection: "row",
+  },
+  socialMetricCell: {
+    flex: 1,
+    borderRightWidth: 1,
+    borderRightColor: "#e2e8f0",
+    paddingHorizontal: 8,
+  },
+  socialMetricLabel: {
+    fontSize: 7.5,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+  socialMetricValue: {
+    fontSize: 15,
+    fontFamily: "Helvetica-Bold",
+  },
+  socialMetricSource: {
+    fontSize: 6.5,
+    color: "#94a3b8",
+    marginTop: 4,
+  },
   colWide: {
     flex: 3.2,
   },
@@ -474,6 +554,43 @@ function AdsTable({ data }: { data: ReportData }) {
   );
 }
 
+function SocialPresenceCard({ data }: { data: ReportData }) {
+  if (!data.socialPresence?.enabled) return null;
+
+  const profile = data.socialPresence;
+  const initials = sanitizePdfText(profile.profileName || data.client.name || "MP").slice(0, 2).toUpperCase();
+
+  return (
+    <View style={styles.socialCard}>
+      <View style={styles.socialHeader}>
+        {profile.logoUrl ? (
+          <Image src={profile.logoUrl} style={styles.socialLogo} />
+        ) : (
+          <View style={styles.socialLogoFallback}>
+            <Text style={styles.socialLogoFallbackText}>{initials}</Text>
+          </View>
+        )}
+        <View>
+          <Text style={styles.socialProfileName}>{sanitizePdfText(profile.profileName)}</Text>
+          <Text style={styles.socialProfileMeta}>
+            {sanitizePdfText(profile.sourceLabels.length ? profile.sourceLabels.join(" + ") : "Presenca digital")}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.socialMetricsRow}>
+        {profile.metrics.map((metric, index) => (
+          <View key={metric.key} style={[styles.socialMetricCell, index === profile.metrics.length - 1 && { borderRightWidth: 0 }]}>
+            <Text style={styles.socialMetricLabel}>{metric.label}</Text>
+            <Text style={styles.socialMetricValue}>{fmtNullableNum(metric.value)}</Text>
+            <Text style={styles.socialMetricSource}>{sanitizePdfText(metric.source)}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export function ReportPdfTemplate({ data }: { data: ReportData }) {
   const introText = `Relatorio gerado dos dados analisados entre ${data.period.label}.`;
   const campaigns = data.topCampaigns.slice(0, 10);
@@ -494,9 +611,13 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
       <Page size="A4" style={styles.page}>
         <View style={styles.shell}>
           <View style={styles.cover}>
-            <View style={styles.badgeCircle}>
-              <Text style={styles.badgeText}>{sanitizePdfText(data.client.name || "MP").slice(0, 2).toUpperCase()}</Text>
-            </View>
+            {data.client.logoUrl ? (
+              <Image src={data.client.logoUrl} style={styles.brandLogo} />
+            ) : (
+              <View style={styles.badgeCircle}>
+                <Text style={styles.badgeText}>{sanitizePdfText(data.client.name || "MP").slice(0, 2).toUpperCase()}</Text>
+              </View>
+            )}
             <Text style={styles.coverTitle}>Relatorio de {sanitizePdfText(data.client.name)}</Text>
             <Text style={styles.coverSub}>Analise de desempenho</Text>
             <Text style={styles.coverMeta}>{introText}</Text>
@@ -506,6 +627,8 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
           <View style={styles.reportCard}>
             <View style={styles.reportCardTop} />
             <View style={styles.reportCardBody}>
+              <SocialPresenceCard data={data} />
+
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionHeaderLeft}>
                   <Text style={styles.networkDot}>M</Text>

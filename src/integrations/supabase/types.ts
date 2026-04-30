@@ -283,59 +283,71 @@ export type Database = {
         ]
       }
       clients: {
-        Row: {
-          created_at: string
-          id: string
-          logo_url: string | null
-          meta_access_token: string | null
-          meta_ad_account_id: string | null
-          meta_auto_sync_enabled: boolean
-          meta_auto_sync_frequency_hours: number
-          meta_connected_at: string | null
-          meta_last_sync_at: string | null
-          meta_last_sync_error: string | null
-          meta_last_verified_at: string | null
-          meta_sync_runs: number
-          meta_sync_status: string
-          name: string
-          status: string
-          updated_at: string
+          Row: {
+            created_at: string
+            id: string
+            logo_url: string | null
+            meta_access_token: string | null
+            meta_ad_account_id: string | null
+            meta_auto_sync_enabled: boolean
+            meta_auto_sync_frequency_hours: number
+            meta_connected_at: string | null
+            meta_instagram_account_id: string | null
+            meta_instagram_username: string | null
+            meta_last_sync_at: string | null
+            meta_last_sync_error: string | null
+            meta_last_verified_at: string | null
+            meta_page_id: string | null
+            meta_page_name: string | null
+            meta_sync_runs: number
+            meta_sync_status: string
+            name: string
+            status: string
+            updated_at: string
         }
         Insert: {
           created_at?: string
           id?: string
-          logo_url?: string | null
-          meta_access_token?: string | null
-          meta_ad_account_id?: string | null
-          meta_auto_sync_enabled?: boolean
-          meta_auto_sync_frequency_hours?: number
-          meta_connected_at?: string | null
-          meta_last_sync_at?: string | null
-          meta_last_sync_error?: string | null
-          meta_last_verified_at?: string | null
-          meta_sync_runs?: number
-          meta_sync_status?: string
-          name: string
-          status?: string
-          updated_at?: string
+            logo_url?: string | null
+            meta_access_token?: string | null
+            meta_ad_account_id?: string | null
+            meta_auto_sync_enabled?: boolean
+            meta_auto_sync_frequency_hours?: number
+            meta_connected_at?: string | null
+            meta_instagram_account_id?: string | null
+            meta_instagram_username?: string | null
+            meta_last_sync_at?: string | null
+            meta_last_sync_error?: string | null
+            meta_last_verified_at?: string | null
+            meta_page_id?: string | null
+            meta_page_name?: string | null
+            meta_sync_runs?: number
+            meta_sync_status?: string
+            name: string
+            status?: string
+            updated_at?: string
         }
         Update: {
           created_at?: string
           id?: string
-          logo_url?: string | null
-          meta_access_token?: string | null
-          meta_ad_account_id?: string | null
-          meta_auto_sync_enabled?: boolean
-          meta_auto_sync_frequency_hours?: number
-          meta_connected_at?: string | null
-          meta_last_sync_at?: string | null
-          meta_last_sync_error?: string | null
-          meta_last_verified_at?: string | null
-          meta_sync_runs?: number
-          meta_sync_status?: string
-          name?: string
-          status?: string
-          updated_at?: string
+            logo_url?: string | null
+            meta_access_token?: string | null
+            meta_ad_account_id?: string | null
+            meta_auto_sync_enabled?: boolean
+            meta_auto_sync_frequency_hours?: number
+            meta_connected_at?: string | null
+            meta_instagram_account_id?: string | null
+            meta_instagram_username?: string | null
+            meta_last_sync_at?: string | null
+            meta_last_sync_error?: string | null
+            meta_last_verified_at?: string | null
+            meta_page_id?: string | null
+            meta_page_name?: string | null
+            meta_sync_runs?: number
+            meta_sync_status?: string
+            name?: string
+            status?: string
+            updated_at?: string
         }
         Relationships: []
       }
