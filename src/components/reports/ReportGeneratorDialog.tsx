@@ -388,7 +388,7 @@ export function ReportGeneratorDialog({
       const insights = await fetchMetaJson<{
         data?: Array<{ name?: string; values?: Array<{ value?: number }> }>;
       }>(`${metaPageId}/insights`, {
-        metric: "page_impressions_unique,page_post_engagements",
+        metric: "page_impressions_unique,page_actions_post_reactions_total",
         since: startDate,
         until: endDate,
         access_token: metaAccessToken.trim(),
@@ -397,9 +397,9 @@ export function ReportGeneratorDialog({
       const rows = insights.data || [];
       reach = rows.find((row) => row.name === "page_impressions_unique")?.values?.reduce((sum, item) => sum + (item.value || 0), 0) ?? null;
       engagement =
-        rows.find((row) => row.name === "page_post_engagements")?.values?.reduce((sum, item) => sum + (item.value || 0), 0) ?? null;
-    } catch {
-      // Some page insights are unavailable depending on permissions or account setup.
+        rows.find((row) => row.name === "page_actions_post_reactions_total")?.values?.reduce((sum, item) => sum + (item.value || 0), 0) ?? null;
+    } catch (error) {
+      console.warn("Facebook page insights indisponiveis:", error);
     }
 
     return {
@@ -429,13 +429,22 @@ export function ReportGeneratorDialog({
     let reach: number | null = null;
     let engagement: number | null = null;
 
+    const endDateObj = new Date(`${endDate}T00:00:00`);
+    const startDateObj = new Date(`${startDate}T00:00:00`);
+    const earliestAllowed = new Date(endDateObj);
+    earliestAllowed.setDate(earliestAllowed.getDate() - 30);
+    const cappedSince = startDateObj < earliestAllowed
+      ? format(earliestAllowed, "yyyy-MM-dd")
+      : startDate;
+
     try {
       const insights = await fetchMetaJson<{
         data?: Array<{ name?: string; total_value?: { value?: number } }>;
       }>(`${metaInstagramAccountId}/insights`, {
         metric: "reach,accounts_engaged",
+        metric_type: "total_value",
         period: "day",
-        since: startDate,
+        since: cappedSince,
         until: endDate,
         access_token: metaAccessToken.trim(),
       });
@@ -443,8 +452,8 @@ export function ReportGeneratorDialog({
       const rows = insights.data || [];
       reach = rows.find((row) => row.name === "reach")?.total_value?.value ?? null;
       engagement = rows.find((row) => row.name === "accounts_engaged")?.total_value?.value ?? null;
-    } catch {
-      // Instagram insights can be unavailable for some accounts or permissions.
+    } catch (error) {
+      console.warn("Instagram insights indisponiveis:", error);
     }
 
     return {
