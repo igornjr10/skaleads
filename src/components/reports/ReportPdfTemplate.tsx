@@ -56,7 +56,7 @@ function chunkMetrics<T>(items: T[], size: number) {
 function getPreferredMetrics(data: ReportData) {
   const preferences = data.metricPreferences?.length
     ? data.metricPreferences
-    : ["spend", "impressions", "clicks", "messagesStarted"];
+    : ["spend", "impressions", "clicks", "roas", "ctr"];
 
   const registry: Record<string, { label: string; value: string; note: string }> = {
     spend: {
@@ -93,6 +93,41 @@ function getPreferredMetrics(data: ReportData) {
       label: "Custo por compra",
       value: data.summary.purchases ? fmtCurrency(data.summary.costPerPurchase || 0) : "-",
       note: "Investimento medio por compra",
+    },
+    roas: {
+      label: "ROAS",
+      value: `${(data.summary.roas || 0).toFixed(2)}x`,
+      note: "Retorno por real investido",
+    },
+    revenue: {
+      label: "Faturamento",
+      value: fmtCurrency(data.summary.revenue || 0),
+      note: "Receita gerada no periodo",
+    },
+    ctr: {
+      label: "CTR",
+      value: fmtPct(data.summary.ctr || 0),
+      note: "Taxa de cliques",
+    },
+    cpc: {
+      label: "CPC",
+      value: fmtCurrency(data.summary.cpc || 0),
+      note: "Custo medio por clique",
+    },
+    cpm: {
+      label: "CPM",
+      value: fmtCurrency(data.summary.cpm || 0),
+      note: "Custo por mil impressoes",
+    },
+    reach: {
+      label: "Alcance",
+      value: fmtNum(data.summary.reach || 0),
+      note: "Pessoas unicas alcancadas",
+    },
+    frequency: {
+      label: "Frequencia",
+      value: (data.summary.frequency || 0).toFixed(2),
+      note: "Exibicoes medias por pessoa",
     },
   };
 

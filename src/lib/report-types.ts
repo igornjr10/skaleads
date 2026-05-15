@@ -20,6 +20,8 @@ export interface ReportData {
     ctr: number;
     cpc: number;
     cpm: number;
+    reach?: number;
+    frequency?: number;
   };
   socialPresence?: {
     enabled: boolean;
@@ -57,6 +59,21 @@ export interface ReportData {
     status: string;
   }>;
   recommendations: string;
-  metricPreferences?: Array<"spend" | "impressions" | "clicks" | "messagesStarted" | "purchaseValue" | "purchases" | "costPerPurchase">;
+  metricPreferences?: Array<
+    | "spend"
+    | "impressions"
+    | "clicks"
+    | "messagesStarted"
+    | "purchaseValue"
+    | "purchases"
+    | "costPerPurchase"
+    | "roas"
+    | "revenue"
+    | "ctr"
+    | "cpc"
+    | "cpm"
+    | "reach"
+    | "frequency"
+  >;
   branding: { primaryColor: string; agencyName: string };
 }

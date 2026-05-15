@@ -39,7 +39,7 @@ function fmtNum(value: number) {
 function getPreferredMetrics(data: ReportData) {
   const preferences = data.metricPreferences?.length
     ? data.metricPreferences
-    : ["spend", "impressions", "clicks", "messagesStarted"];
+    : ["spend", "impressions", "clicks", "roas", "ctr"];
 
   const registry: Record<string, { label: string; value: string }> = {
     spend: {
@@ -69,6 +69,34 @@ function getPreferredMetrics(data: ReportData) {
     costPerPurchase: {
       label: "Custo por compra",
       value: data.summary.purchases ? fmtCurrency(data.summary.costPerPurchase || 0) : "-",
+    },
+    roas: {
+      label: "ROAS",
+      value: `${(data.summary.roas || 0).toFixed(2)}x`,
+    },
+    revenue: {
+      label: "Faturamento",
+      value: fmtCurrency(data.summary.revenue || 0),
+    },
+    ctr: {
+      label: "CTR",
+      value: `${(data.summary.ctr || 0).toFixed(2)}%`,
+    },
+    cpc: {
+      label: "CPC",
+      value: fmtCurrency(data.summary.cpc || 0),
+    },
+    cpm: {
+      label: "CPM",
+      value: fmtCurrency(data.summary.cpm || 0),
+    },
+    reach: {
+      label: "Alcance",
+      value: fmtNum(data.summary.reach || 0),
+    },
+    frequency: {
+      label: "Frequencia",
+      value: (data.summary.frequency || 0).toFixed(2),
     },
   };
 

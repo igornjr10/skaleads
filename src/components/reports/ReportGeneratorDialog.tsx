@@ -52,6 +52,13 @@ const REPORT_METRIC_OPTIONS = [
   { key: "impressions", label: "Impressoes", helper: "Entrega total da conta" },
   { key: "clicks", label: "Total de cliques no link", helper: "Cliques no link registrados no periodo" },
   { key: "messagesStarted", label: "Mensagens iniciadas", helper: "Conversas abertas no periodo" },
+  { key: "roas", label: "ROAS", helper: "Retorno sobre investimento" },
+  { key: "revenue", label: "Faturamento", helper: "Receita gerada no periodo" },
+  { key: "ctr", label: "CTR", helper: "Taxa de cliques no link" },
+  { key: "cpc", label: "CPC", helper: "Custo medio por clique" },
+  { key: "cpm", label: "CPM", helper: "Custo por mil impressoes" },
+  { key: "reach", label: "Alcance", helper: "Pessoas unicas alcancadas" },
+  { key: "frequency", label: "Frequencia", helper: "Media de exibicoes por pessoa" },
 ] as const;
 
 type ReportMetricPreference = (typeof REPORT_METRIC_OPTIONS)[number]["key"];
@@ -186,6 +193,9 @@ export function ReportGeneratorDialog({
     "purchases",
     "costPerPurchase",
     "messagesStarted",
+    "roas",
+    "impressions",
+    "ctr",
   ]);
   const [includeSocialPresence, setIncludeSocialPresence] = useState(true);
   const [socialMetricPreferences, setSocialMetricPreferences] = useState<SocialMetricPreference[]>([
@@ -234,11 +244,11 @@ export function ReportGeneratorDialog({
 
   async function fetchAccountConversionMetrics(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
     if (!metaAdAccountId || !metaAccessToken) {
-      return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0 };
+      return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     }
 
     const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
-      fields: "actions,action_values,spend,impressions,inline_link_clicks",
+      fields: "actions,action_values,spend,impressions,inline_link_clicks,reach,frequency",
       level: "account",
       time_range: JSON.stringify({ since: startDate, until: endDate }),
       access_token: metaAccessToken.trim(),
@@ -265,6 +275,8 @@ export function ReportGeneratorDialog({
         total + extractMessagesStarted(row.actions),
       0
     );
+    const reach = rows.reduce((total: number, row: { reach?: string }) => total + (parseInt(row.reach ?? "0", 10) || 0), 0);
+    const frequency = reach > 0 ? impressions / reach : 0;
 
     const purchases = purchaseMetric.total;
     const purchaseValue = purchaseValueMetric.total;
@@ -277,6 +289,8 @@ export function ReportGeneratorDialog({
       purchases,
       purchaseValue,
       costPerPurchase: purchases > 0 ? spend / purchases : 0,
+      reach,
+      frequency,
     };
   }
 
@@ -555,7 +569,7 @@ export function ReportGeneratorDialog({
     const campaigns = campaignsRaw || [];
     const ads = (adsRaw || []).filter((ad: any) => ad.ad_sets?.campaigns?.client_id === clientId);
 
-    let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0 };
+    let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     try {
       conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
     } catch {
@@ -590,6 +604,8 @@ export function ReportGeneratorDialog({
     summary.ctr = summary.impressions > 0 ? (summary.clicks / summary.impressions) * 100 : 0;
     summary.cpc = summary.clicks > 0 ? summary.spend / summary.clicks : 0;
     summary.cpm = summary.impressions > 0 ? (summary.spend / summary.impressions) * 1000 : 0;
+    summary.reach = conversionMetrics.reach;
+    summary.frequency = conversionMetrics.frequency;
 
     let topCampaigns = campaigns
       .map((campaign: any) => ({
