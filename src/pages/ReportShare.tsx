@@ -288,17 +288,6 @@ export default function ReportShare() {
           </section>
         )}
 
-        {data?.recommendations && (
-          <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Recomendacoes</h2>
-            <Card>
-              <CardContent className="pt-4">
-                <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{data.recommendations}</p>
-              </CardContent>
-            </Card>
-          </section>
-        )}
-
         <p className="text-center text-xs text-muted-foreground">
           {agencyName} - Relatorio gerado em {generatedAt}
         </p>

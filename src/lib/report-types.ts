@@ -58,7 +58,6 @@ export interface ReportData {
     cpm: number;
     status: string;
   }>;
-  recommendations: string;
   metricPreferences?: Array<
     | "spend"
     | "impressions"

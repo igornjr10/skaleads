@@ -1,20 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import { endOfMonth, format, startOfMonth, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Download, FileText, Loader2, Sparkles } from "lucide-react";
+import { Download, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
-import { summarizePeriod } from "@/lib/ai-service";
 
 interface ReportGeneratorDialogProps {
   isOpen: boolean;
@@ -148,32 +146,6 @@ function extractPrimaryActionMetric(
   return { type: acceptedTypes[0], total: 0 };
 }
 
-function buildFallbackRecommendations(data: ReportData) {
-  const ctr = data.summary.ctr;
-  const cpc = data.summary.cpc;
-  const purchases = data.summary.purchases || data.summary.conversions;
-  const spend = data.summary.spend;
-  const messagesStarted = data.summary.messagesStarted || 0;
-  const topCampaign = data.topCampaigns[0];
-
-  const strength =
-    ctr >= 1.5
-      ? "O periodo mostrou boa capacidade de gerar interesse, com CTR saudavel e volume consistente de cliques."
-      : "O periodo mostrou entrega, mas o nivel de interesse ainda pode evoluir, com CTR abaixo do ideal para escalar com seguranca.";
-
-  const warning =
-    purchases > 0 || messagesStarted > 0
-      ? "O principal foco agora deve ser aumentar a eficiencia do que ja converte, concentrando verba nos conjuntos e criativos com melhor resposta."
-      : "O principal ponto de atencao e transformar trafego em resultado, porque houve consumo de verba sem conversoes ou conversas suficientes.";
-
-  const action =
-    topCampaign
-      ? `Como proximo passo, vale priorizar a campanha ${topCampaign.name} como referencia de otimizacao, revisar segmentacoes de baixo desempenho e testar novas variacoes de criativo para reduzir CPC e elevar conversao.`
-      : "Como proximo passo, vale revisar segmentacoes, criativos e pagina de destino para reduzir CPC e melhorar a taxa de resposta do periodo.";
-
-  return `${strength} Foram investidos ${spend.toFixed(2)} no periodo, com CPC medio de ${cpc.toFixed(2)} e ${purchases} compras registradas. ${warning} ${action}`;
-}
-
 export function ReportGeneratorDialog({
   isOpen,
   onClose,
@@ -185,9 +157,6 @@ export function ReportGeneratorDialog({
   const [preset, setPreset] = useState("30");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [recommendations, setRecommendations] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [recommendationSource, setRecommendationSource] = useState<"empty" | "ai" | "manual">("empty");
   const [metricPreferences, setMetricPreferences] = useState<ReportMetricPreference[]>([
     "purchaseValue",
     "purchases",
@@ -203,8 +172,6 @@ export function ReportGeneratorDialog({
     "reach",
     "engagement",
   ]);
-  const recommendationKey = useMemo(() => `${clientId}:${startDate}:${endDate}`, [clientId, startDate, endDate]);
-
   function applyPreset(value: string) {
     setPreset(value);
     const days = parseInt(value);
@@ -670,7 +637,6 @@ export function ReportGeneratorDialog({
       socialPresence,
       topCampaigns,
       topAds,
-      recommendations: recommendations || "Nenhuma recomendacao registrada para este periodo.",
       metricPreferences,
       branding: { primaryColor: "#2563eb", agencyName: "MarketProAds" },
     };
@@ -698,92 +664,10 @@ export function ReportGeneratorDialog({
     });
   }
 
-  async function generateAiRecommendations() {
-    setAiLoading(true);
-    try {
-      const reportData = await buildReportData();
-      const activeCampaigns = reportData.topCampaigns.filter((campaign) => campaign.status === "ACTIVE").length;
-      const activeAds = reportData.topAds.filter((ad) => ad.status === "ACTIVE").length;
-      const topCampaign = reportData.topCampaigns[0];
-      const topAd = reportData.topAds[0];
-
-      const result = await summarizePeriod({
-        period: { start: startDate, end: endDate },
-        metrics: {
-          spend: reportData.summary.spend,
-          impressions: reportData.summary.impressions,
-          clicks: reportData.summary.clicks,
-          ctr: reportData.summary.ctr,
-          cpc: reportData.summary.cpc,
-          cpm: reportData.summary.cpm,
-          conversions: reportData.summary.conversions,
-          messages_started: reportData.summary.messagesStarted || 0,
-          active_campaigns: activeCampaigns,
-          active_ads: activeAds,
-          top_campaign_spend: topCampaign?.spend || 0,
-          top_campaign_conversions: topCampaign?.conversions || 0,
-          top_ad_ctr: topAd?.ctr || 0,
-          top_ad_clicks: topAd?.clicks || 0,
-        },
-      });
-
-      setRecommendations(result.summary);
-      setRecommendationSource("ai");
-    } catch (error) {
-      const reportData = await buildReportData();
-      const fallback = buildFallbackRecommendations(reportData);
-      setRecommendations(fallback);
-      setRecommendationSource("ai");
-      toast.warning(
-        error instanceof Error
-          ? `${error.message}. Usando recomendacao local.`
-          : "IA indisponivel no momento. Usando recomendacao local."
-      );
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    if (!isOpen) return;
-    if (recommendationSource === "manual") return;
-    void generateAiRecommendations();
-  }, [isOpen, recommendationKey]);
-
   async function handleGenerate(download: boolean) {
     setLoading(true);
     try {
-      let finalRecommendations = recommendations;
-
-      if (!finalRecommendations.trim()) {
-        const reportPreview = await buildReportData();
-        try {
-          const result = await summarizePeriod({
-            period: { start: startDate, end: endDate },
-            metrics: {
-              spend: reportPreview.summary.spend,
-              impressions: reportPreview.summary.impressions,
-              clicks: reportPreview.summary.clicks,
-              ctr: reportPreview.summary.ctr,
-              cpc: reportPreview.summary.cpc,
-              cpm: reportPreview.summary.cpm,
-              conversions: reportPreview.summary.conversions,
-              messages_started: reportPreview.summary.messagesStarted || 0,
-            },
-          });
-
-          finalRecommendations = result.summary;
-          setRecommendations(result.summary);
-          setRecommendationSource("ai");
-        } catch {
-          finalRecommendations = buildFallbackRecommendations(reportPreview);
-          setRecommendations(finalRecommendations);
-          setRecommendationSource("ai");
-        }
-      }
-
       const data = await buildReportData();
-      data.recommendations = finalRecommendations;
 
       const { data: session } = await supabase.auth.getSession();
       const tenantId = session.session?.user.id;
@@ -950,32 +834,6 @@ export function ReportGeneratorDialog({
               )}
             </CardContent>
           </Card>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between gap-3">
-              <Label className="text-xs">Analise e recomendacoes</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => void generateAiRecommendations()}
-                disabled={aiLoading || loading}
-                className="h-7 px-2 text-xs"
-              >
-                {aiLoading ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1 h-3.5 w-3.5" />}
-                {recommendations ? "Regenerar com IA" : "Gerar com IA"}
-              </Button>
-            </div>
-            <Textarea
-              value={recommendations}
-              onChange={(event) => {
-                setRecommendations(event.target.value);
-                setRecommendationSource(event.target.value.trim() ? "manual" : "empty");
-              }}
-              placeholder={aiLoading ? "A IA esta analisando o periodo e montando as recomendacoes..." : "A IA vai preencher este campo com base nas metricas do periodo."}
-              className="min-h-[100px] text-sm"
-            />
-          </div>
 
           <div className="flex gap-2">
             <Button onClick={() => handleGenerate(false)} disabled={loading} className="flex-1" variant="outline">

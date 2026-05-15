@@ -302,25 +302,6 @@ const styles = StyleSheet.create({
     color: "#94a3b8",
     marginTop: 5,
   },
-  analysisBox: {
-    borderWidth: 1,
-    borderColor: "#e2e8f0",
-    backgroundColor: "#f8fbfd",
-    borderRadius: 14,
-    padding: 15,
-    marginBottom: 16,
-  },
-  analysisLabel: {
-    fontSize: 8,
-    color: "#64748b",
-    textTransform: "uppercase",
-    marginBottom: 7,
-  },
-  analysisText: {
-    fontSize: 10.2,
-    color: "#334155",
-    lineHeight: 1.55,
-  },
   blockTitle: {
     fontSize: 11.5,
     fontFamily: "Helvetica-Bold",
@@ -630,7 +611,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   const introText = `Relatorio gerado dos dados analisados entre ${data.period.label}.`;
   const campaigns = data.topCampaigns.slice(0, 10);
   const ads = data.topAds.slice(0, 10);
-  const recommendationPage = ads.length > 0 ? 4 : 3;
+  const summaryPage = ads.length > 0 ? 4 : 3;
   const preferredMetrics = getPreferredMetrics(data);
   const metricRows = chunkMetrics(preferredMetrics, 4);
   const consolidatedMetrics = [
@@ -686,11 +667,6 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                   ))}
                 </View>
               ))}
-
-              <View style={styles.analysisBox}>
-                <Text style={styles.analysisLabel}>Analise</Text>
-                <Text style={styles.analysisText}>{data.recommendations || "Sem analise registrada para este periodo."}</Text>
-              </View>
 
               <SummaryTable data={data} />
             </View>
@@ -752,12 +728,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
           <View style={styles.reportCard}>
             <View style={styles.reportCardTop} />
             <View style={styles.reportCardBody}>
-              <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Leituras e proximos passos</Text>
-
-              <View style={styles.analysisBox}>
-                <Text style={styles.analysisLabel}>Resumo do gestor</Text>
-                <Text style={styles.analysisText}>{data.recommendations || "Sem recomendacoes adicionais."}</Text>
-              </View>
+              <Text style={[styles.sectionTitle, { marginBottom: 10 }]}>Resumo consolidado do periodo</Text>
 
               <View style={styles.metricsRow}>
                 <View style={styles.metricCell}>
@@ -798,7 +769,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
             </View>
           </View>
         </View>
-        <Footer agency={data.branding.agencyName} page={recommendationPage} />
+        <Footer agency={data.branding.agencyName} page={summaryPage} />
       </Page>
     </Document>
   );
