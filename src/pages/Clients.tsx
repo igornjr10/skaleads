@@ -19,11 +19,32 @@ import {
   Activity,
   Filter,
   ShieldAlert,
+  MoreVertical,
+  Archive,
+  ArchiveRestore,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -70,7 +91,7 @@ interface ReportRow {
   created_at: string;
 }
 
-type StatusFilter = "all" | "active" | "inactive";
+type StatusFilter = "all" | "active" | "inactive" | "archived";
 type ConnectionFilter = "all" | "connected" | "disconnected";
 type SortOption = "recent" | "name" | "reports" | "lastSync";
 
@@ -159,6 +180,9 @@ export default function Clients() {
   const [selectedPageId, setSelectedPageId] = useState("");
   const [longLivedToken, setLongLivedToken] = useState("");
 
+  const [deleteClient, setDeleteClient] = useState<Client | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   async function load() {
     setLoading(true);
     const [{ data: clientsData, error: clientsError }, { data: reportsData, error: reportsError }] = await Promise.all([
@@ -193,6 +217,7 @@ export default function Clients() {
       const stats = reportStats[client.id] ?? { count: 0, latest: null };
       const isConnected = Boolean(client.meta_ad_account_id);
       const isActive = client.status === "active";
+      const isArchived = client.status === "archived";
       const lastSyncDate = client.meta_last_sync_at ? new Date(client.meta_last_sync_at) : null;
       const verifiedAt = client.meta_last_verified_at ? new Date(client.meta_last_verified_at) : null;
       const health = HEALTH_STYLES[client.meta_sync_status] ?? HEALTH_STYLES.pending;
@@ -212,6 +237,7 @@ export default function Clients() {
         stats,
         isConnected,
         isActive,
+        isArchived,
         health,
         lastSyncDate,
         verifiedAt,
@@ -224,12 +250,13 @@ export default function Clients() {
   const filteredClients = useMemo(() => {
     const term = search.trim().toLowerCase();
     return clientsWithStats
-      .filter(({ client, isActive, isConnected }) => {
+      .filter(({ client, isActive, isArchived, isConnected }) => {
         const matchesSearch = !term || client.name.toLowerCase().includes(term);
-        const matchesStatus =
-          statusFilter === "all" ||
-          (statusFilter === "active" && isActive) ||
-          (statusFilter === "inactive" && !isActive);
+        let matchesStatus = true;
+        if (statusFilter === "active") matchesStatus = isActive;
+        else if (statusFilter === "inactive") matchesStatus = !isActive && !isArchived;
+        else if (statusFilter === "archived") matchesStatus = isArchived;
+        else matchesStatus = !isArchived;
         const matchesConnection =
           connectionFilter === "all" ||
           (connectionFilter === "connected" && isConnected) ||
@@ -439,6 +466,28 @@ export default function Clients() {
     load();
   }
 
+  async function archiveClient(client: Client) {
+    const nextStatus = client.status === "archived" ? "inactive" : "archived";
+    const { error } = await supabase
+      .from("clients")
+      .update({ status: nextStatus })
+      .eq("id", client.id);
+    if (error) return toast.error(error.message);
+    toast.success(nextStatus === "archived" ? "Cliente arquivado" : "Cliente desarquivado");
+    load();
+  }
+
+  async function confirmDeleteClient() {
+    if (!deleteClient) return;
+    setDeleting(true);
+    const { error } = await supabase.from("clients").delete().eq("id", deleteClient.id);
+    setDeleting(false);
+    if (error) return toast.error(error.message);
+    toast.success("Cliente excluido");
+    setDeleteClient(null);
+    load();
+  }
+
   async function handleVerifyConnection(client: Client) {
     if (!client.meta_ad_account_id || !client.meta_access_token) {
       toast.error("Configure a conta Meta antes de verificar");
@@ -594,6 +643,35 @@ export default function Clients() {
         <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/audiences`)}>
           <Users className="mr-2 h-3 w-3" />Publicos
         </Button>
+        {canManage && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" aria-label="Mais acoes">
+                <MoreVertical className="h-3 w-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => archiveClient(client)}>
+                {client.status === "archived" ? (
+                  <>
+                    <ArchiveRestore className="mr-2 h-4 w-4" />Desarquivar
+                  </>
+                ) : (
+                  <>
+                    <Archive className="mr-2 h-4 w-4" />Arquivar
+                  </>
+                )}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setDeleteClient(client)}
+                className="text-rose-600 focus:text-rose-700 focus:bg-rose-50"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />Excluir
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     );
   }
@@ -881,6 +959,7 @@ export default function Clients() {
                   <SelectItem value="all">Todos status</SelectItem>
                   <SelectItem value="active">Ativos</SelectItem>
                   <SelectItem value="inactive">Inativos</SelectItem>
+                  <SelectItem value="archived">Arquivados</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={connectionFilter} onValueChange={(value) => setConnectionFilter(value as ConnectionFilter)}>
@@ -939,7 +1018,7 @@ export default function Clients() {
             </div>
           ) : view === "gallery" ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredClients.map(({ client, stats, isActive, isConnected, health, syncLabel, lastSyncDate, verifiedAt, syncDue }) => {
+              {filteredClients.map(({ client, stats, isActive, isArchived, isConnected, health, syncLabel, lastSyncDate, verifiedAt, syncDue }) => {
                 const latestText = stats.latest
                   ? `Ultimo relatorio gerado ${formatDistanceToNow(new Date(stats.latest), { addSuffix: true, locale: ptBR })}`
                   : "Nenhum relatorio gerado ainda";
@@ -965,8 +1044,8 @@ export default function Clients() {
                           <div className="min-w-0">
                             <h3 className="text-lg font-semibold truncate">{client.name}</h3>
                             <div className="mt-1 flex flex-wrap gap-2">
-                              <Badge variant="outline" className={isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
-                                {isActive ? "Ativo" : "Inativo"}
+                              <Badge variant="outline" className={isArchived ? "border-amber-200 bg-amber-50 text-amber-700" : isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
+                                {isArchived ? "Arquivado" : isActive ? "Ativo" : "Inativo"}
                               </Badge>
                               <Badge variant="outline" className={isConnected ? "border-sky-200 bg-sky-50 text-sky-700" : "border-slate-200 bg-slate-50 text-slate-500"}>
                                 {isConnected ? "Meta conectada" : "Sem Meta"}
@@ -1072,10 +1151,14 @@ export default function Clients() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Switch checked={client.status === "active"} onCheckedChange={() => canManage && toggleStatus(client)} disabled={!canManage} />
-                          <span className="text-xs text-muted-foreground">{client.status === "active" ? "Ativo" : "Inativo"}</span>
-                        </div>
+                        {client.status === "archived" ? (
+                          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">Arquivado</Badge>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Switch checked={client.status === "active"} onCheckedChange={() => canManage && toggleStatus(client)} disabled={!canManage} />
+                            <span className="text-xs text-muted-foreground">{client.status === "active" ? "Ativo" : "Inativo"}</span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
@@ -1124,6 +1207,30 @@ export default function Clients() {
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteClient} onOpenChange={(open) => !open && !deleting && setDeleteClient(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acao remove permanentemente <strong>{deleteClient?.name}</strong> e todos os dados vinculados (campanhas, conjuntos, anuncios, relatorios e auditorias). Nao e possivel desfazer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                confirmDeleteClient();
+              }}
+              disabled={deleting}
+              className="bg-rose-600 hover:bg-rose-700 focus:ring-rose-600"
+            >
+              {deleting ? "Excluindo..." : "Excluir definitivamente"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
