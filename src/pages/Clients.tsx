@@ -51,6 +51,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -796,34 +797,36 @@ export default function Clients() {
                 <form onSubmit={handleSaveOAuth} className="space-y-4">
                   <div className="space-y-2">
                     <Label>Conta de anuncios</Label>
-                    <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a conta..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {adAccounts.map((account) => (
-                          <SelectItem key={account.id} value={account.id.replace("act_", "")}>
-                            {account.name} ({account.id})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                      value={selectedAccountId}
+                      onChange={setSelectedAccountId}
+                      placeholder="Selecione a conta..."
+                      searchPlaceholder="Buscar conta ou ID..."
+                      emptyText="Nenhuma conta encontrada"
+                      options={adAccounts.map((account) => ({
+                        value: account.id.replace("act_", ""),
+                        label: account.name,
+                        description: account.id,
+                        keywords: [account.id, account.id.replace("act_", "")],
+                      }))}
+                    />
                   </div>
                   {pages.length > 0 && (
                     <div className="space-y-2">
                       <Label>Pagina do Facebook</Label>
-                      <Select value={selectedPageId} onValueChange={setSelectedPageId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a pagina para usar a logo..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {pages.map((page) => (
-                            <SelectItem key={page.id} value={page.id}>
-                              {page.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <SearchableSelect
+                        value={selectedPageId}
+                        onChange={setSelectedPageId}
+                        placeholder="Selecione a pagina para usar a logo..."
+                        searchPlaceholder="Buscar pagina..."
+                        emptyText="Nenhuma pagina encontrada"
+                        options={pages.map((page) => ({
+                          value: page.id,
+                          label: page.name,
+                          description: page.id,
+                          keywords: [page.id],
+                        }))}
+                      />
                       <p className="text-xs text-muted-foreground">
                         A foto da pagina selecionada sera usada como logo automatica do cliente.
                       </p>
