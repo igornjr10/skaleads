@@ -308,20 +308,65 @@ export default function Clients() {
   }
 
   async function fetchFacebookPages(token: string) {
-    const response = await fetch(
-      `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({
-        fields: "id,name,access_token,fan_count,followers_count,instagram_business_account{id,username,profile_picture_url},picture.width(256).height(256)",
-        access_token: token,
-      })}`
-    );
+    const pageFields = "id,name,access_token,fan_count,followers_count,instagram_business_account{id,username,profile_picture_url},picture.width(256).height(256)";
 
-    const data = await response.json();
-
-    if (!response.ok || data.error) {
-      throw new Error(data.error?.message || "Erro ao buscar paginas do Facebook");
+    async function fetchAllPaginated(initialUrl: string): Promise<MetaPage[]> {
+      const out: MetaPage[] = [];
+      let url: string | null = initialUrl;
+      while (url) {
+        const res = await fetch(url);
+        const json = await res.json();
+        if (!res.ok || json.error) {
+          throw new Error(json.error?.message || "Erro ao buscar paginas do Facebook");
+        }
+        for (const p of (json.data as MetaPage[]) ?? []) out.push(p);
+        url = json.paging?.next ?? null;
+      }
+      return out;
     }
 
-    return (data.data as MetaPage[]) ?? [];
+    const directPages = await fetchAllPaginated(
+      `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "100" })}`
+    );
+
+    const businessesRes = await fetch(
+      `https://graph.facebook.com/v21.0/me/businesses?${new URLSearchParams({ fields: "id,name", access_token: token, limit: "100" })}`
+    );
+    const businessesData = await businessesRes.json();
+    if (!businessesRes.ok || businessesData.error) {
+      throw new Error(businessesData.error?.message || "Erro ao buscar Business Managers");
+    }
+    const businesses = (businessesData.data as { id: string; name: string }[]) ?? [];
+
+    const bmPagesNested = await Promise.all(
+      businesses.flatMap((bm) => [
+        fetchAllPaginated(
+          `https://graph.facebook.com/v21.0/${bm.id}/owned_pages?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "100" })}`
+        ).catch(() => [] as MetaPage[]),
+        fetchAllPaginated(
+          `https://graph.facebook.com/v21.0/${bm.id}/client_pages?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "100" })}`
+        ).catch(() => [] as MetaPage[]),
+      ])
+    );
+
+    const merged = new Map<string, MetaPage>();
+    for (const page of [...directPages, ...bmPagesNested.flat()]) {
+      if (!page?.id) continue;
+      const existing = merged.get(page.id);
+      if (!existing) {
+        merged.set(page.id, page);
+      } else {
+        merged.set(page.id, {
+          ...existing,
+          ...page,
+          access_token: existing.access_token || page.access_token,
+          instagram_business_account: existing.instagram_business_account || page.instagram_business_account,
+          picture: existing.picture || page.picture,
+        });
+      }
+    }
+
+    return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
   }
 
   async function handleFacebookLogin() {
