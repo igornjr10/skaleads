@@ -50,6 +50,7 @@ const REPORT_METRIC_OPTIONS = [
   { key: "impressions", label: "Impressoes", helper: "Entrega total da conta" },
   { key: "clicks", label: "Total de cliques no link", helper: "Cliques no link registrados no periodo" },
   { key: "messagesStarted", label: "Mensagens iniciadas", helper: "Conversas abertas no periodo" },
+  { key: "instagramProfileVisits", label: "Visitas no perfil", helper: "Visitas ao perfil do Instagram no periodo" },
   { key: "roas", label: "ROAS", helper: "Retorno sobre investimento" },
   { key: "revenue", label: "Faturamento", helper: "Receita gerada no periodo" },
   { key: "reach", label: "Alcance", helper: "Pessoas unicas alcancadas na conta do cliente" },
@@ -119,6 +120,21 @@ function extractMessagesStarted(actions?: Array<{ action_type?: string; value?: 
   }, 0);
 }
 
+function extractInstagramProfileVisits(actions?: Array<{ action_type?: string; value?: string }>) {
+  if (!actions?.length) return 0;
+
+  return actions.reduce((total, action) => {
+    const type = (action.action_type ?? "").toLowerCase();
+    const isProfileVisit =
+      type.includes("instagram") &&
+      type.includes("profile") &&
+      (type.includes("visit") || type.includes("view"));
+
+    if (!isProfileVisit) return total;
+    return total + (parseInt(action.value ?? "0", 10) || 0);
+  }, 0);
+}
+
 function extractActionTotal(
   actions: Array<{ action_type?: string; value?: string }> | undefined,
   acceptedTypes: string[]
@@ -167,6 +183,7 @@ export function ReportGeneratorDialog({
     "purchases",
     "costPerPurchase",
     "messagesStarted",
+    "instagramProfileVisits",
     "roas",
     "reach",
     "impressions",
@@ -219,7 +236,7 @@ export function ReportGeneratorDialog({
 
   async function fetchAccountConversionMetrics(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
     if (!metaAdAccountId || !metaAccessToken) {
-      return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
+      return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     }
 
     const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
@@ -250,6 +267,11 @@ export function ReportGeneratorDialog({
         total + extractMessagesStarted(row.actions),
       0
     );
+    const instagramProfileVisits = rows.reduce(
+      (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) =>
+        total + extractInstagramProfileVisits(row.actions),
+      0
+    );
     const reach = rows.reduce((total: number, row: { reach?: string }) => total + (parseInt(row.reach ?? "0", 10) || 0), 0);
     const frequency = reach > 0 ? impressions / reach : 0;
 
@@ -261,6 +283,7 @@ export function ReportGeneratorDialog({
       impressions,
       clicks,
       messagesStarted,
+      instagramProfileVisits,
       purchases,
       purchaseValue,
       costPerPurchase: purchases > 0 ? spend / purchases : 0,
@@ -593,7 +616,7 @@ export function ReportGeneratorDialog({
     const campaigns = campaignsRaw || [];
     const ads = (adsRaw || []).filter((ad: any) => ad.ad_sets?.campaigns?.client_id === clientId);
 
-    let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
+    let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     try {
       conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
     } catch {
@@ -681,6 +704,8 @@ export function ReportGeneratorDialog({
     const end = new Date(endDate + "T00:00:00");
     const periodLabel = `${format(start, "dd MMM yyyy", { locale: ptBR })} ate ${format(end, "dd MMM yyyy", { locale: ptBR })}`;
     const socialPresence = await buildSocialPresence(clientRaw);
+    const socialProfileViews = socialPresence?.metrics.find((metric) => metric.key === "profileViews")?.value ?? 0;
+    summary.instagramProfileVisits = conversionMetrics.instagramProfileVisits || socialProfileViews || 0;
 
     return {
       generatedAt: format(new Date(), "dd/MM/yyyy 'as' HH:mm"),

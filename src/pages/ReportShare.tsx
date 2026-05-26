@@ -40,6 +40,10 @@ function getPreferredMetrics(data: ReportData) {
   const preferences = data.metricPreferences?.length
     ? data.metricPreferences
     : ["spend", "impressions", "clicks", "roas", "ctr"];
+  const visiblePreferences = preferences.includes("instagramProfileVisits")
+    ? preferences
+    : [...preferences, "instagramProfileVisits"];
+  const socialProfileViews = data.socialPresence?.metrics.find((metric) => metric.key === "profileViews")?.value ?? 0;
 
   const registry: Record<string, { label: string; value: string }> = {
     spend: {
@@ -57,6 +61,10 @@ function getPreferredMetrics(data: ReportData) {
     messagesStarted: {
       label: "Mensagens iniciadas",
       value: fmtNum(data.summary.messagesStarted || 0),
+    },
+    instagramProfileVisits: {
+      label: "Visitas no perfil",
+      value: fmtNum(data.summary.instagramProfileVisits || socialProfileViews || 0),
     },
     purchaseValue: {
       label: "Valor da conversao da compra",
@@ -100,7 +108,7 @@ function getPreferredMetrics(data: ReportData) {
     },
   };
 
-  return preferences.map((key) => registry[key]).filter(Boolean);
+  return visiblePreferences.map((key) => registry[key]).filter(Boolean);
 }
 
 export default function ReportShare() {
