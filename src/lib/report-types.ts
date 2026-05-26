@@ -26,6 +26,7 @@ export interface ReportData {
   socialPresence?: {
     enabled: boolean;
     profileName: string;
+    profileUrl?: string | null;
     logoUrl?: string | null;
     sourceLabels: string[];
     metrics: Array<{

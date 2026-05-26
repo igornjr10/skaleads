@@ -25,6 +25,7 @@ interface ReportGeneratorDialogProps {
 interface SocialPresenceSnapshot {
   enabled: boolean;
   profileName: string;
+  profileUrl?: string | null;
   logoUrl?: string | null;
   sourceLabels: string[];
   metrics: Array<{
@@ -523,6 +524,7 @@ export function ReportGeneratorDialog({
     return {
       enabled: true,
       profileName: instagramResult?.username ? `@${instagramResult.username}` : client.meta_page_name || pageResult?.pageName || client.name || clientName,
+      profileUrl: instagramResult?.username ? `https://www.instagram.com/${instagramResult.username}/` : null,
       logoUrl: instagramResult?.logoUrl || client.logo_url || null,
       sourceLabels,
       metrics: socialMetricPreferences.map((key) => ({
