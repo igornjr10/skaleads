@@ -505,20 +505,43 @@ export function ReportGeneratorDialog({
 
       try {
         const profileInsights = await fetchMetaJson<{
-          data?: Array<{ name?: string; values?: Array<{ value?: number | string }> }>;
+          data?: Array<{
+            name?: string;
+            total_value?: { value?: number };
+            values?: Array<{ value?: number | string }>;
+          }>;
         }>(`${metaInstagramAccountId}/insights`, {
           metric: "profile_views",
+          metric_type: "total_value",
           period: "day",
           since: cappedSince,
           until: endDate,
           access_token: metaAccessToken.trim(),
         });
 
-        const profileRows = profileInsights.data || [];
-        const profileViewValues = profileRows.find((row) => row.name === "profile_views")?.values || [];
-        profileViews = profileViewValues.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+        const profileRow = (profileInsights.data || []).find((row) => row.name === "profile_views");
+        if (profileRow?.total_value?.value !== undefined) {
+          profileViews = profileRow.total_value.value;
+        } else if (profileRow?.values?.length) {
+          profileViews = profileRow.values.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+        }
       } catch (error) {
         console.warn("Visitas ao perfil do Instagram indisponiveis:", error);
+        try {
+          const fallback = await fetchMetaJson<{
+            data?: Array<{ name?: string; values?: Array<{ value?: number | string }> }>;
+          }>(`${metaInstagramAccountId}/insights`, {
+            metric: "profile_views",
+            period: "day",
+            since: cappedSince,
+            until: endDate,
+            access_token: metaAccessToken.trim(),
+          });
+          const row = (fallback.data || []).find((r) => r.name === "profile_views");
+          profileViews = (row?.values || []).reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+        } catch (fallbackError) {
+          console.warn("Fallback de visitas ao perfil tambem falhou:", fallbackError);
+        }
       }
     }
 

@@ -179,6 +179,7 @@ export default function Clients() {
   const [pages, setPages] = useState<MetaPage[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [selectedPageId, setSelectedPageId] = useState("");
+  const [selectedInstagramId, setSelectedInstagramId] = useState("");
   const [longLivedToken, setLongLivedToken] = useState("");
 
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
@@ -293,6 +294,7 @@ export default function Clients() {
     setPages([]);
     setSelectedAccountId("");
     setSelectedPageId(client.meta_page_id ?? "");
+    setSelectedInstagramId(client.meta_instagram_account_id ?? "");
     setLongLivedToken("");
     setConnectClient(client);
   }
@@ -303,6 +305,7 @@ export default function Clients() {
     setPages([]);
     setSelectedAccountId("");
     setSelectedPageId("");
+    setSelectedInstagramId("");
     setLongLivedToken("");
     setAutoSyncEnabled(false);
     setAutoSyncFrequencyHours("24");
@@ -402,7 +405,14 @@ export default function Clients() {
         setSelectedPageId(facebookPages[0].id);
       }
 
-      toast.success(`${data.ad_accounts?.length ?? 0} conta(s) de anuncio e ${facebookPages.length} pagina(s) encontrada(s)`);
+      const instagramAccounts = facebookPages
+        .map((page) => page.instagram_business_account)
+        .filter((account): account is { id: string; username?: string; profile_picture_url?: string } => Boolean(account?.id));
+      if (instagramAccounts.length === 1) {
+        setSelectedInstagramId(instagramAccounts[0].id);
+      }
+
+      toast.success(`${data.ad_accounts?.length ?? 0} conta(s) de anuncio · ${facebookPages.length} pagina(s) · ${instagramAccounts.length} Instagram`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro no login com Facebook");
     } finally {
@@ -415,7 +425,10 @@ export default function Clients() {
     event.preventDefault();
     if (!connectClient || !selectedAccountId || !longLivedToken) return;
     const selectedPage = pages.find((page) => page.id === selectedPageId);
-    await saveAndSync(connectClient, selectedAccountId, longLivedToken, selectedPage);
+    const explicitInstagram = pages
+      .map((page) => page.instagram_business_account)
+      .find((account) => account?.id === selectedInstagramId) ?? null;
+    await saveAndSync(connectClient, selectedAccountId, longLivedToken, selectedPage, explicitInstagram);
   }
 
   async function handleConnectManual(event: React.FormEvent) {
@@ -427,10 +440,18 @@ export default function Clients() {
     await saveAndSync(connectClient, adAccountId, accessToken);
   }
 
-  async function saveAndSync(client: Client, accountId: string, token: string, selectedPage?: MetaPage) {
+  async function saveAndSync(
+    client: Client,
+    accountId: string,
+    token: string,
+    selectedPage?: MetaPage,
+    explicitInstagram?: { id: string; username?: string; profile_picture_url?: string } | null
+  ) {
     setSyncingId(client.id);
     setSyncProgress("Salvando configuracoes...");
     try {
+      const instagramFromPage = selectedPage?.instagram_business_account ?? null;
+      const instagramFinal = explicitInstagram ?? instagramFromPage;
       const { error } = await supabase
         .from("clients")
         .update({
@@ -438,8 +459,8 @@ export default function Clients() {
           meta_access_token: token.trim(),
           meta_page_id: selectedPage?.id || client.meta_page_id,
           meta_page_name: selectedPage?.name || client.meta_page_name,
-          meta_instagram_account_id: selectedPage?.instagram_business_account?.id || client.meta_instagram_account_id,
-          meta_instagram_username: selectedPage?.instagram_business_account?.username || client.meta_instagram_username,
+          meta_instagram_account_id: instagramFinal?.id || client.meta_instagram_account_id,
+          meta_instagram_username: instagramFinal?.username || client.meta_instagram_username,
           meta_auto_sync_enabled: autoSyncEnabled,
           meta_auto_sync_frequency_hours: Number(autoSyncFrequencyHours),
           meta_last_sync_error: null,
@@ -816,7 +837,11 @@ export default function Clients() {
                       <Label>Pagina do Facebook</Label>
                       <SearchableSelect
                         value={selectedPageId}
-                        onChange={setSelectedPageId}
+                        onChange={(value) => {
+                          setSelectedPageId(value);
+                          const igFromPage = pages.find((page) => page.id === value)?.instagram_business_account;
+                          if (igFromPage?.id) setSelectedInstagramId(igFromPage.id);
+                        }}
                         placeholder="Selecione a pagina para usar a logo..."
                         searchPlaceholder="Buscar pagina..."
                         emptyText="Nenhuma pagina encontrada"
@@ -832,6 +857,44 @@ export default function Clients() {
                       </p>
                     </div>
                   )}
+                  {(() => {
+                    const instagramOptions = Array.from(
+                      pages
+                        .map((page) => ({ page, account: page.instagram_business_account }))
+                        .filter((entry): entry is { page: MetaPage; account: { id: string; username?: string; profile_picture_url?: string } } => Boolean(entry.account?.id))
+                        .reduce((map, { page, account }) => {
+                          if (!map.has(account.id)) {
+                            map.set(account.id, {
+                              value: account.id,
+                              label: account.username ? `@${account.username}` : `Instagram ${account.id}`,
+                              description: `Vinculado a ${page.name}`,
+                              keywords: [account.id, page.name, account.username ?? ""],
+                            });
+                          }
+                          return map;
+                        }, new Map<string, { value: string; label: string; description: string; keywords: string[] }>())
+                        .values()
+                    );
+
+                    if (instagramOptions.length === 0) return null;
+
+                    return (
+                      <div className="space-y-2">
+                        <Label>Perfil do Instagram</Label>
+                        <SearchableSelect
+                          value={selectedInstagramId}
+                          onChange={setSelectedInstagramId}
+                          placeholder="Selecione o Instagram..."
+                          searchPlaceholder="Buscar Instagram..."
+                          emptyText="Nenhum Instagram encontrado"
+                          options={instagramOptions}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Define o perfil usado para seguidores, alcance e visitas ao perfil.
+                        </p>
+                      </div>
+                    );
+                  })()}
                   <div className="rounded-xl border border-slate-200 p-3 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
