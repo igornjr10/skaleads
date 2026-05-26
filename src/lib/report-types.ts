@@ -26,11 +26,10 @@ export interface ReportData {
   socialPresence?: {
     enabled: boolean;
     profileName: string;
-    profileUrl?: string | null;
     logoUrl?: string | null;
     sourceLabels: string[];
     metrics: Array<{
-      key: "followers" | "reach" | "engagement";
+      key: "followers" | "profileViews" | "reach" | "engagement";
       label: string;
       value: number | null;
       source: string;

@@ -25,7 +25,6 @@ interface ReportGeneratorDialogProps {
 interface SocialPresenceSnapshot {
   enabled: boolean;
   profileName: string;
-  profileUrl?: string | null;
   logoUrl?: string | null;
   sourceLabels: string[];
   metrics: Array<{
@@ -61,12 +60,13 @@ const REPORT_METRIC_OPTIONS = [
 ] as const;
 
 type ReportMetricPreference = (typeof REPORT_METRIC_OPTIONS)[number]["key"];
-type SocialMetricPreference = "followers" | "reach" | "engagement";
+type SocialMetricPreference = "followers" | "profileViews" | "reach" | "engagement";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 const PURCHASE_ACTION_TYPES = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"] as const;
 const SOCIAL_METRIC_OPTIONS = [
   { key: "followers", label: "Seguidores", helper: "Soma Facebook + Instagram quando disponivel" },
+  { key: "profileViews", label: "Visitas no perfil", helper: "Visitas ao perfil do Instagram no periodo" },
   { key: "reach", label: "Alcance", helper: "Insights da Meta para o periodo do relatorio" },
   { key: "engagement", label: "Engajamento", helper: "Interacoes retornadas pela Meta quando disponiveis" },
 ] as const;
@@ -176,6 +176,7 @@ export function ReportGeneratorDialog({
   const [instagramProfileSearch, setInstagramProfileSearch] = useState("");
   const [socialMetricPreferences, setSocialMetricPreferences] = useState<SocialMetricPreference[]>([
     "followers",
+    "profileViews",
     "reach",
     "engagement",
   ]);
@@ -424,6 +425,7 @@ export function ReportGeneratorDialog({
         username: null,
         logoUrl: null,
         followers: null,
+        profileViews: null,
         reach: null,
         engagement: null,
       };
@@ -448,6 +450,7 @@ export function ReportGeneratorDialog({
 
     let reach: number | null = null;
     let engagement: number | null = null;
+    let profileViews: number | null = null;
 
     const endDateObj = new Date(`${endDate}T00:00:00`);
     const startDateObj = new Date(`${startDate}T00:00:00`);
@@ -476,12 +479,31 @@ export function ReportGeneratorDialog({
       } catch (error) {
         console.warn("Instagram insights indisponiveis:", error);
       }
+
+      try {
+        const profileInsights = await fetchMetaJson<{
+          data?: Array<{ name?: string; values?: Array<{ value?: number | string }> }>;
+        }>(`${metaInstagramAccountId}/insights`, {
+          metric: "profile_views",
+          period: "day",
+          since: cappedSince,
+          until: endDate,
+          access_token: metaAccessToken.trim(),
+        });
+
+        const profileRows = profileInsights.data || [];
+        const profileViewValues = profileRows.find((row) => row.name === "profile_views")?.values || [];
+        profileViews = profileViewValues.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+      } catch (error) {
+        console.warn("Visitas ao perfil do Instagram indisponiveis:", error);
+      }
     }
 
     return {
       username: profile.username || null,
       logoUrl: profile.profile_picture_url || null,
       followers: profile.followers_count ?? null,
+      profileViews,
       reach,
       engagement,
     };
@@ -519,12 +541,12 @@ export function ReportGeneratorDialog({
         (pageResult?.engagement ?? 0) + (instagramResult?.engagement ?? 0) > 0
           ? (pageResult?.engagement ?? 0) + (instagramResult?.engagement ?? 0)
           : null,
+      profileViews: instagramResult?.profileViews ?? null,
     };
 
     return {
       enabled: true,
       profileName: instagramResult?.username ? `@${instagramResult.username}` : client.meta_page_name || pageResult?.pageName || client.name || clientName,
-      profileUrl: instagramResult?.username ? `https://www.instagram.com/${instagramResult.username}/` : null,
       logoUrl: instagramResult?.logoUrl || client.logo_url || null,
       sourceLabels,
       metrics: socialMetricPreferences.map((key) => ({

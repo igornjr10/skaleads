@@ -433,11 +433,6 @@ const styles = StyleSheet.create({
     color: "#64748b",
     marginTop: 2,
   },
-  socialProfileLink: {
-    fontSize: 7,
-    color: "#2563eb",
-    marginTop: 2,
-  },
   socialMetricsRow: {
     flexDirection: "row",
   },
@@ -596,9 +591,6 @@ function SocialPresenceCard({ data }: { data: ReportData }) {
           <Text style={styles.socialProfileMeta}>
             {sanitizePdfText(profile.sourceLabels.length ? profile.sourceLabels.join(" + ") : "Presenca digital")}
           </Text>
-          {profile.profileUrl && (
-            <Text style={styles.socialProfileLink}>{sanitizePdfText(profile.profileUrl)}</Text>
-          )}
         </View>
       </View>
 

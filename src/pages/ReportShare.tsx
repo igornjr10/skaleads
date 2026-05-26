@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, Download, ExternalLink } from "lucide-react";
+import { AlertCircle, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
@@ -241,16 +241,8 @@ export default function ReportShare() {
                       {data.socialPresence.sourceLabels.length ? data.socialPresence.sourceLabels.join(" + ") : "Dados sociais"}
                     </p>
                   </div>
-                  {data.socialPresence.profileUrl && (
-                    <Button asChild variant="outline" size="sm" className="ml-auto shrink-0">
-                      <a href={data.socialPresence.profileUrl} target="_blank" rel="noreferrer">
-                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                        Visitar perfil
-                      </a>
-                    </Button>
-                  )}
                 </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                   {data.socialPresence.metrics.map((metric) => (
                     <KpiCard
                       key={metric.key}
