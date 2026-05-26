@@ -52,10 +52,10 @@ const REPORT_METRIC_OPTIONS = [
   { key: "messagesStarted", label: "Mensagens iniciadas", helper: "Conversas abertas no periodo" },
   { key: "roas", label: "ROAS", helper: "Retorno sobre investimento" },
   { key: "revenue", label: "Faturamento", helper: "Receita gerada no periodo" },
+  { key: "reach", label: "Alcance", helper: "Pessoas unicas alcancadas na conta do cliente" },
   { key: "ctr", label: "CTR", helper: "Taxa de cliques no link" },
   { key: "cpc", label: "CPC", helper: "Custo medio por clique" },
   { key: "cpm", label: "CPM", helper: "Custo por mil impressoes" },
-  { key: "reach", label: "Alcance", helper: "Pessoas unicas alcancadas" },
   { key: "frequency", label: "Frequencia", helper: "Media de exibicoes por pessoa" },
 ] as const;
 
@@ -72,6 +72,10 @@ const SOCIAL_METRIC_OPTIONS = [
 
 function normalizeAccountId(id: string) {
   return id.startsWith("act_") ? id.slice(4) : id.trim();
+}
+
+function normalizeInstagramUsername(username: string) {
+  return username.trim().toLowerCase().replace(/^@+/, "").replace(/[^a-z0-9._]/g, "");
 }
 
 async function fetchMetaJson<T>(path: string, params: Record<string, string>) {
@@ -163,10 +167,12 @@ export function ReportGeneratorDialog({
     "costPerPurchase",
     "messagesStarted",
     "roas",
+    "reach",
     "impressions",
     "ctr",
   ]);
   const [includeSocialPresence, setIncludeSocialPresence] = useState(true);
+  const [instagramProfileSearch, setInstagramProfileSearch] = useState("");
   const [socialMetricPreferences, setSocialMetricPreferences] = useState<SocialMetricPreference[]>([
     "followers",
     "reach",
@@ -411,20 +417,33 @@ export function ReportGeneratorDialog({
     };
   }
 
-  async function fetchInstagramPresence(metaInstagramAccountId?: string | null, metaAccessToken?: string | null) {
+  async function fetchInstagramPresence(metaInstagramAccountId?: string | null, metaAccessToken?: string | null, usernameSearch?: string) {
     if (!metaInstagramAccountId || !metaAccessToken) {
       return {
         username: null,
+        logoUrl: null,
         followers: null,
         reach: null,
         engagement: null,
       };
     }
 
-    const profile = await fetchMetaJson<{ username?: string; followers_count?: number }>(metaInstagramAccountId, {
-      fields: "username,followers_count",
-      access_token: metaAccessToken.trim(),
-    });
+    const searchedUsername = normalizeInstagramUsername(usernameSearch ?? "");
+    const profile = searchedUsername
+      ? (await fetchMetaJson<{
+          business_discovery?: {
+            username?: string;
+            followers_count?: number;
+            profile_picture_url?: string;
+          };
+        }>(metaInstagramAccountId, {
+          fields: `business_discovery.username(${searchedUsername}){username,followers_count,profile_picture_url}`,
+          access_token: metaAccessToken.trim(),
+        })).business_discovery ?? {}
+      : await fetchMetaJson<{ username?: string; followers_count?: number; profile_picture_url?: string }>(metaInstagramAccountId, {
+          fields: "username,followers_count,profile_picture_url",
+          access_token: metaAccessToken.trim(),
+        });
 
     let reach: number | null = null;
     let engagement: number | null = null;
@@ -437,27 +456,30 @@ export function ReportGeneratorDialog({
       ? format(earliestAllowed, "yyyy-MM-dd")
       : startDate;
 
-    try {
-      const insights = await fetchMetaJson<{
-        data?: Array<{ name?: string; total_value?: { value?: number } }>;
-      }>(`${metaInstagramAccountId}/insights`, {
-        metric: "reach,accounts_engaged",
-        metric_type: "total_value",
-        period: "day",
-        since: cappedSince,
-        until: endDate,
-        access_token: metaAccessToken.trim(),
-      });
+    if (!searchedUsername) {
+      try {
+        const insights = await fetchMetaJson<{
+          data?: Array<{ name?: string; total_value?: { value?: number } }>;
+        }>(`${metaInstagramAccountId}/insights`, {
+          metric: "reach,accounts_engaged",
+          metric_type: "total_value",
+          period: "day",
+          since: cappedSince,
+          until: endDate,
+          access_token: metaAccessToken.trim(),
+        });
 
-      const rows = insights.data || [];
-      reach = rows.find((row) => row.name === "reach")?.total_value?.value ?? null;
-      engagement = rows.find((row) => row.name === "accounts_engaged")?.total_value?.value ?? null;
-    } catch (error) {
-      console.warn("Instagram insights indisponiveis:", error);
+        const rows = insights.data || [];
+        reach = rows.find((row) => row.name === "reach")?.total_value?.value ?? null;
+        engagement = rows.find((row) => row.name === "accounts_engaged")?.total_value?.value ?? null;
+      } catch (error) {
+        console.warn("Instagram insights indisponiveis:", error);
+      }
     }
 
     return {
       username: profile.username || null,
+      logoUrl: profile.profile_picture_url || null,
       followers: profile.followers_count ?? null,
       reach,
       engagement,
@@ -470,6 +492,7 @@ export function ReportGeneratorDialog({
     meta_page_id?: string | null;
     meta_page_name?: string | null;
     meta_instagram_account_id?: string | null;
+    meta_instagram_username?: string | null;
     meta_access_token?: string | null;
   }): Promise<SocialPresenceSnapshot | undefined> {
     if (!includeSocialPresence) return undefined;
@@ -477,7 +500,8 @@ export function ReportGeneratorDialog({
     const token = client.meta_access_token?.trim();
     const pageResult = token ? await fetchFacebookPresence(client.meta_page_id, token).catch(() => null) : null;
     const instagramAccountId = pageResult?.instagramAccountId || client.meta_instagram_account_id || null;
-    const instagramResult = token ? await fetchInstagramPresence(instagramAccountId, token).catch(() => null) : null;
+    const instagramUsername = normalizeInstagramUsername(instagramProfileSearch);
+    const instagramResult = token ? await fetchInstagramPresence(instagramAccountId, token, instagramUsername).catch(() => null) : null;
     const sourceLabels = [pageResult ? "Facebook" : null, instagramResult ? "Instagram" : null].filter(Boolean) as string[];
     const sourceText = sourceLabels.length ? sourceLabels.join(" + ") : "Dados nao disponiveis";
 
@@ -498,8 +522,8 @@ export function ReportGeneratorDialog({
 
     return {
       enabled: true,
-      profileName: client.meta_page_name || pageResult?.pageName || client.name || clientName,
-      logoUrl: client.logo_url || null,
+      profileName: instagramResult?.username ? `@${instagramResult.username}` : client.meta_page_name || pageResult?.pageName || client.name || clientName,
+      logoUrl: instagramResult?.logoUrl || client.logo_url || null,
       sourceLabels,
       metrics: socialMetricPreferences.map((key) => ({
         key,
@@ -513,7 +537,7 @@ export function ReportGeneratorDialog({
   async function buildReportData(): Promise<ReportData> {
     const { data: clientRaw, error: clientError } = await supabase
       .from("clients")
-      .select("name, logo_url, meta_ad_account_id, meta_access_token, meta_page_id, meta_page_name, meta_instagram_account_id")
+      .select("name, logo_url, meta_ad_account_id, meta_access_token, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username")
       .eq("id", clientId)
       .single();
 
@@ -818,6 +842,19 @@ export function ReportGeneratorDialog({
 
               {includeSocialPresence && (
                 <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Perfil do Instagram</Label>
+                    <Input
+                      value={instagramProfileSearch}
+                      onChange={(event) => setInstagramProfileSearch(event.target.value)}
+                      placeholder="@perfil"
+                      className="text-sm"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Se vazio, usa o Instagram conectado ao cliente.
+                    </p>
+                  </div>
+
                   {SOCIAL_METRIC_OPTIONS.map((option) => (
                     <label
                       key={option.key}
