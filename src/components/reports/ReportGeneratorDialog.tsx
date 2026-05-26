@@ -126,7 +126,7 @@ function extractInstagramProfileVisits(actions?: Array<{ action_type?: string; v
   return actions.reduce((total, action) => {
     const type = (action.action_type ?? "").toLowerCase();
     const isProfileVisit =
-      type.includes("instagram") &&
+      (type.includes("instagram") || type.includes("ig_") || type.includes(".ig")) &&
       type.includes("profile") &&
       (type.includes("visit") || type.includes("view"));
 
