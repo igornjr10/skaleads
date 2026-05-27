@@ -503,44 +503,52 @@ export function ReportGeneratorDialog({
         console.warn("Instagram insights indisponiveis:", error);
       }
 
-      try {
-        const profileInsights = await fetchMetaJson<{
-          data?: Array<{
-            name?: string;
-            total_value?: { value?: number };
-            values?: Array<{ value?: number | string }>;
-          }>;
-        }>(`${metaInstagramAccountId}/insights`, {
-          metric: "profile_views",
-          metric_type: "total_value",
-          period: "day",
-          since: cappedSince,
-          until: endDate,
-          access_token: metaAccessToken.trim(),
-        });
+      const attempts: Array<{ label: string; params: Record<string, string> }> = [
+        {
+          label: "profile_views total_value",
+          params: { metric: "profile_views", metric_type: "total_value", period: "day", since: cappedSince, until: endDate },
+        },
+        {
+          label: "views total_value",
+          params: { metric: "views", metric_type: "total_value", period: "day", since: cappedSince, until: endDate },
+        },
+        {
+          label: "profile_views legacy",
+          params: { metric: "profile_views", period: "day", since: cappedSince, until: endDate },
+        },
+      ];
 
-        const profileRow = (profileInsights.data || []).find((row) => row.name === "profile_views");
-        if (profileRow?.total_value?.value !== undefined) {
-          profileViews = profileRow.total_value.value;
-        } else if (profileRow?.values?.length) {
-          profileViews = profileRow.values.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
-        }
-      } catch (error) {
-        console.warn("Visitas ao perfil do Instagram indisponiveis:", error);
+      let lastError: unknown = null;
+      for (const attempt of attempts) {
         try {
-          const fallback = await fetchMetaJson<{
-            data?: Array<{ name?: string; values?: Array<{ value?: number | string }> }>;
+          const insights = await fetchMetaJson<{
+            data?: Array<{
+              name?: string;
+              total_value?: { value?: number };
+              values?: Array<{ value?: number | string }>;
+            }>;
           }>(`${metaInstagramAccountId}/insights`, {
-            metric: "profile_views",
-            period: "day",
-            since: cappedSince,
-            until: endDate,
+            ...attempt.params,
             access_token: metaAccessToken.trim(),
           });
-          const row = (fallback.data || []).find((r) => r.name === "profile_views");
-          profileViews = (row?.values || []).reduce((sum, item) => sum + (Number(item.value) || 0), 0);
-        } catch (fallbackError) {
-          console.warn("Fallback de visitas ao perfil tambem falhou:", fallbackError);
+
+          const row = (insights.data || []).find((r) => r.name === attempt.params.metric);
+          if (row?.total_value?.value !== undefined) {
+            profileViews = row.total_value.value;
+          } else if (row?.values?.length) {
+            profileViews = row.values.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+          }
+          if (profileViews !== null) break;
+        } catch (error) {
+          lastError = error;
+          console.warn(`Tentativa ${attempt.label} falhou:`, error);
+        }
+      }
+
+      if (profileViews === null && lastError instanceof Error) {
+        const msg = lastError.message.toLowerCase();
+        if (msg.includes("permission") || msg.includes("scope") || msg.includes("instagram_manage_insights")) {
+          toast.warning("Reconecte o Facebook para conceder acesso aos insights do Instagram (instagram_manage_insights).");
         }
       }
     }
