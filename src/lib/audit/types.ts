@@ -1,6 +1,6 @@
 export type CheckSeverity = 'critical' | 'warning' | 'info';
 export type CheckStatus   = 'pass' | 'warn' | 'fail' | 'skip';
-export type AuditCategory = 'pixel' | 'structure' | 'creatives' | 'budget' | 'account';
+export type AuditCategory = 'pixel' | 'structure' | 'creatives' | 'budget' | 'account' | 'local';
 
 export interface AuditContext {
   clientId:    string;

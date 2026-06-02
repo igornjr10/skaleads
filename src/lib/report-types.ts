@@ -16,6 +16,9 @@ export interface ReportData {
     costPerPurchase?: number;
     messagesStarted?: number;
     instagramProfileVisits?: number;
+    phoneCalls?: number;
+    directions?: number;
+    leads?: number;
     impressions: number;
     clicks: number;
     ctr: number;
@@ -65,6 +68,9 @@ export interface ReportData {
     | "clicks"
     | "messagesStarted"
     | "instagramProfileVisits"
+    | "phoneCalls"
+    | "directions"
+    | "leads"
     | "purchaseValue"
     | "purchases"
     | "costPerPurchase"

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { endOfMonth, format, startOfMonth, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
+import { extractPhoneCalls, extractDirections, extractLeads, GOAL_KPIS, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
 
 interface ReportGeneratorDialogProps {
   isOpen: boolean;
@@ -51,6 +52,9 @@ const REPORT_METRIC_OPTIONS = [
   { key: "clicks", label: "Total de cliques no link", helper: "Cliques no link registrados no periodo" },
   { key: "messagesStarted", label: "Mensagens iniciadas", helper: "Conversas abertas no periodo" },
   { key: "instagramProfileVisits", label: "Visitas no perfil", helper: "Visitas ao perfil do Instagram no periodo" },
+  { key: "phoneCalls", label: "Ligacoes", helper: "Cliques para ligar registrados no periodo" },
+  { key: "directions", label: "Rotas / Como chegar", helper: "Cliques em rotas ou localizacao no periodo" },
+  { key: "leads", label: "Leads", helper: "Cadastros e leads gerados no periodo" },
   { key: "roas", label: "ROAS", helper: "Retorno sobre investimento" },
   { key: "revenue", label: "Faturamento", helper: "Receita gerada no periodo" },
   { key: "reach", label: "Alcance", helper: "Pessoas unicas alcancadas na conta do cliente" },
@@ -62,6 +66,14 @@ const REPORT_METRIC_OPTIONS = [
 
 type ReportMetricPreference = (typeof REPORT_METRIC_OPTIONS)[number]["key"];
 type SocialMetricPreference = "followers" | "profileViews" | "reach" | "engagement";
+
+const LOCAL_TO_REPORT_METRIC: Record<LocalMetricKey, ReportMetricPreference> = {
+  messages: "messagesStarted",
+  calls: "phoneCalls",
+  directions: "directions",
+  leads: "leads",
+  profileVisits: "instagramProfileVisits",
+};
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 const PURCHASE_ACTION_TYPES = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"] as const;
@@ -197,6 +209,27 @@ export function ReportGeneratorDialog({
     "reach",
     "engagement",
   ]);
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    supabase
+      .from("clients")
+      .select("primary_goal")
+      .eq("id", clientId)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!active) return;
+        const goal = (data?.primary_goal as LocalGoal | null) ?? null;
+        if (!goal || !GOAL_KPIS[goal]) return;
+        const localPrefs = GOAL_KPIS[goal].map((key) => LOCAL_TO_REPORT_METRIC[key]);
+        const general: ReportMetricPreference[] = ["spend", "reach", "impressions", "ctr"];
+        setMetricPreferences([...localPrefs, ...general.filter((p) => !localPrefs.includes(p))]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isOpen, clientId]);
+
   function applyPreset(value: string) {
     setPreset(value);
     const days = parseInt(value);
@@ -272,6 +305,18 @@ export function ReportGeneratorDialog({
         total + extractInstagramProfileVisits(row.actions),
       0
     );
+    const phoneCalls = rows.reduce(
+      (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) => total + extractPhoneCalls(row.actions),
+      0
+    );
+    const directions = rows.reduce(
+      (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) => total + extractDirections(row.actions),
+      0
+    );
+    const leads = rows.reduce(
+      (total: number, row: { actions?: Array<{ action_type?: string; value?: string }> }) => total + extractLeads(row.actions),
+      0
+    );
     const reach = rows.reduce((total: number, row: { reach?: string }) => total + (parseInt(row.reach ?? "0", 10) || 0), 0);
     const frequency = reach > 0 ? impressions / reach : 0;
 
@@ -284,6 +329,9 @@ export function ReportGeneratorDialog({
       clicks,
       messagesStarted,
       instagramProfileVisits,
+      phoneCalls,
+      directions,
+      leads,
       purchases,
       purchaseValue,
       costPerPurchase: purchases > 0 ? spend / purchases : 0,
@@ -484,71 +532,59 @@ export function ReportGeneratorDialog({
       : startDate;
 
     if (!searchedUsername) {
-      try {
-        const insights = await fetchMetaJson<{
-          data?: Array<{ name?: string; total_value?: { value?: number } }>;
-        }>(`${metaInstagramAccountId}/insights`, {
-          metric: "reach,accounts_engaged",
-          metric_type: "total_value",
-          period: "day",
-          since: cappedSince,
-          until: endDate,
-          access_token: metaAccessToken.trim(),
-        });
+      const failures: string[] = [];
 
-        const rows = insights.data || [];
-        reach = rows.find((row) => row.name === "reach")?.total_value?.value ?? null;
-        engagement = rows.find((row) => row.name === "accounts_engaged")?.total_value?.value ?? null;
-      } catch (error) {
-        console.warn("Instagram insights indisponiveis:", error);
-      }
-
-      const attempts: Array<{ label: string; params: Record<string, string> }> = [
-        {
-          label: "profile_views total_value",
-          params: { metric: "profile_views", metric_type: "total_value", period: "day", since: cappedSince, until: endDate },
-        },
-        {
-          label: "views total_value",
-          params: { metric: "views", metric_type: "total_value", period: "day", since: cappedSince, until: endDate },
-        },
-        {
-          label: "profile_views legacy",
-          params: { metric: "profile_views", period: "day", since: cappedSince, until: endDate },
-        },
-      ];
-
-      let lastError: unknown = null;
-      for (const attempt of attempts) {
-        try {
-          const insights = await fetchMetaJson<{
-            data?: Array<{
-              name?: string;
-              total_value?: { value?: number };
-              values?: Array<{ value?: number | string }>;
-            }>;
-          }>(`${metaInstagramAccountId}/insights`, {
-            ...attempt.params,
+      async function tryMetric(metricsList: Array<{ metric: string; useTotalValue?: boolean }>): Promise<number | null> {
+        for (const { metric, useTotalValue = true } of metricsList) {
+          const params: Record<string, string> = {
+            metric,
+            period: "day",
+            since: cappedSince,
+            until: endDate,
             access_token: metaAccessToken.trim(),
-          });
-
-          const row = (insights.data || []).find((r) => r.name === attempt.params.metric);
-          if (row?.total_value?.value !== undefined) {
-            profileViews = row.total_value.value;
-          } else if (row?.values?.length) {
-            profileViews = row.values.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+          };
+          if (useTotalValue) params.metric_type = "total_value";
+          try {
+            const insights = await fetchMetaJson<{
+              data?: Array<{
+                name?: string;
+                total_value?: { value?: number };
+                values?: Array<{ value?: number | string }>;
+              }>;
+            }>(`${metaInstagramAccountId}/insights`, params);
+            const row = (insights.data || []).find((r) => r.name === metric);
+            if (row?.total_value?.value !== undefined) return row.total_value.value;
+            if (row?.values?.length) {
+              return row.values.reduce((sum, item) => sum + (Number(item.value) || 0), 0);
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            failures.push(`${metric}: ${message}`);
+            console.warn(`IG insights "${metric}" falhou:`, error);
           }
-          if (profileViews !== null) break;
-        } catch (error) {
-          lastError = error;
-          console.warn(`Tentativa ${attempt.label} falhou:`, error);
         }
+        return null;
       }
 
-      if (profileViews === null && lastError instanceof Error) {
-        const msg = lastError.message.toLowerCase();
-        if (msg.includes("permission") || msg.includes("scope") || msg.includes("instagram_manage_insights")) {
-          toast.warning("Reconecte o Facebook para conceder acesso aos insights do Instagram (instagram_manage_insights).");
+      reach = await tryMetric([{ metric: "reach" }, { metric: "impressions" }]);
+      engagement = await tryMetric([
+        { metric: "accounts_engaged" },
+        { metric: "total_interactions" },
+      ]);
+      profileViews = await tryMetric([
+        { metric: "profile_views" },
+        { metric: "views" },
+        { metric: "profile_views", useTotalValue: false },
+      ]);
+
+      if (reach === null && engagement === null && profileViews === null && failures.length > 0) {
+        const sample = failures[0]?.toLowerCase() ?? "";
+        if (sample.includes("permission") || sample.includes("scope") || sample.includes("insights")) {
+          toast.warning(
+            "Reconecte o Facebook (Conectar Meta) para autorizar instagram_manage_insights — sem isso, alcance, engajamento e visitas do Instagram ficam vazios."
+          );
+        } else {
+          toast.warning(`Insights do Instagram indisponiveis: ${failures[0]}`);
         }
       }
     }
@@ -647,7 +683,7 @@ export function ReportGeneratorDialog({
     const campaigns = campaignsRaw || [];
     const ads = (adsRaw || []).filter((ad: any) => ad.ad_sets?.campaigns?.client_id === clientId);
 
-    let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
+    let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, phoneCalls: 0, directions: 0, leads: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     try {
       conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
     } catch {
@@ -684,6 +720,9 @@ export function ReportGeneratorDialog({
     summary.cpm = summary.impressions > 0 ? (summary.spend / summary.impressions) * 1000 : 0;
     summary.reach = conversionMetrics.reach;
     summary.frequency = conversionMetrics.frequency;
+    summary.phoneCalls = conversionMetrics.phoneCalls;
+    summary.directions = conversionMetrics.directions;
+    summary.leads = conversionMetrics.leads;
 
     let topCampaigns = campaigns
       .map((campaign: any) => ({

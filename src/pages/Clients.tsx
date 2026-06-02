@@ -23,6 +23,9 @@ import {
   Archive,
   ArchiveRestore,
   Trash2,
+  Pencil,
+  MapPin,
+  Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -60,6 +63,7 @@ import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { syncClientData, validateMetaConnection } from "@/lib/meta-api";
 import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaPage } from "@/lib/facebook-sdk";
+import { BUSINESS_SEGMENTS, LOCAL_GOALS, segmentLabel } from "@/lib/local-business";
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -70,6 +74,12 @@ interface Client {
   name: string;
   status: string;
   logo_url: string | null;
+  business_segment: string | null;
+  city: string | null;
+  state: string | null;
+  address: string | null;
+  service_radius_km: number | null;
+  primary_goal: string | null;
   meta_ad_account_id: string | null;
   meta_access_token: string | null;
   meta_page_id: string | null;
@@ -161,8 +171,15 @@ export default function Clients() {
   const [reportStats, setReportStats] = useState<Record<string, { count: number; latest: string | null }>>({});
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editClient, setEditClient] = useState<Client | null>(null);
   const [newName, setNewName] = useState("");
   const [newLogoUrl, setNewLogoUrl] = useState("");
+  const [newSegment, setNewSegment] = useState("");
+  const [newCity, setNewCity] = useState("");
+  const [newState, setNewState] = useState("");
+  const [newAddress, setNewAddress] = useState("");
+  const [newRadius, setNewRadius] = useState("");
+  const [newGoal, setNewGoal] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [connectClient, setConnectClient] = useState<Client | null>(null);
@@ -377,7 +394,18 @@ export default function Clients() {
     setOauthLoading(true);
     try {
       await loadFacebookSDK(META_APP_ID);
-      const shortToken = await facebookLogin();
+      const loginResult = await facebookLogin();
+      const shortToken = loginResult.accessToken;
+
+      const missing = ["instagram_basic", "instagram_manage_insights"].filter(
+        (scope) => !loginResult.grantedScopes.includes(scope)
+      );
+      if (missing.length > 0) {
+        toast.warning(
+          `Voce nao concedeu: ${missing.join(", ")}. Insights de Instagram (alcance, engajamento, visitas) virao vazios. Reconecte e marque tudo.`,
+          { duration: 10000 }
+        );
+      }
 
       setSyncProgress("Trocando token...");
 
@@ -507,19 +535,57 @@ export default function Clients() {
     }
   }
 
+  function resetClientForm() {
+    setNewName("");
+    setNewLogoUrl("");
+    setNewSegment("");
+    setNewCity("");
+    setNewState("");
+    setNewAddress("");
+    setNewRadius("");
+    setNewGoal("");
+  }
+
+  function openCreateDialog() {
+    setEditClient(null);
+    resetClientForm();
+    setCreateOpen(true);
+  }
+
+  function openEditDialog(client: Client) {
+    setEditClient(client);
+    setNewName(client.name ?? "");
+    setNewLogoUrl(client.logo_url ?? "");
+    setNewSegment(client.business_segment ?? "");
+    setNewCity(client.city ?? "");
+    setNewState(client.state ?? "");
+    setNewAddress(client.address ?? "");
+    setNewRadius(client.service_radius_km != null ? String(client.service_radius_km) : "");
+    setNewGoal(client.primary_goal ?? "");
+    setCreateOpen(true);
+  }
+
   async function createClient(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
-    const { error } = await supabase.from("clients").insert({
+    const payload = {
       name: newName.trim(),
-      status: "active",
       logo_url: newLogoUrl.trim() || null,
-    });
+      business_segment: newSegment || null,
+      city: newCity.trim() || null,
+      state: newState.trim().toUpperCase() || null,
+      address: newAddress.trim() || null,
+      service_radius_km: newRadius.trim() ? Number(newRadius) : null,
+      primary_goal: newGoal || null,
+    };
+    const { error } = editClient
+      ? await supabase.from("clients").update(payload).eq("id", editClient.id)
+      : await supabase.from("clients").insert({ ...payload, status: "active" });
     setSaving(false);
     if (error) return toast.error(error.message);
-    toast.success("Cliente criado");
-    setNewName("");
-    setNewLogoUrl("");
+    toast.success(editClient ? "Cliente atualizado" : "Cliente criado");
+    resetClientForm();
+    setEditClient(null);
     setCreateOpen(false);
     load();
   }
@@ -718,6 +784,10 @@ export default function Clients() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => openEditDialog(client)}>
+                <Pencil className="mr-2 h-4 w-4" />Editar
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => archiveClient(client)}>
                 {client.status === "archived" ? (
                   <>
@@ -760,23 +830,63 @@ export default function Clients() {
               <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
               Sincronizar vencidos
             </Button>
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button><Plus className="mr-2 h-4 w-4" />Novo cliente</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle>Novo cliente</DialogTitle></DialogHeader>
+            <Button onClick={openCreateDialog}><Plus className="mr-2 h-4 w-4" />Novo cliente</Button>
+            <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setEditClient(null); }}>
+              <DialogContent className="sm:max-w-lg">
+                <DialogHeader><DialogTitle>{editClient ? "Editar cliente" : "Novo cliente"}</DialogTitle></DialogHeader>
                 <form onSubmit={createClient} className="space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="name">Nome do cliente</Label>
-                    <Input id="name" value={newName} onChange={(event) => setNewName(event.target.value)} required placeholder="Ex: Loja Aurora" />
+                    <Input id="name" value={newName} onChange={(event) => setNewName(event.target.value)} required placeholder="Ex: Pizzaria do Bairro" />
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Segmento do negócio</Label>
+                      <Select value={newSegment} onValueChange={setNewSegment}>
+                        <SelectTrigger><SelectValue placeholder="Selecione o nicho..." /></SelectTrigger>
+                        <SelectContent>
+                          {BUSINESS_SEGMENTS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Objetivo principal</Label>
+                      <Select value={newGoal} onValueChange={setNewGoal}>
+                        <SelectTrigger><SelectValue placeholder="O que mais importa?" /></SelectTrigger>
+                        <SelectContent>
+                          {LOCAL_GOALS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-[1fr_120px_140px]">
+                    <div className="space-y-2">
+                      <Label htmlFor="city">Cidade</Label>
+                      <Input id="city" value={newCity} onChange={(event) => setNewCity(event.target.value)} placeholder="Ex: Campinas" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="state">UF</Label>
+                      <Input id="state" value={newState} onChange={(event) => setNewState(event.target.value)} maxLength={2} placeholder="SP" />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="radius">Raio (km)</Label>
+                      <Input id="radius" type="number" min={0} value={newRadius} onChange={(event) => setNewRadius(event.target.value)} placeholder="10" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="address">Endereço</Label>
+                    <Input id="address" value={newAddress} onChange={(event) => setNewAddress(event.target.value)} placeholder="Rua, número, bairro" />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="logoUrl">Foto ou logo (URL)</Label>
                     <Input id="logoUrl" value={newLogoUrl} onChange={(event) => setNewLogoUrl(event.target.value)} placeholder="https://..." />
                   </div>
                   <DialogFooter>
-                    <Button type="submit" disabled={saving}>{saving ? "Salvando..." : "Criar"}</Button>
+                    <Button type="submit" disabled={saving}>{saving ? "Salvando..." : editClient ? "Salvar" : "Criar"}</Button>
                   </DialogFooter>
                 </form>
               </DialogContent>
@@ -1169,6 +1279,16 @@ export default function Clients() {
                                   {syncDue ? "Sync vencida" : `Auto ${client.meta_auto_sync_frequency_hours}h`}
                                 </Badge>
                               )}
+                              {client.business_segment && (
+                                <Badge variant="outline" className="gap-1 border-violet-200 bg-violet-50 text-violet-700">
+                                  <Store className="h-3 w-3" />{segmentLabel(client.business_segment)}
+                                </Badge>
+                              )}
+                              {(client.city || client.state) && (
+                                <Badge variant="outline" className="gap-1 border-slate-200 bg-slate-50 text-slate-600">
+                                  <MapPin className="h-3 w-3" />{[client.city, client.state].filter(Boolean).join("/")}
+                                </Badge>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1257,7 +1377,11 @@ export default function Clients() {
                           </Avatar>
                           <div>
                             <p className="font-medium">{client.name}</p>
-                            <p className="text-xs text-muted-foreground">{client.meta_ad_account_id ? `CA ${client.meta_ad_account_id}` : "Sem conta conectada"}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {[segmentLabel(client.business_segment), [client.city, client.state].filter(Boolean).join("/") || null]
+                                .filter(Boolean)
+                                .join(" · ") || (client.meta_ad_account_id ? `CA ${client.meta_ad_account_id}` : "Sem conta conectada")}
+                            </p>
                           </div>
                         </div>
                       </TableCell>

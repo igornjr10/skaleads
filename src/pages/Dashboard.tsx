@@ -7,16 +7,26 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp } from "lucide-react";
+import { ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp, MessageCircle, Phone, MapPin, UserPlus } from "lucide-react";
 import { subDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { GOAL_KPIS, LOCAL_METRIC_LABELS, goalLabel, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
 
 type Period = "7" | "14" | "30";
 
 interface Client {
   id: string;
   name: string;
+  primary_goal: string | null;
 }
+
+const LOCAL_METRIC_ICONS: Record<LocalMetricKey, typeof MessageCircle> = {
+  messages: MessageCircle,
+  calls: Phone,
+  directions: MapPin,
+  leads: UserPlus,
+  profileVisits: Eye,
+};
 
 interface Campaign {
   id: string;
@@ -37,6 +47,11 @@ interface DailyMetric {
   spend: number;
   impressions: number;
   clicks: number;
+  messages: number;
+  calls: number;
+  directions: number;
+  leads: number;
+  profile_visits: number;
 }
 
 interface SeriesPoint {
@@ -51,8 +66,13 @@ function aggregateMetrics(rows: DailyMetric[]) {
       spend: acc.spend + r.spend,
       impressions: acc.impressions + r.impressions,
       clicks: acc.clicks + r.clicks,
+      messages: acc.messages + (r.messages || 0),
+      calls: acc.calls + (r.calls || 0),
+      directions: acc.directions + (r.directions || 0),
+      leads: acc.leads + (r.leads || 0),
+      profileVisits: acc.profileVisits + (r.profile_visits || 0),
     }),
-    { spend: 0, impressions: 0, clicks: 0 }
+    { spend: 0, impressions: 0, clicks: 0, messages: 0, calls: 0, directions: 0, leads: 0, profileVisits: 0 }
   );
 }
 
@@ -76,7 +96,7 @@ export default function Dashboard() {
   useEffect(() => {
     supabase
       .from("clients")
-      .select("id, name")
+      .select("id, name, primary_goal")
       .eq("status", "active")
       .order("name")
       .then(({ data }) => setClients(data ?? []));
@@ -97,7 +117,7 @@ export default function Dashboard() {
       const startDate = format(subDays(new Date(), periodDays * 2), "yyyy-MM-dd");
       let metricsQuery = supabase
         .from("campaign_daily_metrics")
-        .select("date, spend, impressions, clicks")
+        .select("date, spend, impressions, clicks, messages, calls, directions, leads, profile_visits")
         .gte("date", startDate)
         .order("date");
       if (clientId) metricsQuery = metricsQuery.eq("client_id", clientId);
@@ -111,6 +131,11 @@ export default function Dashboard() {
           existing.spend += r.spend;
           existing.impressions += r.impressions;
           existing.clicks += r.clicks;
+          existing.messages += r.messages || 0;
+          existing.calls += r.calls || 0;
+          existing.directions += r.directions || 0;
+          existing.leads += r.leads || 0;
+          existing.profile_visits += r.profile_visits || 0;
         } else {
           byDate.set(r.date, { ...r });
         }
@@ -170,6 +195,39 @@ export default function Dashboard() {
     { label: "CPC", value: formatCurrency(kpiMetrics.cpc), delta: pctDelta(kpiMetrics.cpc, prevCpc), icon: Target, lowerIsBetter: true },
     { label: "CTR", value: formatPercent(kpiMetrics.ctr), delta: pctDelta(kpiMetrics.ctr, prevCtr), icon: Percent, lowerIsBetter: false },
   ];
+
+  const localTotals: Record<LocalMetricKey, number> = {
+    messages: currentAgg.messages,
+    calls: currentAgg.calls,
+    directions: currentAgg.directions,
+    leads: currentAgg.leads,
+    profileVisits: currentAgg.profileVisits,
+  };
+  const prevLocalTotals: Record<LocalMetricKey, number> = {
+    messages: prevAgg.messages,
+    calls: prevAgg.calls,
+    directions: prevAgg.directions,
+    leads: prevAgg.leads,
+    profileVisits: prevAgg.profileVisits,
+  };
+
+  const selectedGoal = clientId ? (clients.find((c) => c.id === clientId)?.primary_goal as LocalGoal | null) : null;
+  const orderedLocalKeys: LocalMetricKey[] = selectedGoal && GOAL_KPIS[selectedGoal]
+    ? [...GOAL_KPIS[selectedGoal], ...(["messages", "calls", "directions", "leads", "profileVisits"] as LocalMetricKey[]).filter((k) => !GOAL_KPIS[selectedGoal].includes(k))]
+    : ["messages", "calls", "directions", "leads", "profileVisits"];
+
+  const localKpis = orderedLocalKeys.map((key) => ({
+    key,
+    label: LOCAL_METRIC_LABELS[key],
+    value: formatNumber(localTotals[key]),
+    delta: pctDelta(localTotals[key], prevLocalTotals[key]),
+    icon: LOCAL_METRIC_ICONS[key],
+  }));
+
+  const primaryKey = orderedLocalKeys[0];
+  const primaryResults = localTotals[primaryKey];
+  const costPerPrimary = primaryResults > 0 ? currentAgg.spend / primaryResults : 0;
+  const hasLocalResults = Object.values(localTotals).some((v) => v > 0);
 
   // Chart series
   const chartSeries: SeriesPoint[] = useMemo(() => {
@@ -254,6 +312,39 @@ export default function Dashboard() {
               </Card>
             ))}
           </div>
+
+          {/* Resultados locais */}
+          {hasLocalResults && (
+            <Card className="shadow-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Resultados de negócio local</CardTitle>
+                <CardDescription>
+                  {selectedGoal
+                    ? `Objetivo principal: ${goalLabel(selectedGoal)} · custo por ${LOCAL_METRIC_LABELS[primaryKey].toLowerCase()}: ${primaryResults > 0 ? formatCurrency(costPerPrimary) : "-"}`
+                    : "Conversas, ligações, rotas, leads e visitas no perfil no período"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+                  {localKpis.map((k) => (
+                    <div key={k.key} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</span>
+                        <k.icon className="h-4 w-4 text-primary" />
+                      </div>
+                      <div className="mt-2 text-xl font-semibold tabular-nums">{k.value}</div>
+                      {k.delta !== 0 && (
+                        <div className={`mt-1 flex items-center gap-1 text-xs ${k.delta >= 0 ? "text-success" : "text-destructive"}`}>
+                          {k.delta >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                          {Math.abs(k.delta).toFixed(1)}% vs período anterior
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Chart */}
           <Card className="shadow-card">

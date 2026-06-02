@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { extractLocalActionTotals, type MetaAction } from "@/lib/local-business";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 
@@ -347,8 +348,8 @@ export async function syncClientData(
     }
 
     onProgress?.("Buscando metricas diarias...");
-    const dailyData = await metaFetchAll<MetaInsight & { date_start: string }>(`act_${accountId}/insights`, {
-      fields: "spend,impressions,clicks,date_start",
+    const dailyData = await metaFetchAll<MetaInsight & { date_start: string; actions?: MetaAction[] }>(`act_${accountId}/insights`, {
+      fields: "spend,impressions,clicks,actions,date_start",
       time_increment: "1",
       date_preset: "last_30d",
       level: "account",
@@ -356,6 +357,7 @@ export async function syncClientData(
     });
 
     for (const day of dailyData) {
+      const local = extractLocalActionTotals(day.actions);
       await supabase.from("campaign_daily_metrics").upsert(
         {
           client_id: clientId,
@@ -363,6 +365,11 @@ export async function syncClientData(
           spend: n(day.spend),
           impressions: ni(day.impressions),
           clicks: ni(day.clicks),
+          messages: local.messages,
+          calls: local.calls,
+          directions: local.directions,
+          leads: local.leads,
+          profile_visits: local.profileVisits,
         },
         { onConflict: "client_id,date" }
       );

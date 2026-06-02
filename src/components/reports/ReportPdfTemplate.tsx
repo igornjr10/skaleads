@@ -88,6 +88,21 @@ function getPreferredMetrics(data: ReportData) {
       value: fmtNum(data.summary.instagramProfileVisits || socialProfileViews || 0),
       note: "Visitas ao perfil do Instagram",
     },
+    phoneCalls: {
+      label: "Ligacoes",
+      value: fmtNum(data.summary.phoneCalls || 0),
+      note: "Cliques para ligar no periodo",
+    },
+    directions: {
+      label: "Rotas / Como chegar",
+      value: fmtNum(data.summary.directions || 0),
+      note: "Cliques em rotas ou localizacao",
+    },
+    leads: {
+      label: "Leads",
+      value: fmtNum(data.summary.leads || 0),
+      note: "Cadastros e leads gerados",
+    },
     purchaseValue: {
       label: "Valor de compras",
       value: fmtCurrency(data.summary.purchaseValue || 0),

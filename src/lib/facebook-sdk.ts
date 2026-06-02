@@ -14,7 +14,13 @@ interface FBLoginResponse {
     accessToken: string;
     expiresIn: number;
     userID: string;
+    grantedScopes?: string;
   };
+}
+
+export interface FacebookLoginResult {
+  accessToken: string;
+  grantedScopes: string[];
 }
 
 export interface MetaAdAccount {
@@ -63,17 +69,22 @@ export function loadFacebookSDK(appId: string): Promise<void> {
   });
 }
 
-export function facebookLogin(): Promise<string> {
+export function facebookLogin(): Promise<FacebookLoginResult> {
   return new Promise((resolve, reject) => {
     window.FB.login(
       (res) => {
         if (res.status === "connected" && res.authResponse?.accessToken) {
-          resolve(res.authResponse.accessToken);
+          const granted = res.authResponse.grantedScopes?.split(",").map((s) => s.trim()).filter(Boolean) ?? [];
+          resolve({ accessToken: res.authResponse.accessToken, grantedScopes: granted });
         } else {
           reject(new Error("Login cancelado ou não autorizado pelo usuário"));
         }
       },
-      { scope: "ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,instagram_basic,instagram_manage_insights", auth_type: "rerequest" }
+      {
+        scope: "ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,instagram_basic,instagram_manage_insights",
+        auth_type: "rerequest",
+        return_scopes: true,
+      }
     );
   });
 }

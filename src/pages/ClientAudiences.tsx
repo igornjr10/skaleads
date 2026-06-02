@@ -14,13 +14,14 @@ import {
 import {
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { ChevronLeft, Image } from "lucide-react";
+import { ChevronLeft, Image, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -29,6 +30,7 @@ import {
   type Dimension,
   type BreakdownRow,
 } from "@/lib/audience-analysis";
+import { matchesClientArea } from "@/lib/local-business";
 
 const DIMENSIONS: { key: Dimension; label: string }[] = [
   { key: "age", label: "Idade" },
@@ -259,15 +261,137 @@ function HeatmapTab({ clientId, days }: HeatmapTabProps) {
   );
 }
 
+// ── Geografia (concentração na área de atuação) ────────────────────────────────
+interface GeographyTabProps {
+  clientId: string;
+  days: number;
+  metric: keyof BreakdownRow;
+  state: string | null;
+  city: string | null;
+}
+
+function GeographyTab({ clientId, days, metric, state, city }: GeographyTabProps) {
+  const [rows, setRows] = useState<BreakdownRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    getBreakdown(clientId, days, "region")
+      .then(setRows)
+      .catch((error) => toast.error(getBreakdownErrorMessage(error)))
+      .finally(() => setLoading(false));
+  }, [clientId, days]);
+
+  if (loading) return <Skeleton className="h-64 w-full" />;
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <MapPin className="h-10 w-10 text-muted-foreground mb-3" />
+        <p className="text-sm text-muted-foreground">
+          Sem dados geográficos. Execute o "Sync avançado" na galeria de criativos.
+        </p>
+      </div>
+    );
+  }
+
+  const totalSpend = rows.reduce((sum, r) => sum + r.spend, 0);
+  const insideSpend = rows
+    .filter((r) => matchesClientArea(r.dimension_value, state, city))
+    .reduce((sum, r) => sum + r.spend, 0);
+  const concentration = totalSpend > 0 ? (insideSpend / totalSpend) * 100 : 0;
+  const hasArea = Boolean(state || city);
+
+  const chartData = rows.slice(0, 12).map((r) => ({
+    name: r.dimension_value,
+    value: r[metric] as number,
+    inside: matchesClientArea(r.dimension_value, state, city),
+  }));
+
+  return (
+    <div className="space-y-5">
+      {hasArea ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">Concentração na área de atuação</p>
+          <div className="mt-1 flex items-baseline gap-2">
+            <span className="text-2xl font-bold tabular-nums">{concentration.toFixed(0)}%</span>
+            <span className="text-sm text-muted-foreground">
+              do investimento em {[city, state].filter(Boolean).join("/")}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {fmtValue("spend", insideSpend)} de {fmtValue("spend", totalSpend)} no período.
+            {concentration < 60 && " Boa parte do investimento está fora da sua região — revise a segmentação geográfica."}
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Cadastre a cidade/UF do cliente para calcular a concentração do investimento na área de atuação.
+        </div>
+      )}
+
+      <ResponsiveContainer width="100%" height={240}>
+        <BarChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 48 }}>
+          <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+          <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+          <YAxis tick={{ fontSize: 10 }} width={50} />
+          <Tooltip
+            formatter={(v: number) => [fmtValue(metric, v), METRICS.find((m) => m.key === metric)?.label]}
+            contentStyle={{ fontSize: 11 }}
+          />
+          <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+            {chartData.map((entry) => (
+              <Cell key={entry.name} fill={entry.inside ? "#16a34a" : "#6366f1"} />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b bg-muted/30">
+              <th className="text-left p-2 pl-3 font-medium">Região</th>
+              <th className="text-right p-2 font-medium">Invest.</th>
+              <th className="text-right p-2 font-medium">Impressões</th>
+              <th className="text-right p-2 font-medium">Cliques</th>
+              <th className="text-right p-2 pr-3 font-medium">CTR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => {
+              const inside = matchesClientArea(r.dimension_value, state, city);
+              return (
+                <tr key={r.dimension_value} className={inside ? "bg-emerald-50" : i % 2 === 1 ? "bg-muted/20" : ""}>
+                  <td className="p-2 pl-3 font-medium">
+                    {inside && <span className="mr-1 inline-block h-2 w-2 rounded-full bg-emerald-500" />}
+                    {r.dimension_value}
+                  </td>
+                  <td className="p-2 text-right text-xs">{fmtValue("spend", r.spend)}</td>
+                  <td className="p-2 text-right text-xs">{r.impressions.toLocaleString("pt-BR")}</td>
+                  <td className="p-2 text-right text-xs">{r.clicks.toLocaleString("pt-BR")}</td>
+                  <td className="p-2 pr-3 text-right text-xs">{r.ctr.toFixed(2)}%</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function ClientAudiences() {
   const { id: clientId } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [clientName, setClientName] = useState("");
+  const [clientState, setClientState] = useState<string | null>(null);
+  const [clientCity, setClientCity] = useState<string | null>(null);
 
   const days = parseInt(searchParams.get("period") || "30");
   const metric = (searchParams.get("metric") || "spend") as keyof BreakdownRow;
-  const activeTab = searchParams.get("tab") || "age";
+  const activeTab = searchParams.get("tab") || "geography";
 
   function updateParam(key: string, value: string) {
     setSearchParams(prev => {
@@ -279,8 +403,14 @@ export default function ClientAudiences() {
 
   useEffect(() => {
     if (!clientId) return;
-    supabase.from("clients").select("name").eq("id", clientId).single()
-      .then(({ data }) => { if (data) setClientName(data.name); });
+    supabase.from("clients").select("name, state, city").eq("id", clientId).single()
+      .then(({ data }) => {
+        if (data) {
+          setClientName(data.name);
+          setClientState(data.state);
+          setClientCity(data.city);
+        }
+      });
   }, [clientId]);
 
   return (
@@ -321,6 +451,7 @@ export default function ClientAudiences() {
         <CardContent className="pt-5">
           <Tabs value={activeTab} onValueChange={v => updateParam("tab", v)}>
             <TabsList className="flex-wrap h-auto gap-1 mb-5">
+              <TabsTrigger value="geography" className="text-xs">Geografia</TabsTrigger>
               {DIMENSIONS.map(d => (
                 <TabsTrigger key={d.key} value={d.key} className="text-xs">
                   {d.label}
@@ -328,6 +459,18 @@ export default function ClientAudiences() {
               ))}
               <TabsTrigger value="heatmap" className="text-xs">Heatmap</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="geography">
+              {clientId && (
+                <GeographyTab
+                  clientId={clientId}
+                  days={days}
+                  metric={metric}
+                  state={clientState}
+                  city={clientCity}
+                />
+              )}
+            </TabsContent>
 
             {DIMENSIONS.map(d => (
               <TabsContent key={d.key} value={d.key}>

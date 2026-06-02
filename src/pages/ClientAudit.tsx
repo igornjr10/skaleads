@@ -18,7 +18,7 @@ import { ptBR } from "date-fns/locale";
 import {
   AlertTriangle, CheckCircle, XCircle, SkipForward, RefreshCw, FileText,
   ArrowLeft, ShieldCheck, Zap, LayoutGrid, PaintBucket, DollarSign, Building2,
-  ChevronDown, ChevronUp, Info, Brain, Loader2, Copy,
+  ChevronDown, ChevronUp, Info, Brain, Loader2, Copy, MapPin,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
@@ -68,6 +68,7 @@ const CATEGORY_META: Record<AuditCategory, { label: string; icon: React.ElementT
   creatives: { label: 'Criativos',        icon: PaintBucket },
   budget:    { label: 'Orçamento',        icon: DollarSign },
   account:   { label: 'Conta',           icon: Building2 },
+  local:     { label: 'Negócio Local',    icon: MapPin },
 };
 
 function CategoryCard({ category, score, fail, warn: warnCount }: { category: AuditCategory; score: number; fail: number; warn: number }) {

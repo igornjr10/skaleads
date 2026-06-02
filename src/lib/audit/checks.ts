@@ -1,5 +1,6 @@
 import { AuditCheck, AuditContext, AuditResult } from './types';
 import { supabase } from '@/integrations/supabase/client';
+import { matchesClientArea } from '@/lib/local-business';
 
 const BASE = 'https://graph.facebook.com/v21.0';
 
@@ -422,6 +423,148 @@ const bmAccessCheck: AuditCheck = {
   },
 };
 
+// ── NEGÓCIO LOCAL ─────────────────────────────────────────────────────────────
+
+interface ClientLocalProfile {
+  primary_goal: string | null;
+  state: string | null;
+  city: string | null;
+}
+
+async function loadClientLocal(clientId: string): Promise<ClientLocalProfile | null> {
+  const { data } = await supabase.from('clients').select('primary_goal, state, city').eq('id', clientId).maybeSingle();
+  return (data as ClientLocalProfile | null) ?? null;
+}
+
+const GOAL_OBJECTIVES: Record<string, string[]> = {
+  messages: ['MESSAGES', 'ENGAGEMENT'],
+  calls: ['LEADS', 'TRAFFIC', 'AWARENESS', 'CALL'],
+  directions: ['AWARENESS', 'TRAFFIC', 'STORE'],
+  leads: ['LEADS', 'LEAD_GENERATION', 'SALES', 'CONVERSION'],
+  sales: ['SALES', 'CONVERSION', 'LEADS'],
+};
+
+const GOAL_LABELS: Record<string, string> = {
+  messages: 'Conversas (WhatsApp/Direct)',
+  calls: 'Ligações',
+  directions: 'Rotas / Como chegar',
+  leads: 'Leads / Cadastros',
+  sales: 'Vendas',
+};
+
+interface GeoLocations {
+  countries?: string[];
+  regions?: unknown[];
+  cities?: unknown[];
+  custom_locations?: Array<{ radius?: number; distance_unit?: string }>;
+  geo_markets?: unknown[];
+  places?: unknown[];
+}
+
+function isLocalTargeting(geo?: GeoLocations): boolean {
+  if (!geo) return false;
+  return Boolean(
+    (geo.regions && geo.regions.length) ||
+    (geo.cities && geo.cities.length) ||
+    (geo.custom_locations && geo.custom_locations.length) ||
+    (geo.geo_markets && geo.geo_markets.length) ||
+    (geo.places && geo.places.length)
+  );
+}
+
+const localGeoTargeting: AuditCheck = {
+  id: 'local_geo_targeting', name: 'Segmentação geográfica local', category: 'local', severity: 'critical',
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const adsets = await mAll<{ id: string; name: string; targeting?: { geo_locations?: GeoLocations } }>(`act_${adAccountId}/adsets`, accessToken, {
+      fields: 'id,name,targeting{geo_locations}',
+      effective_status: JSON.stringify(['ACTIVE']),
+    });
+    if (!adsets.length) return skip('Nenhum adset ativo para avaliar segmentação geográfica');
+    const national = adsets.filter(a => !isLocalTargeting(a.targeting?.geo_locations));
+    if (national.length === 0) return pass('Todos os adsets ativos usam segmentação local (cidade, região ou raio)');
+    const pct = Math.round((national.length / adsets.length) * 100);
+    if (pct >= 50) return fail(`${pct}% dos adsets segmentam país/área ampla`, national.slice(0, 5).map(a => a.name).join(', '), 'Para negócio local, segmente por cidade, região ou raio (custom_locations) ao redor do endereço. Segmentar o país inteiro desperdiça verba com público que não pode comprar/visitar.');
+    return warn(`${national.length} adset(s) sem segmentação local (${pct}%)`, national.slice(0, 5).map(a => a.name).join(', '), 'Restrinja a segmentação à cidade/região ou a um raio em torno do negócio.');
+  },
+};
+
+const localRadius: AuditCheck = {
+  id: 'local_radius', name: 'Raio de segmentação compatível', category: 'local', severity: 'warning',
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const adsets = await mAll<{ id: string; name: string; targeting?: { geo_locations?: GeoLocations } }>(`act_${adAccountId}/adsets`, accessToken, {
+      fields: 'id,name,targeting{geo_locations}',
+      effective_status: JSON.stringify(['ACTIVE']),
+    });
+    const withRadius = adsets.filter(a => a.targeting?.geo_locations?.custom_locations?.some(l => l.radius));
+    if (!withRadius.length) return skip('Nenhum adset com raio (custom_locations) configurado');
+    const toKm = (radius: number, unit?: string) => (unit === 'mile' ? radius * 1.60934 : radius);
+    const wide = withRadius.filter(a =>
+      a.targeting!.geo_locations!.custom_locations!.some(l => l.radius && toKm(l.radius, l.distance_unit) > 40)
+    );
+    if (!wide.length) return pass('Raios de segmentação dentro de um alcance local saudável (≤ 40 km)');
+    return warn(`${wide.length} adset(s) com raio acima de 40 km`, wide.slice(0, 5).map(a => a.name).join(', '), 'Raios muito amplos atraem público distante que dificilmente visita o negócio. Ajuste o raio ao deslocamento real do seu cliente (ex.: 5–15 km em área urbana).');
+  },
+};
+
+const localObjective: AuditCheck = {
+  id: 'local_objective', name: 'Objetivo alinhado à meta do negócio', category: 'local', severity: 'warning',
+  async run({ clientId, adAccountId, accessToken }: AuditContext) {
+    const profile = await loadClientLocal(clientId);
+    if (!profile?.primary_goal) return skip('Defina o objetivo principal do cliente no cadastro para avaliar o alinhamento');
+    const accepted = GOAL_OBJECTIVES[profile.primary_goal] ?? [];
+    const campaigns = await mAll<{ id: string; name: string; objective?: string }>(`act_${adAccountId}/campaigns`, accessToken, {
+      fields: 'id,name,objective',
+      effective_status: JSON.stringify(['ACTIVE']),
+    });
+    if (!campaigns.length) return skip('Nenhuma campanha ativa para avaliar');
+    const goalLabel = GOAL_LABELS[profile.primary_goal] ?? profile.primary_goal;
+    const aligned = campaigns.filter(c => c.objective && accepted.some(token => c.objective!.toUpperCase().includes(token)));
+    if (aligned.length === campaigns.length) return pass(`Todas as campanhas ativas estão alinhadas ao objetivo "${goalLabel}"`);
+    const misaligned = campaigns.filter(c => !aligned.includes(c));
+    if (aligned.length === 0) return fail(`Nenhuma campanha ativa otimiza para "${goalLabel}"`, misaligned.slice(0, 5).map(c => `${c.name}: ${c.objective ?? '—'}`).join(', '), `O objetivo do cliente é ${goalLabel}, mas as campanhas otimizam para outro resultado. Crie/ajuste campanhas com o objetivo correto para que o algoritmo entregue os resultados que importam.`);
+    return warn(`${misaligned.length} campanha(s) fora do objetivo "${goalLabel}"`, misaligned.slice(0, 5).map(c => `${c.name}: ${c.objective ?? '—'}`).join(', '), 'Revise as campanhas desalinhadas — otimizar para o resultado certo reduz o custo por conversão local.');
+  },
+};
+
+const messagingDestination: AuditCheck = {
+  id: 'messaging_destination', name: 'Destino de conversa configurado', category: 'local', severity: 'warning',
+  async run({ clientId, adAccountId, accessToken }: AuditContext) {
+    const profile = await loadClientLocal(clientId);
+    if (profile?.primary_goal !== 'messages') return skip('Aplicável apenas quando o objetivo é gerar conversas');
+    const adsets = await mAll<{ id: string; name: string; destination_type?: string }>(`act_${adAccountId}/adsets`, accessToken, {
+      fields: 'id,name,destination_type',
+      effective_status: JSON.stringify(['ACTIVE']),
+    });
+    if (!adsets.length) return skip('Nenhum adset ativo para avaliar destino de conversa');
+    const messaging = adsets.filter(a => ['WHATSAPP', 'MESSENGER', 'INSTAGRAM_DIRECT'].includes((a.destination_type ?? '').toUpperCase()));
+    if (messaging.length) return pass(`${messaging.length} adset(s) direcionando para conversa (WhatsApp/Messenger/Direct)`);
+    return warn('Nenhum adset ativo com destino de conversa', undefined, 'O objetivo é gerar conversas, mas nenhum adset envia para WhatsApp/Messenger/Direct. Configure o destino de mensagem para capturar contatos diretamente.');
+  },
+};
+
+const nearbySpend: AuditCheck = {
+  id: 'nearby_spend', name: 'Investimento concentrado na região', category: 'local', severity: 'warning',
+  async run({ clientId }: AuditContext) {
+    const profile = await loadClientLocal(clientId);
+    if (!profile?.state && !profile?.city) return skip('Cadastre cidade/UF do cliente para avaliar a concentração geográfica do gasto');
+    const { data } = await supabase.from('ad_breakdowns')
+      .select('dimension_value, spend')
+      .eq('client_id', clientId)
+      .eq('dimension', 'region');
+    if (!data?.length) return skip('Sem dados de breakdown por região. Rode o "Sync avançado" na galeria de criativos.');
+    const totalSpend = data.reduce((sum, r) => sum + (r.spend || 0), 0);
+    if (!totalSpend) return skip('Sem investimento registrado por região no período');
+    const insideSpend = data
+      .filter(r => matchesClientArea(r.dimension_value, profile.state, profile.city))
+      .reduce((sum, r) => sum + (r.spend || 0), 0);
+    const pct = Math.round((insideSpend / totalSpend) * 100);
+    const area = [profile.city, profile.state].filter(Boolean).join('/');
+    if (pct >= 70) return pass(`${pct}% do investimento está em ${area}`);
+    if (pct >= 40) return warn(`${pct}% do investimento em ${area}`, undefined, `Parte relevante do gasto está fora de ${area}. Reforce a segmentação geográfica para priorizar quem pode visitar/comprar.`);
+    return fail(`Apenas ${pct}% do investimento em ${area}`, undefined, `A maior parte da verba está sendo entregue fora da área de atuação do negócio. Ajuste a segmentação geográfica das campanhas para concentrar em ${area}.`);
+  },
+};
+
 // ── EXPORT ────────────────────────────────────────────────────────────────────
 
 export const ALL_CHECKS: AuditCheck[] = [
@@ -455,4 +598,10 @@ export const ALL_CHECKS: AuditCheck[] = [
   policyQuality,
   highCpcCheck,
   bmAccessCheck,
+  // Negócio Local
+  localGeoTargeting,
+  localRadius,
+  localObjective,
+  messagingDestination,
+  nearbySpend,
 ];

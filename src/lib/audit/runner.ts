@@ -3,7 +3,7 @@ import { ALL_CHECKS } from './checks';
 import type { AuditCategory, AuditCheckResult, AuditContext, AuditReport, CategoryScore } from './types';
 
 const SEVERITY_POINTS = { critical: 3, warning: 2, info: 1 } as const;
-const CATEGORIES: AuditCategory[] = ['pixel', 'structure', 'creatives', 'budget', 'account'];
+const CATEGORIES: AuditCategory[] = ['pixel', 'structure', 'creatives', 'budget', 'account', 'local'];
 
 function computeScore(results: AuditCheckResult[]): { score: number; categoryScores: Record<AuditCategory, CategoryScore> } {
   const cat = Object.fromEntries(

@@ -187,27 +187,42 @@ export type Database = {
       }
       campaign_daily_metrics: {
         Row: {
+          calls: number
           clicks: number
           client_id: string
           date: string
+          directions: number
           id: string
           impressions: number
+          leads: number
+          messages: number
+          profile_visits: number
           spend: number
         }
         Insert: {
+          calls?: number
           clicks?: number
           client_id: string
           date: string
+          directions?: number
           id?: string
           impressions?: number
+          leads?: number
+          messages?: number
+          profile_visits?: number
           spend?: number
         }
         Update: {
+          calls?: number
           clicks?: number
           client_id?: string
           date?: string
+          directions?: number
           id?: string
           impressions?: number
+          leads?: number
+          messages?: number
+          profile_visits?: number
           spend?: number
         }
         Relationships: [
@@ -284,6 +299,9 @@ export type Database = {
       }
       clients: {
           Row: {
+            address: string | null
+            business_segment: string | null
+            city: string | null
             created_at: string
             id: string
             logo_url: string | null
@@ -302,10 +320,16 @@ export type Database = {
             meta_sync_runs: number
             meta_sync_status: string
             name: string
+            primary_goal: string | null
+            service_radius_km: number | null
+            state: string | null
             status: string
             updated_at: string
         }
         Insert: {
+          address?: string | null
+          business_segment?: string | null
+          city?: string | null
           created_at?: string
           id?: string
             logo_url?: string | null
@@ -324,10 +348,16 @@ export type Database = {
             meta_sync_runs?: number
             meta_sync_status?: string
             name: string
+            primary_goal?: string | null
+            service_radius_km?: number | null
+            state?: string | null
             status?: string
             updated_at?: string
         }
         Update: {
+          address?: string | null
+          business_segment?: string | null
+          city?: string | null
           created_at?: string
           id?: string
             logo_url?: string | null
@@ -346,6 +376,9 @@ export type Database = {
             meta_sync_runs?: number
             meta_sync_status?: string
             name?: string
+            primary_goal?: string | null
+            service_radius_km?: number | null
+            state?: string | null
             status?: string
             updated_at?: string
         }
