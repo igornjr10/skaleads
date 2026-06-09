@@ -7,10 +7,11 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp, MessageCircle, Phone, MapPin, UserPlus } from "lucide-react";
+import { ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp, MessageCircle, Phone, MapPin, UserPlus, Users, Repeat, Heart, Radio } from "lucide-react";
 import { subDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { GOAL_KPIS, LOCAL_METRIC_LABELS, goalLabel, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
+import { fetchAccountReachFrequency, fetchSocialPresence, type ReachFrequency, type SocialPresence } from "@/lib/meta-insights";
 
 type Period = "7" | "14" | "30";
 
@@ -88,6 +89,9 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [client, setClient] = useState<string>("all");
   const [period, setPeriod] = useState<Period>("30");
+  const [reachFreq, setReachFreq] = useState<ReachFrequency | null>(null);
+  const [social, setSocial] = useState<SocialPresence | null>(null);
+  const [richLoading, setRichLoading] = useState(false);
 
   const clientId = client === "all" ? undefined : client;
   const periodDays = Number(period);
@@ -145,6 +149,61 @@ export default function Dashboard() {
       setLoading(false);
     }
     load();
+  }, [clientId, periodDays]);
+
+  // Alcance/frequência e presença social: busca ao vivo na Meta, só com 1 cliente selecionado
+  useEffect(() => {
+    if (!clientId) {
+      setReachFreq(null);
+      setSocial(null);
+      setRichLoading(false);
+      return;
+    }
+    let active = true;
+    setRichLoading(true);
+    (async () => {
+      const { data: c } = await supabase
+        .from("clients")
+        .select("meta_ad_account_id, meta_access_token, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username, logo_url")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      if (!c?.meta_ad_account_id || !c?.meta_access_token) {
+        if (active) {
+          setReachFreq(null);
+          setSocial(null);
+          setRichLoading(false);
+        }
+        return;
+      }
+
+      const until = format(new Date(), "yyyy-MM-dd");
+      const since = format(subDays(new Date(), periodDays), "yyyy-MM-dd");
+      try {
+        const [rf, sp] = await Promise.all([
+          fetchAccountReachFrequency(c.meta_ad_account_id, c.meta_access_token, since, until).catch(() => null),
+          fetchSocialPresence({
+            pageId: c.meta_page_id,
+            pageName: c.meta_page_name,
+            instagramAccountId: c.meta_instagram_account_id,
+            instagramUsername: c.meta_instagram_username,
+            accessToken: c.meta_access_token,
+            logoUrl: c.logo_url,
+            since,
+            until,
+          }).catch(() => null),
+        ]);
+        if (active) {
+          setReachFreq(rf);
+          setSocial(sp);
+        }
+      } finally {
+        if (active) setRichLoading(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
   }, [clientId, periodDays]);
 
   // Split daily metrics into current vs previous period for delta calculation
@@ -232,6 +291,18 @@ export default function Dashboard() {
   const primaryResults = localTotals[primaryKey];
   const costPerPrimary = primaryResults > 0 ? currentAgg.spend / primaryResults : 0;
   const hasLocalResults = Object.values(localTotals).some((v) => v > 0);
+
+  const richStats: { key: string; label: string; value: string; icon: typeof Users }[] = [];
+  if (reachFreq) {
+    richStats.push({ key: "reach", label: "Alcance", value: formatNumber(reachFreq.reach), icon: Radio });
+    richStats.push({ key: "freq", label: "Frequência", value: reachFreq.frequency.toFixed(2), icon: Repeat });
+  }
+  if (social) {
+    if (social.followers != null) richStats.push({ key: "followers", label: "Seguidores", value: formatNumber(social.followers), icon: Users });
+    if (social.profileViews != null) richStats.push({ key: "pviews", label: "Visitas no perfil", value: formatNumber(social.profileViews), icon: Eye });
+    if (social.reach != null) richStats.push({ key: "sreach", label: "Alcance social", value: formatNumber(social.reach), icon: Radio });
+    if (social.engagement != null) richStats.push({ key: "eng", label: "Engajamento", value: formatNumber(social.engagement), icon: Heart });
+  }
 
   // Chart series
   const chartSeries: SeriesPoint[] = useMemo(() => {
@@ -346,6 +417,40 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Alcance e presença social (apenas com 1 cliente selecionado) */}
+          {clientId && (
+            <Card className="shadow-card">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Alcance e presença social</CardTitle>
+                <CardDescription>
+                  Dados ao vivo da Meta para o período selecionado
+                  {social?.sources?.length ? ` · Fontes: ${social.sources.join(" + ")}` : ""}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {richLoading ? (
+                  <p className="py-4 text-sm text-muted-foreground animate-pulse">Buscando dados na Meta...</p>
+                ) : richStats.length === 0 ? (
+                  <p className="py-4 text-sm text-muted-foreground">
+                    Sem dados de alcance/presença disponíveis. Verifique a conexão Meta do cliente (token válido e permissões do Instagram).
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+                    {richStats.map((s) => (
+                      <div key={s.key} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</span>
+                          <s.icon className="h-4 w-4 text-primary" />
+                        </div>
+                        <div className="mt-2 text-xl font-semibold tabular-nums">{s.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
