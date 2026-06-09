@@ -216,7 +216,12 @@ export default function Dashboard() {
     ? [...GOAL_KPIS[selectedGoal], ...(["messages", "calls", "directions", "leads", "profileVisits"] as LocalMetricKey[]).filter((k) => !GOAL_KPIS[selectedGoal].includes(k))]
     : ["messages", "calls", "directions", "leads", "profileVisits"];
 
-  const localKpis = orderedLocalKeys.map((key) => ({
+  const primaryKey = orderedLocalKeys[0];
+  // Mostra apenas métricas com resultado ou o objetivo principal — evita
+  // exibir cards zerados (ex.: cliente que só roda campanha de conversa).
+  const visibleLocalKeys = orderedLocalKeys.filter((key) => localTotals[key] > 0 || key === primaryKey);
+
+  const localKpis = visibleLocalKeys.map((key) => ({
     key,
     label: LOCAL_METRIC_LABELS[key],
     value: formatNumber(localTotals[key]),
@@ -224,7 +229,6 @@ export default function Dashboard() {
     icon: LOCAL_METRIC_ICONS[key],
   }));
 
-  const primaryKey = orderedLocalKeys[0];
   const primaryResults = localTotals[primaryKey];
   const costPerPrimary = primaryResults > 0 ? currentAgg.spend / primaryResults : 0;
   const hasLocalResults = Object.values(localTotals).some((v) => v > 0);
