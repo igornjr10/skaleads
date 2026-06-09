@@ -740,6 +740,7 @@ export default function Clients() {
   const isSyncing = syncingId !== null;
   const activeCount = clients.filter((client) => client.status === "active").length;
   const connectedCount = clients.filter((client) => client.meta_ad_account_id).length;
+  const expiredClients = clients.filter((client) => client.meta_sync_status === "expired");
 
   function renderClientActions(client: Client, compact = false) {
     return (
@@ -1099,6 +1100,42 @@ export default function Clients() {
           </Tabs>
         </DialogContent>
       </Dialog>
+
+      {canManage && expiredClients.length > 0 && (
+        <Card className="border-rose-200 bg-rose-50/70">
+          <CardContent className="pt-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl bg-rose-100 p-3 text-rose-600">
+                  <ShieldAlert className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-semibold text-rose-800">
+                    {expiredClients.length} integração(ões) com token expirado
+                  </p>
+                  <p className="text-sm text-rose-700">
+                    A sessão do Facebook foi invalidada (troca de senha ou segurança). Esses clientes não sincronizam até reconectar a Meta. Como o login costuma ser o mesmo, ao reconectar um, os demais ficam rápidos.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {expiredClients.map((client) => (
+                <Button
+                  key={client.id}
+                  variant="outline"
+                  size="sm"
+                  className="border-rose-200 bg-white text-rose-700 hover:bg-rose-100"
+                  onClick={() => openConnectDialog(client)}
+                >
+                  <Link2 className="mr-2 h-3 w-3" />
+                  Reconectar {client.name}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card className="border-slate-200">
