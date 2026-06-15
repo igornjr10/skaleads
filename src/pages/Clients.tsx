@@ -347,7 +347,7 @@ export default function Clients() {
     }
 
     const directPages = await fetchAllPaginated(
-      `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "100" })}`
+      `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "25" })}`
     );
 
     const businessesRes = await fetch(
@@ -362,10 +362,10 @@ export default function Clients() {
     const bmPagesNested = await Promise.all(
       businesses.flatMap((bm) => [
         fetchAllPaginated(
-          `https://graph.facebook.com/v21.0/${bm.id}/owned_pages?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "100" })}`
+          `https://graph.facebook.com/v21.0/${bm.id}/owned_pages?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "25" })}`
         ).catch(() => [] as MetaPage[]),
         fetchAllPaginated(
-          `https://graph.facebook.com/v21.0/${bm.id}/client_pages?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "100" })}`
+          `https://graph.facebook.com/v21.0/${bm.id}/client_pages?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "25" })}`
         ).catch(() => [] as MetaPage[]),
       ])
     );
