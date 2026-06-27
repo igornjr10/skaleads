@@ -133,6 +133,35 @@ export interface AuditActionOutput {
   prioritization: string;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function sendChatMessage(
+  messages: ChatMessage[],
+  clientId?: string
+): Promise<{ reply: string; tokens: { input: number; output: number }; cost: number }> {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user?.user?.id) throw new Error("Usuario nao autenticado");
+
+  const { data, error } = await supabase.functions.invoke("chat-assistant", {
+    body: { messages, clientId, tenantId: user.user.id },
+  });
+
+  const response = data as { success: boolean; reply: string; tokens: { input: number; output: number }; cost_usd: string; error?: string } | null;
+
+  if (error || !response?.success) {
+    throw new Error(response?.error || error?.message || "Erro ao chamar assistente de chat");
+  }
+
+  return {
+    reply: response.reply,
+    tokens: response.tokens,
+    cost: parseFloat(response.cost_usd || "0"),
+  };
+}
+
 export async function prioritizeAuditActions(payload: AuditActionInput): Promise<{
   prioritization: string;
   tokens: { input: number; output: number };

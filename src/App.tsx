@@ -23,6 +23,7 @@ const ClientCreatives = lazy(() => import("./pages/ClientCreatives"));
 const ClientAudiences = lazy(() => import("./pages/ClientAudiences"));
 const AlertBuilder = lazy(() => import("./pages/AlertBuilder"));
 const AlertEvents = lazy(() => import("./pages/AlertEvents"));
+const Chat = lazy(() => import("./pages/Chat"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -61,6 +62,7 @@ const App = () => (
                 <Route path="/alerts/:id/edit" element={<AlertBuilder />} />
                 <Route path="/alert-events" element={<AlertEvents />} />
                 <Route path="/report-schedules" element={<ReportSchedules />} />
+                <Route path="/chat" element={<Chat />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
               <Route path="/share/reports/:token" element={<ReportShare />} />
