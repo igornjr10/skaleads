@@ -120,6 +120,7 @@ export default function AlertBuilder() {
   const [channelDashboard, setChannelDashboard] = useState(true);
   const [channelEmail, setChannelEmail] = useState(false);
   const [emailRecipients, setEmailRecipients] = useState("");
+  const [channelWhatsapp, setChannelWhatsapp] = useState(false);
   const [cooldown, setCooldown] = useState(60);
 
   useEffect(() => {
@@ -140,6 +141,7 @@ export default function AlertBuilder() {
     setChannelDashboard(ch.dashboard !== false);
     setChannelEmail(!!ch.email);
     setEmailRecipients((ch.emailRecipients || []).join("\n"));
+    setChannelWhatsapp(!!ch.whatsapp);
     setCooldown(data.cooldown_minutes || 60);
     setShowTemplates(false);
   }
@@ -204,6 +206,7 @@ export default function AlertBuilder() {
         dashboard: channelDashboard,
         email: channelEmail,
         emailRecipients: emailRecipients.split(/[\n,;]/).map(e => e.trim()).filter(e => e.includes("@")),
+        whatsapp: channelWhatsapp,
       } as any,
       cooldown_minutes: cooldown,
       is_active: true,
@@ -432,6 +435,14 @@ export default function AlertBuilder() {
                 />
               </div>
             )}
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">WhatsApp</p>
+                <p className="text-xs text-muted-foreground">Mensagem para o gestor via Datafy (WhatsApp Business)</p>
+              </div>
+              <Switch checked={channelWhatsapp} onCheckedChange={setChannelWhatsapp} />
+            </div>
             <Separator />
             <div className="space-y-1">
               <Label className="text-xs">Cooldown — reenvio mínimo após disparo</Label>

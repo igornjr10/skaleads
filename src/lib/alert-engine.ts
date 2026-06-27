@@ -25,6 +25,7 @@ export interface AlertChannels {
   dashboard: boolean;
   email: boolean;
   emailRecipients: string[];
+  whatsapp: boolean;
 }
 
 export interface StoredAlert {
@@ -342,6 +343,22 @@ export async function runAllAlerts(
             });
           } catch {
             // Email failures are non-blocking
+          }
+        }
+
+        // WhatsApp notification
+        if (channels.whatsapp) {
+          try {
+            await supabase.functions.invoke("send-whatsapp-alert", {
+              body: {
+                alertName: alert.name,
+                alertDescription: alert.description,
+                entities: firedEntities,
+                ruleSnapshot: alert.rule_json,
+              },
+            });
+          } catch {
+            // WhatsApp failures are non-blocking
           }
         }
       }
