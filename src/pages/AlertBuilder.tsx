@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CheckCircle, Loader2, Zap, LayoutTemplate } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CheckCircle, Loader2, Zap, LayoutTemplate, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -109,6 +109,7 @@ export default function AlertBuilder() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ fired: boolean; count: number } | null>(null);
+  const [testingWhatsapp, setTestingWhatsapp] = useState(false);
   const [showTemplates, setShowTemplates] = useState(!isEdit);
 
   // Form state
@@ -186,6 +187,33 @@ export default function AlertBuilder() {
       toast.error(err instanceof Error ? err.message : "Erro ao testar");
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleTestWhatsapp() {
+    setTestingWhatsapp(true);
+    try {
+      const { error } = await supabase.functions.invoke("send-whatsapp-alert", {
+        body: {
+          alertName: name || "Alerta de teste",
+          alertDescription: description || null,
+          entities: [
+            {
+              entityType: "CAMPAIGN",
+              entityId: "test-id",
+              entityName: "Campanha de exemplo",
+              metricValue: 99.9,
+            },
+          ],
+          ruleSnapshot: { conditions, logic },
+        },
+      });
+      if (error) throw new Error(error.message);
+      toast.success("Mensagem de teste enviada via WhatsApp!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar WhatsApp");
+    } finally {
+      setTestingWhatsapp(false);
     }
   }
 
@@ -477,9 +505,10 @@ export default function AlertBuilder() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Canais</span>
-                <span className="flex gap-1">
+                <span className="flex gap-1 flex-wrap justify-end">
                   {channelDashboard && <Badge variant="secondary" className="text-[10px]">Dashboard</Badge>}
                   {channelEmail && <Badge variant="secondary" className="text-[10px]">Email</Badge>}
+                  {channelWhatsapp && <Badge variant="secondary" className="text-[10px] border-green-500/40 text-green-600">WhatsApp</Badge>}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -506,6 +535,19 @@ export default function AlertBuilder() {
                 {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Zap className="mr-2 h-4 w-4" />}
                 {testing ? "Testando..." : "Testar condição"}
               </Button>
+              {channelWhatsapp && (
+                <Button
+                  variant="outline"
+                  onClick={handleTestWhatsapp}
+                  disabled={testingWhatsapp}
+                  className="w-full border-green-500/30 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                >
+                  {testingWhatsapp
+                    ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    : <MessageSquare className="mr-2 h-4 w-4" />}
+                  {testingWhatsapp ? "Enviando..." : "Testar WhatsApp"}
+                </Button>
+              )}
             </CardContent>
           </Card>
         </div>
