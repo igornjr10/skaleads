@@ -6,7 +6,7 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const TOKEN_COST = { input: 0.000003, output: 0.000015 };
+const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 interface Message {
   role: "user" | "assistant";
@@ -156,36 +156,39 @@ Instruções:
 - Formate respostas longas com markdown (negrito, listas, etc.)
 - Seja proativo: se identificar algo importante nos dados, mencione mesmo sem ser perguntado`;
 
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurado");
+    const apiKey = Deno.env.get("GROQ_API_KEY");
+    if (!apiKey) throw new Error("GROQ_API_KEY não configurado");
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: GROQ_MODEL,
         max_tokens: 2048,
-        system: systemPrompt,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ],
       }),
     });
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(`Claude API error: ${err.error?.message ?? response.statusText}`);
+      throw new Error(`Groq API error: ${err.error?.message ?? response.statusText}`);
     }
 
     const data = await response.json();
-    const reply = data.content[0].text as string;
-    const tokens = { input: data.usage.input_tokens, output: data.usage.output_tokens };
-    const cost = tokens.input * TOKEN_COST.input + tokens.output * TOKEN_COST.output;
+    const reply = data.choices[0].message.content as string;
+    const tokens = {
+      input: data.usage?.prompt_tokens ?? 0,
+      output: data.usage?.completion_tokens ?? 0,
+    };
 
     return new Response(
-      JSON.stringify({ success: true, reply, tokens, cost_usd: cost.toFixed(6) }),
+      JSON.stringify({ success: true, reply, tokens, cost_usd: "0.000000" }),
       { headers: { ...cors, "Content-Type": "application/json" } }
     );
   } catch (err) {
@@ -193,7 +196,7 @@ Instruções:
     const message = err instanceof Error ? err.message : "Erro interno";
     return new Response(
       JSON.stringify({ success: false, error: message }),
-      { status: 400, headers: { ...cors, "Content-Type": "application/json" } }
+      { headers: { ...cors, "Content-Type": "application/json" } }
     );
   }
 });
