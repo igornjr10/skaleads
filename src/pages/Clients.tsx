@@ -26,6 +26,7 @@ import {
   Pencil,
   MapPin,
   Store,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { syncClientData, validateMetaConnection } from "@/lib/meta-api";
 import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaPage } from "@/lib/facebook-sdk";
 import { BUSINESS_SEGMENTS, LOCAL_GOALS, segmentLabel } from "@/lib/local-business";
+import ClientReportDialog from "@/components/ClientReportDialog";
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
@@ -95,6 +97,8 @@ interface Client {
   meta_sync_runs: number;
   meta_sync_status: "pending" | "connected" | "syncing" | "healthy" | "warning" | "error" | "expired";
   created_at: string;
+  whatsapp_number: string | null;
+  report_template: Record<string, unknown> | null;
 }
 
 interface ReportRow {
@@ -201,6 +205,7 @@ export default function Clients() {
 
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [reportClient, setReportClient] = useState<Client | null>(null);
 
   async function load() {
     setLoading(true);
@@ -770,6 +775,14 @@ export default function Clients() {
         </Button>
         <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/reports`)}>
           <FileText className="mr-2 h-3 w-3" />Relatorios
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-green-500/30 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+          onClick={() => setReportClient(client)}
+        >
+          <Send className="mr-2 h-3 w-3" />Relatório WA
         </Button>
         <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/creatives`)}>
           <ImageIcon className="mr-2 h-3 w-3" />Criativos
@@ -1503,6 +1516,14 @@ export default function Clients() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {reportClient && (
+        <ClientReportDialog
+          open={!!reportClient}
+          onClose={() => setReportClient(null)}
+          client={reportClient}
+        />
+      )}
     </div>
   );
 }
