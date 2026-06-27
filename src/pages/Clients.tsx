@@ -184,6 +184,7 @@ export default function Clients() {
   const [newAddress, setNewAddress] = useState("");
   const [newRadius, setNewRadius] = useState("");
   const [newGoal, setNewGoal] = useState("");
+  const [newWhatsapp, setNewWhatsapp] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [connectClient, setConnectClient] = useState<Client | null>(null);
@@ -549,6 +550,7 @@ export default function Clients() {
     setNewAddress("");
     setNewRadius("");
     setNewGoal("");
+    setNewWhatsapp("");
   }
 
   function openCreateDialog() {
@@ -567,6 +569,7 @@ export default function Clients() {
     setNewAddress(client.address ?? "");
     setNewRadius(client.service_radius_km != null ? String(client.service_radius_km) : "");
     setNewGoal(client.primary_goal ?? "");
+    setNewWhatsapp(client.whatsapp_number ?? "");
     setCreateOpen(true);
   }
 
@@ -582,6 +585,7 @@ export default function Clients() {
       address: newAddress.trim() || null,
       service_radius_km: newRadius.trim() ? Number(newRadius) : null,
       primary_goal: newGoal || null,
+      whatsapp_number: newWhatsapp.trim().replace(/\D/g, "") || null,
     };
     const { error } = editClient
       ? await supabase.from("clients").update(payload).eq("id", editClient.id)
@@ -898,6 +902,20 @@ export default function Clients() {
                   <div className="space-y-2">
                     <Label htmlFor="logoUrl">Foto ou logo (URL)</Label>
                     <Input id="logoUrl" value={newLogoUrl} onChange={(event) => setNewLogoUrl(event.target.value)} placeholder="https://..." />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsapp" className="flex items-center gap-1.5">
+                      WhatsApp
+                      <span className="text-xs font-normal text-muted-foreground">(para receber relatórios)</span>
+                    </Label>
+                    <Input
+                      id="whatsapp"
+                      value={newWhatsapp}
+                      onChange={(event) => setNewWhatsapp(event.target.value)}
+                      placeholder="5511999999999"
+                      inputMode="numeric"
+                    />
+                    <p className="text-xs text-muted-foreground">DDI + DDD + número, só dígitos. Ex: 5511999999999</p>
                   </div>
                   <DialogFooter>
                     <Button type="submit" disabled={saving}>{saving ? "Salvando..." : editClient ? "Salvar" : "Criar"}</Button>
