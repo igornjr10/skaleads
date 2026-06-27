@@ -102,13 +102,12 @@ ${topIssues}`;
 
   // Visão geral — todos os clientes
   const [clients, campaigns] = await Promise.all([
-    dbGet(baseUrl, serviceKey, "clients", {
+    dbGet(baseUrl, serviceKey, dbAuthHeader, "clients", {
       select: "id,name,status,meta_sync_status,city",
       order: "name.asc",
     }),
-    dbGet(baseUrl, serviceKey, "campaigns", {
+    dbGet(baseUrl, serviceKey, dbAuthHeader, "campaigns", {
       select: "name,status,spend,ctr,client_id",
-      status: "eq.ACTIVE",
       order: "spend.desc",
       limit: "10",
     }),
@@ -128,11 +127,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   const baseUrl = Deno.env.get("SUPABASE_URL")!;
-  // Use o JWT do usuário logado para respeitar as políticas de RLS
   const serviceKey = Deno.env.get("SVC_ROLE_KEY")!;
-  // Preferir JWT do usuário logado; cair para service role como fallback
-  const authHeader = req.headers.get("Authorization") ?? `Bearer ${serviceKey}`;
-  const anonKey = serviceKey;
+  // Sempre usar service role para queries de contexto — ignora RLS
+  const dbAuthHeader = `Bearer ${serviceKey}`;
 
   try {
     const { messages, clientId, tenantId } = await req.json() as {
@@ -146,7 +143,7 @@ serve(async (req) => {
     }
     if (!tenantId) throw new Error("tenantId é obrigatório");
 
-    const context = await fetchContext(baseUrl, anonKey, authHeader, clientId);
+    const context = await fetchContext(baseUrl, serviceKey, dbAuthHeader, clientId);
 
     const systemPrompt = `Você é um assistente especialista em gestão de tráfego pago e campanhas Meta Ads. Seu nome é Assistente IA do MarketPro Manager.
 
