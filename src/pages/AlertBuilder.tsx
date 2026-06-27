@@ -23,6 +23,7 @@ import {
   ruleToHuman,
   type AlertRule,
   type AlertCondition,
+  type FiredEntity,
   type MetricKey,
   type Comparator,
   type Period,
@@ -108,7 +109,7 @@ export default function AlertBuilder() {
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ fired: boolean; count: number } | null>(null);
+  const [testResult, setTestResult] = useState<{ fired: boolean; count: number; entities: FiredEntity[] } | null>(null);
   const [testingWhatsapp, setTestingWhatsapp] = useState(false);
   const [showTemplates, setShowTemplates] = useState(!isEdit);
 
@@ -177,7 +178,7 @@ export default function AlertBuilder() {
     try {
       const rule: AlertRule = { conditions, logic };
       const fired = await testAlert(rule, clientId === "all" ? undefined : clientId);
-      setTestResult({ fired: fired.length > 0, count: fired.length });
+      setTestResult({ fired: fired.length > 0, count: fired.length, entities: fired });
       if (fired.length > 0) {
         toast.success(`Alerta dispararia para ${fired.length} entidade(s)`, { duration: 4000 });
       } else {
@@ -193,23 +194,30 @@ export default function AlertBuilder() {
   async function handleTestWhatsapp() {
     setTestingWhatsapp(true);
     try {
+      const rule: AlertRule = { conditions, logic };
+
+      // Usa entidades do último teste ou roda agora
+      let entities = testResult?.entities ?? [];
+      if (entities.length === 0) {
+        entities = await testAlert(rule, clientId === "all" ? undefined : clientId);
+        setTestResult({ fired: entities.length > 0, count: entities.length, entities });
+      }
+
+      if (entities.length === 0) {
+        toast.info("Nenhuma entidade dispararia agora — mensagem não enviada");
+        return;
+      }
+
       const { error } = await supabase.functions.invoke("send-whatsapp-alert", {
         body: {
           alertName: name || "Alerta de teste",
           alertDescription: description || null,
-          entities: [
-            {
-              entityType: "CAMPAIGN",
-              entityId: "test-id",
-              entityName: "Campanha de exemplo",
-              metricValue: 99.9,
-            },
-          ],
+          entities,
           ruleSnapshot: { conditions, logic },
         },
       });
       if (error) throw new Error(error.message);
-      toast.success("Mensagem de teste enviada via WhatsApp!");
+      toast.success(`WhatsApp enviado para ${entities.length} entidade(s)!`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar WhatsApp");
     } finally {
