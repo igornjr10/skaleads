@@ -11,6 +11,7 @@ import { AppLayout } from "@/components/AppLayout";
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Clients = lazy(() => import("./pages/Clients"));
+const ClientHub = lazy(() => import("./pages/ClientHub"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -25,6 +26,7 @@ const AlertBuilder = lazy(() => import("./pages/AlertBuilder"));
 const AlertEvents = lazy(() => import("./pages/AlertEvents"));
 const Chat = lazy(() => import("./pages/Chat"));
 const WhatsappScheduled = lazy(() => import("./pages/WhatsappScheduled"));
+const AutomationLog = lazy(() => import("./pages/AutomationLog"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -52,6 +54,7 @@ const App = () => (
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/clients" element={<Clients />} />
+                <Route path="/clients/:id" element={<ClientHub />} />
                 <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/andromeda" element={<Andromeda />} />
@@ -64,6 +67,7 @@ const App = () => (
                 <Route path="/alert-events" element={<AlertEvents />} />
                 <Route path="/report-schedules" element={<ReportSchedules />} />
                 <Route path="/whatsapp-scheduled" element={<WhatsappScheduled />} />
+                <Route path="/automations" element={<AutomationLog />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>

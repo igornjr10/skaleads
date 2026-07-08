@@ -287,9 +287,14 @@ serve(async (req) => {
     });
   }
 
+  const startedAt = new Date().toISOString();
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
+  let runSuccess = true;
+  let runSummary: Record<string, unknown> = {};
+  let runError: string | null = null;
+
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
     const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL") ?? "";
     const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE") ?? "";
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY") ?? "";
@@ -352,14 +357,26 @@ serve(async (req) => {
       }
     }
 
+    runSummary = { checked: totalChecked, fired: totalFired };
     return new Response(
       JSON.stringify({ success: true, checked: totalChecked, fired: totalFired, results: fired }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    runSuccess = false;
+    runError = (err as Error).message;
+    return new Response(JSON.stringify({ error: runError }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
+  } finally {
+    dbInsert(supabaseUrl, svcKey, "automation_runs", {
+      job_name: "run-alerts-cron",
+      started_at: startedAt,
+      finished_at: new Date().toISOString(),
+      success: runSuccess,
+      summary: runSummary,
+      error: runError,
+    }).catch(() => {});
   }
 });

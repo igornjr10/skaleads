@@ -38,6 +38,19 @@ function dbPatch(supabaseUrl: string, svcKey: string, path: string, body: object
   });
 }
 
+function dbInsert(supabaseUrl: string, svcKey: string, table: string, body: object) {
+  return fetch(`${supabaseUrl}/rest/v1/${table}`, {
+    method: "POST",
+    headers: {
+      apikey: svcKey,
+      Authorization: `Bearer ${svcKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
 function todayInSaoPaulo(): { dateStr: string; minutesOfDay: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
@@ -85,9 +98,15 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const startedAt = new Date().toISOString();
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
+  let isTest = false;
+  let runSuccess = true;
+  let runSummary: Record<string, unknown> = {};
+  let runError: string | null = null;
+
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
     const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL")!;
     const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE")!;
     const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
@@ -98,11 +117,14 @@ serve(async (req) => {
 
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const testId = body?.test_id as string | undefined;
+    isTest = !!testId;
 
     // ── Chamada de cron (sem test_id): exige o segredo do pg_cron ──────────────
     if (!testId) {
       const cronSecret = Deno.env.get("CRON_SECRET");
       if (cronSecret && req.headers.get("x-cron-secret") !== cronSecret) {
+        runSuccess = false;
+        runError = "Unauthorized";
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -153,14 +175,28 @@ serve(async (req) => {
       }
     }
 
+    runSummary = { checked: (scheduled || []).length, sent: sentCount };
     return new Response(
       JSON.stringify({ success: true, checked: (scheduled || []).length, sent: sentCount }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
+    runSuccess = false;
+    runError = (err as Error).message;
+    return new Response(JSON.stringify({ error: runError }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+  } finally {
+    if (!isTest) {
+      dbInsert(supabaseUrl, svcKey, "automation_runs", {
+        job_name: "send-scheduled-whatsapp",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        success: runSuccess,
+        summary: runSummary,
+        error: runError,
+      }).catch(() => {});
+    }
   }
 });

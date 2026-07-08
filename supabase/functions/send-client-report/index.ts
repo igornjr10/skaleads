@@ -22,6 +22,7 @@ interface RequestPayload {
   client_id: string;
   template?: Partial<ReportTemplate>;
   save_template?: boolean;
+  targets?: string[];
 }
 
 const PERIOD_DAYS: Record<Period, number> = { "1d": 1, "7d": 7, "14d": 14, "30d": 30 };
@@ -143,7 +144,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { client_id, template: templateOverride, save_template }: RequestPayload = await req.json();
+    const { client_id, template: templateOverride, save_template, targets: targetsOverride }: RequestPayload = await req.json();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
@@ -162,8 +163,9 @@ serve(async (req) => {
     );
 
     if (!client) throw new Error("Cliente não encontrado");
-    const target = client.whatsapp_group_jid || client.whatsapp_number;
-    if (!target) throw new Error("Cliente sem número ou grupo de WhatsApp cadastrado");
+    const defaultTarget = client.whatsapp_group_jid || client.whatsapp_number;
+    const targets = (targetsOverride && targetsOverride.length > 0) ? targetsOverride : (defaultTarget ? [defaultTarget] : []);
+    if (targets.length === 0) throw new Error("Cliente sem número ou grupo de WhatsApp cadastrado");
 
     const savedTemplate: ReportTemplate = client.report_template ?? {};
     const tpl: ReportTemplate = {
@@ -276,20 +278,30 @@ serve(async (req) => {
 
     const message = lines.join("\n");
 
-    // ── 8. Enviar mensagem de texto via Evolution API ─────────────────────────
-    const response = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
-      method: "POST",
-      headers: {
-        apikey: evolutionApiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ number: target, text: message }),
-    });
+    // ── 8. Enviar mensagem de texto via Evolution API (para cada destino) ─────
+    let lastMessageId: string | null = null;
+    const textErrors: string[] = [];
+    for (const target of targets) {
+      try {
+        const response = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
+          method: "POST",
+          headers: {
+            apikey: evolutionApiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ number: target, text: message }),
+        });
 
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || result.error || "Evolution API error");
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || result.error || "Evolution API error");
+        lastMessageId = result.key?.id ?? lastMessageId;
+      } catch (err) {
+        textErrors.push(`${target}: ${(err as Error).message}`);
+      }
+    }
+    if (textErrors.length === targets.length) throw new Error(textErrors.join("; "));
 
-    // ── 9. Gerar e enviar o PDF do relatório ───────────────────────────────────
+    // ── 9. Gerar e enviar o PDF do relatório (para cada destino) ───────────────
     let pdfSent = false;
     let pdfError: string | null = null;
     try {
@@ -312,25 +324,28 @@ serve(async (req) => {
         .replace(/[^a-zA-Z0-9]+/g, "-")
         .replace(/(^-+|-+$)/g, "") || "cliente";
       const fileName = `relatorio-${safeName}.pdf`;
+      const mediaBase64 = base64Encode(new Uint8Array(pdfBytes).buffer);
 
-      const mediaResponse = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendMedia/${evolutionInstance}`, {
-        method: "POST",
-        headers: {
-          apikey: evolutionApiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          number: target,
-          mediatype: "document",
-          mimetype: "application/pdf",
-          fileName,
-          media: base64Encode(new Uint8Array(pdfBytes).buffer),
-        }),
-      });
+      for (const target of targets) {
+        const mediaResponse = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendMedia/${evolutionInstance}`, {
+          method: "POST",
+          headers: {
+            apikey: evolutionApiKey,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            number: target,
+            mediatype: "document",
+            mimetype: "application/pdf",
+            fileName,
+            media: mediaBase64,
+          }),
+        });
 
-      const mediaResult = await mediaResponse.json();
-      if (!mediaResponse.ok) throw new Error(mediaResult.message || mediaResult.error || "Evolution API error (PDF)");
-      pdfSent = true;
+        const mediaResult = await mediaResponse.json();
+        if (!mediaResponse.ok) throw new Error(mediaResult.message || mediaResult.error || "Evolution API error (PDF)");
+        pdfSent = true;
+      }
     } catch (err) {
       pdfError = (err as Error).message;
     }
@@ -343,7 +358,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message_id: result.key?.id ?? null,
+        message_id: lastMessageId,
         preview: message,
         pdf_sent: pdfSent,
         pdf_error: pdfError,

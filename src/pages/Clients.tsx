@@ -1360,7 +1360,10 @@ export default function Clients() {
                   <Card key={client.id} className="overflow-hidden border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center min-w-0">
+                        <div
+                          className="flex items-center min-w-0 cursor-pointer group/clientlink"
+                          onClick={() => navigate(`/clients/${client.id}`)}
+                        >
                           {client.logo_url ? (
                             <img
                               src={client.logo_url}
@@ -1375,7 +1378,7 @@ export default function Clients() {
                             </div>
                           )}
                           <div className="min-w-0">
-                            <h3 className="text-lg font-semibold truncate">{client.name}</h3>
+                            <h3 className="text-lg font-semibold truncate group-hover/clientlink:text-primary group-hover/clientlink:underline">{client.name}</h3>
                             <div className="mt-1 flex flex-wrap gap-2">
                               <Badge variant="outline" className={isArchived ? "border-amber-200 bg-amber-50 text-amber-700" : isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
                                 {isArchived ? "Arquivado" : isActive ? "Ativo" : "Inativo"}
@@ -1480,7 +1483,10 @@ export default function Clients() {
                   return (
                     <TableRow key={client.id}>
                       <TableCell>
-                        <div className="flex items-center gap-3">
+                        <div
+                          className="flex items-center gap-3 cursor-pointer group/clientlink"
+                          onClick={() => navigate(`/clients/${client.id}`)}
+                        >
                           <Avatar className="h-10 w-10 border border-slate-200">
                             {client.logo_url && <AvatarImage src={client.logo_url} alt={client.name} />}
                             <AvatarFallback className={`${getAvatarTone(client.name)} text-xs font-semibold`}>
@@ -1488,7 +1494,7 @@ export default function Clients() {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <p className="font-medium">{client.name}</p>
+                            <p className="font-medium group-hover/clientlink:text-primary group-hover/clientlink:underline">{client.name}</p>
                             <p className="text-xs text-muted-foreground">
                               {[segmentLabel(client.business_segment), [client.city, client.state].filter(Boolean).join("/") || null]
                                 .filter(Boolean)

@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Megaphone, Bell, Settings, Brain, LogOut, MessageSquare, MessageCircle } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Bell, Settings, Brain, LogOut, MessageSquare, MessageCircle, Activity } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,6 +23,7 @@ const items = [
   { title: "Campanhas",      url: "/campaigns",  icon: Megaphone },
   { title: "Alertas",        url: "/alerts",     icon: Bell },
   { title: "Msgs WhatsApp",  url: "/whatsapp-scheduled", icon: MessageCircle },
+  { title: "Automações",    url: "/automations", icon: Activity },
   { title: "Assistente IA",  url: "/chat",       icon: MessageSquare },
   { title: "Andromeda IA",   url: "/andromeda",  icon: Brain },
   { title: "Configurações",  url: "/settings",   icon: Settings },
