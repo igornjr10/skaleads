@@ -8,12 +8,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { Copy, Loader2, RefreshCw, Users } from "lucide-react";
 
 interface Member {
   user_id: string;
   email: string | null;
   full_name: string | null;
   role: string;
+}
+
+interface WhatsAppGroup {
+  id: string;
+  subject: string;
+  size: number;
+  pictureUrl: string | null;
 }
 
 const ROLES = ["owner", "admin", "analyst", "viewer"] as const;
@@ -23,6 +31,8 @@ export default function Settings() {
   const isOwner = role === "owner";
   const [members, setMembers] = useState<Member[]>([]);
   const [fullName, setFullName] = useState("");
+  const [whatsappGroups, setWhatsappGroups] = useState<WhatsAppGroup[] | null>(null);
+  const [loadingGroups, setLoadingGroups] = useState(false);
 
   async function load() {
     const { data: profiles } = await supabase.from("profiles").select("id, email, full_name");
@@ -46,6 +56,25 @@ export default function Settings() {
     const { error } = await supabase.from("profiles").update({ full_name: fullName }).eq("id", user.id);
     if (error) return toast.error(error.message);
     toast.success("Perfil atualizado");
+  }
+
+  async function loadWhatsappGroups() {
+    setLoadingGroups(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      setWhatsappGroups(data.groups ?? []);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao carregar grupos");
+    } finally {
+      setLoadingGroups(false);
+    }
+  }
+
+  function copyGroupId(id: string) {
+    navigator.clipboard.writeText(id);
+    toast.success("JID do grupo copiado");
   }
 
   async function changeRole(userId: string, newRole: string) {
@@ -179,6 +208,54 @@ export default function Settings() {
             </p>
           </div>
 
+        </CardContent>
+      </Card>
+
+      <Card className="shadow-card">
+        <CardHeader>
+          <CardTitle>WhatsApp — Grupos (Evolution API)</CardTitle>
+          <CardDescription>
+            Grupos ativos no número conectado à instância Evolution. Copie o JID para usar como destino de alertas/relatórios.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Button onClick={loadWhatsappGroups} disabled={loadingGroups} variant="outline" size="sm">
+            {loadingGroups ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            {whatsappGroups ? "Atualizar grupos" : "Carregar grupos"}
+          </Button>
+
+          {whatsappGroups && whatsappGroups.length === 0 && (
+            <p className="text-sm text-muted-foreground">Nenhum grupo encontrado nesse número.</p>
+          )}
+
+          {whatsappGroups && whatsappGroups.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Grupo</TableHead>
+                  <TableHead>Membros</TableHead>
+                  <TableHead>JID</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {whatsappGroups.map((g) => (
+                  <TableRow key={g.id}>
+                    <TableCell className="font-medium">{g.subject}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      <span className="inline-flex items-center gap-1"><Users className="h-3.5 w-3.5" />{g.size}</span>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">{g.id}</TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyGroupId(g.id)}>
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

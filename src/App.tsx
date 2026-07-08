@@ -24,6 +24,7 @@ const ClientAudiences = lazy(() => import("./pages/ClientAudiences"));
 const AlertBuilder = lazy(() => import("./pages/AlertBuilder"));
 const AlertEvents = lazy(() => import("./pages/AlertEvents"));
 const Chat = lazy(() => import("./pages/Chat"));
+const WhatsappScheduled = lazy(() => import("./pages/WhatsappScheduled"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -62,6 +63,7 @@ const App = () => (
                 <Route path="/alerts/:id/edit" element={<AlertBuilder />} />
                 <Route path="/alert-events" element={<AlertEvents />} />
                 <Route path="/report-schedules" element={<ReportSchedules />} />
+                <Route path="/whatsapp-scheduled" element={<WhatsappScheduled />} />
                 <Route path="/chat" element={<Chat />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>

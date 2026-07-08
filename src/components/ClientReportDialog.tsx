@@ -36,7 +36,13 @@ interface ReportTemplate {
 interface Props {
   open: boolean;
   onClose: () => void;
-  client: { id: string; name: string; whatsapp_number?: string | null; report_template?: ReportTemplate | null };
+  client: {
+    id: string;
+    name: string;
+    whatsapp_number?: string | null;
+    whatsapp_group_jid?: string | null;
+    report_template?: ReportTemplate | null;
+  };
 }
 
 const ALL_METRICS: { key: MetricKey; label: string }[] = [
@@ -106,8 +112,8 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
   }
 
   async function handleSend() {
-    if (!client.whatsapp_number) {
-      toast.error("Cadastre o número de WhatsApp do cliente antes de enviar");
+    if (!client.whatsapp_number && !client.whatsapp_group_jid) {
+      toast.error("Cadastre o número ou o grupo de WhatsApp do cliente antes de enviar");
       return;
     }
     if (metrics.length === 0) {
@@ -131,6 +137,7 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
       setPreview(data.preview ?? null);
       setShowPreview(true);
       toast.success("Relatório enviado com sucesso!");
+      if (data?.pdf_sent === false) toast.warning(data?.pdf_error || "Falha ao enviar o PDF do relatório");
       if (saveTemplate) toast.info("Template salvo para este cliente");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao enviar relatório");
@@ -141,7 +148,7 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
 
   async function handlePreview() {
     if (preview) { setShowPreview(p => !p); return; }
-    if (!client.whatsapp_number) {
+    if (!client.whatsapp_number && !client.whatsapp_group_jid) {
       // Gera preview local sem enviar
       const lines = [
         `📊 *Relatório de Performance*`,
@@ -152,8 +159,7 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
         ...metrics.map(m => `${ALL_METRICS.find(x => x.key === m)?.label ?? m}: *—*`),
         includeCampaigns ? `\n*🏃 Campanhas ativas (top 5):*\n• (dados reais ao enviar)` : "",
         includeAudit ? `\n*🔍 Auditoria da conta:* 🟡 —/100` : "",
-        `\n🔗 ver relatório completo`,
-        `_Enviado por MarketProAds_`,
+        `\n_Enviado por MarketProAds_`,
       ].filter(Boolean).join("\n");
       setPreview(lines);
       setShowPreview(true);
@@ -162,7 +168,7 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
     toast.info("Clique em Enviar para ver o preview com dados reais");
   }
 
-  const hasNumber = !!client.whatsapp_number;
+  const hasNumber = !!client.whatsapp_number || !!client.whatsapp_group_jid;
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
@@ -176,8 +182,11 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
 
         {!hasNumber && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-            ⚠️ Este cliente não tem número de WhatsApp cadastrado. Edite o cliente para adicionar.
+            ⚠️ Este cliente não tem número nem grupo de WhatsApp cadastrado. Edite o cliente para adicionar.
           </div>
+        )}
+        {hasNumber && client.whatsapp_group_jid && (
+          <p className="text-xs text-muted-foreground">Enviando para o grupo do WhatsApp deste cliente</p>
         )}
 
         <div className="space-y-5">

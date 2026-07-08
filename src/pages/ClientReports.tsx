@@ -22,11 +22,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ChevronLeft, Download, Eye, FileText, Link2, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, Download, Eye, FileText, Link2, Loader2, MessageSquare, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
-import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
+import { blobToBase64, buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
 
 const ReportGeneratorDialog = lazy(() =>
   import("@/components/reports/ReportGeneratorDialog").then((module) => ({ default: module.ReportGeneratorDialog }))
@@ -47,6 +47,8 @@ interface Report {
 interface Client {
   id: string;
   name: string;
+  whatsapp_number: string | null;
+  whatsapp_group_jid: string | null;
 }
 
 const STATUS_LABELS: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -64,6 +66,7 @@ export default function ClientReports() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showGenerator, setShowGenerator] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (clientId) {
@@ -73,7 +76,11 @@ export default function ClientReports() {
   }, [clientId]);
 
   async function fetchClient() {
-    const { data } = await supabase.from("clients").select("id, name").eq("id", clientId!).single();
+    const { data } = await supabase
+      .from("clients")
+      .select("id, name, whatsapp_number, whatsapp_group_jid")
+      .eq("id", clientId!)
+      .single();
     if (data) setClient(data);
   }
 
@@ -109,6 +116,42 @@ export default function ClientReports() {
       downloadBlob(blob, `${report.name}.pdf`);
     } catch {
       toast.error("Erro ao gerar PDF");
+    }
+  }
+
+  async function sendWhatsapp(report: Report) {
+    if (!report.data) {
+      toast.error("Dados do relatorio nao disponiveis");
+      return;
+    }
+    if (!client?.whatsapp_number && !client?.whatsapp_group_jid) {
+      toast.error("Cadastre o numero ou o grupo de WhatsApp do cliente antes de enviar");
+      return;
+    }
+
+    setSendingId(report.id);
+    try {
+      const blob = await buildReportPdfBlob(report.data);
+      const media_base64 = await blobToBase64(blob);
+      const caption = `📊 *Relatório de Performance*\n👤 *${client.name}*\n📅 _${report.period?.label ?? ""}_`;
+
+      const { data, error } = await supabase.functions.invoke("send-report-whatsapp", {
+        body: {
+          client_id: client.id,
+          file_name: `${report.name}.pdf`,
+          media_base64,
+          caption,
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+
+      toast.success("Relatorio enviado no WhatsApp!");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar relatorio no WhatsApp");
+    } finally {
+      setSendingId(null);
     }
   }
 
@@ -217,6 +260,19 @@ export default function ClientReports() {
                           <DropdownMenuItem onClick={() => downloadPdf(report)}>
                             <Download className="mr-2 h-4 w-4" />
                             Baixar PDF
+                          </DropdownMenuItem>
+                        )}
+                        {report.data && (client?.whatsapp_number || client?.whatsapp_group_jid) && (
+                          <DropdownMenuItem
+                            onClick={() => sendWhatsapp(report)}
+                            disabled={sendingId === report.id}
+                          >
+                            {sendingId === report.id ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <MessageSquare className="mr-2 h-4 w-4" />
+                            )}
+                            Enviar por WhatsApp
                           </DropdownMenuItem>
                         )}
                         {report.share_token && (

@@ -5,8 +5,6 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const DATAFY_BASE_URL = "https://cloud.datafyapi.com.br";
-
 interface FiredEntity {
   entityType: string;
   entityId: string;
@@ -19,6 +17,7 @@ interface WhatsAppAlertPayload {
   alertDescription: string | null;
   entities: FiredEntity[];
   ruleSnapshot: { conditions: any[]; logic: string };
+  target?: string | null;
 }
 
 function buildMessage(payload: WhatsAppAlertPayload): string {
@@ -62,33 +61,37 @@ serve(async (req) => {
   try {
     const payload: WhatsAppAlertPayload = await req.json();
 
-    const datafyApiKey = Deno.env.get("DATAFY_API_KEY");
+    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
+    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE");
+    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
     const managerNumber = Deno.env.get("MANAGER_WHATSAPP_NUMBER");
 
-    if (!datafyApiKey) {
+    if (!evolutionApiUrl || !evolutionInstance || !evolutionApiKey) {
       return new Response(
-        JSON.stringify({ error: "DATAFY_API_KEY não configurado" }),
+        JSON.stringify({ error: "EVOLUTION_API_URL / EVOLUTION_INSTANCE / EVOLUTION_API_KEY não configurados" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (!managerNumber) {
+    const target = payload.target || managerNumber;
+
+    if (!target) {
       return new Response(
-        JSON.stringify({ error: "MANAGER_WHATSAPP_NUMBER não configurado" }),
+        JSON.stringify({ error: "MANAGER_WHATSAPP_NUMBER não configurado e nenhum destino informado" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const message = buildMessage(payload);
 
-    const response = await fetch(`${DATAFY_BASE_URL}/messages/send/text`, {
+    const response = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${datafyApiKey}`,
+        apikey: evolutionApiKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        to: managerNumber,
+        number: target,
         text: message,
       }),
     });
@@ -96,11 +99,11 @@ serve(async (req) => {
     const result = await response.json();
 
     if (!response.ok) {
-      throw new Error(result.message || result.error || "Datafy API error");
+      throw new Error(result.message || result.error || "Evolution API error");
     }
 
     return new Response(
-      JSON.stringify({ success: true, message_id: result.messages?.[0]?.id }),
+      JSON.stringify({ success: true, message_id: result.key?.id ?? null }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

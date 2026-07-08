@@ -27,6 +27,7 @@ import {
   MapPin,
   Store,
   Send,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +99,7 @@ interface Client {
   meta_sync_status: "pending" | "connected" | "syncing" | "healthy" | "warning" | "error" | "expired";
   created_at: string;
   whatsapp_number: string | null;
+  whatsapp_group_jid: string | null;
   report_template: Record<string, unknown> | null;
 }
 
@@ -185,6 +187,9 @@ export default function Clients() {
   const [newRadius, setNewRadius] = useState("");
   const [newGoal, setNewGoal] = useState("");
   const [newWhatsapp, setNewWhatsapp] = useState("");
+  const [newWhatsappGroupJid, setNewWhatsappGroupJid] = useState("");
+  const [waGroups, setWaGroups] = useState<{ id: string; subject: string }[] | null>(null);
+  const [loadingWaGroups, setLoadingWaGroups] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [connectClient, setConnectClient] = useState<Client | null>(null);
@@ -551,12 +556,28 @@ export default function Clients() {
     setNewRadius("");
     setNewGoal("");
     setNewWhatsapp("");
+    setNewWhatsappGroupJid("");
+  }
+
+  async function loadWaGroups() {
+    if (waGroups || loadingWaGroups) return;
+    setLoadingWaGroups(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
+      if (error) throw new Error(error.message);
+      setWaGroups(data?.groups ?? []);
+    } catch {
+      setWaGroups([]);
+    } finally {
+      setLoadingWaGroups(false);
+    }
   }
 
   function openCreateDialog() {
     setEditClient(null);
     resetClientForm();
     setCreateOpen(true);
+    loadWaGroups();
   }
 
   function openEditDialog(client: Client) {
@@ -570,7 +591,9 @@ export default function Clients() {
     setNewRadius(client.service_radius_km != null ? String(client.service_radius_km) : "");
     setNewGoal(client.primary_goal ?? "");
     setNewWhatsapp(client.whatsapp_number ?? "");
+    setNewWhatsappGroupJid(client.whatsapp_group_jid ?? "");
     setCreateOpen(true);
+    loadWaGroups();
   }
 
   async function createClient(event: React.FormEvent) {
@@ -586,6 +609,7 @@ export default function Clients() {
       service_radius_km: newRadius.trim() ? Number(newRadius) : null,
       primary_goal: newGoal || null,
       whatsapp_number: newWhatsapp.trim().replace(/\D/g, "") || null,
+      whatsapp_group_jid: newWhatsappGroupJid || null,
     };
     const { error } = editClient
       ? await supabase.from("clients").update(payload).eq("id", editClient.id)
@@ -916,6 +940,26 @@ export default function Clients() {
                       inputMode="numeric"
                     />
                     <p className="text-xs text-muted-foreground">DDI + DDD + número, só dígitos. Ex: 5511999999999</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="whatsappGroup" className="flex items-center gap-1.5">
+                      Grupo do WhatsApp
+                      <span className="text-xs font-normal text-muted-foreground">(opcional, sobrepõe o número acima)</span>
+                    </Label>
+                    <Select
+                      value={newWhatsappGroupJid || "none"}
+                      onValueChange={(v) => setNewWhatsappGroupJid(v === "none" ? "" : v)}
+                    >
+                      <SelectTrigger id="whatsappGroup">
+                        {loadingWaGroups ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SelectValue />}
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhum — usar número acima</SelectItem>
+                        {(waGroups ?? []).map(g => (
+                          <SelectItem key={g.id} value={g.id}>{g.subject}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <DialogFooter>
                     <Button type="submit" disabled={saving}>{saving ? "Salvando..." : editClient ? "Salvar" : "Criar"}</Button>

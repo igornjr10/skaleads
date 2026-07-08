@@ -1,7 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const DATAFY_BASE_URL = "https://cloud.datafyapi.com.br";
-
 type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status";
 type Comparator = "gt" | "gte" | "lt" | "lte" | "eq" | "change_pct";
 type Period = "1d" | "3d" | "7d" | "14d" | "30d";
@@ -25,6 +23,7 @@ interface AlertChannels {
   email: boolean;
   emailRecipients: string[];
   whatsapp: boolean;
+  whatsappTarget?: string;
 }
 
 interface StoredAlert {
@@ -279,13 +278,21 @@ serve(async (req) => {
 
   const cronSecret = Deno.env.get("CRON_SECRET");
   if (cronSecret && req.headers.get("x-cron-secret") !== cronSecret) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Content-Type": "application/json",
+      },
+    });
   }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
-    const datafyKey = Deno.env.get("DATAFY_API_KEY") ?? "";
+    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL") ?? "";
+    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE") ?? "";
+    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY") ?? "";
     const managerNumber = Deno.env.get("MANAGER_WHATSAPP_NUMBER") ?? "";
 
     if (!supabaseUrl || !svcKey) throw new Error("SUPABASE_URL / SVC_ROLE_KEY não configurados");
@@ -325,13 +332,14 @@ serve(async (req) => {
 
         const channels: AlertChannels = alert.channels;
 
-        if (channels.whatsapp && datafyKey && managerNumber) {
+        const whatsappTarget = channels.whatsappTarget || managerNumber;
+        if (channels.whatsapp && evolutionApiUrl && evolutionInstance && evolutionApiKey && whatsappTarget) {
           try {
             const message = buildWhatsAppMessage(alert, firedEntities);
-            await fetch(`${DATAFY_BASE_URL}/messages/send/text`, {
+            await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
               method: "POST",
-              headers: { Authorization: `Bearer ${datafyKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ to: managerNumber, text: message }),
+              headers: { apikey: evolutionApiKey, "Content-Type": "application/json" },
+              body: JSON.stringify({ number: whatsappTarget, text: message }),
             });
           } catch {
             // non-blocking

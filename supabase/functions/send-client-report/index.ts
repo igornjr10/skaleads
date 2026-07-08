@@ -1,11 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
+import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-const DATAFY_BASE_URL = "https://cloud.datafyapi.com.br";
 
 type Period = "1d" | "7d" | "14d" | "30d";
 type MetricKey = "spend" | "impressions" | "clicks" | "ctr" | "cpc" | "cpm" | "cpa" | "roas" | "conversions";
@@ -44,6 +44,18 @@ const METRIC_LABEL: Record<MetricKey, string> = {
   conversions: "✅ Conversões",
 };
 
+const METRIC_LABEL_PLAIN: Record<MetricKey, string> = {
+  spend: "Investimento",
+  impressions: "Impressões",
+  clicks: "Cliques",
+  ctr: "CTR",
+  cpc: "CPC",
+  cpm: "CPM",
+  cpa: "CPA",
+  roas: "ROAS",
+  conversions: "Conversões",
+};
+
 function fmtBRL(v: number) {
   return `R$ ${v.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 }
@@ -75,6 +87,58 @@ function dbPatch(supabaseUrl: string, svcKey: string, path: string, body: object
   });
 }
 
+async function buildReportPdf(params: {
+  clientName: string;
+  periodLabel: string;
+  metrics: { label: string; value: string }[];
+  campaigns: { name: string; spend: string; ctr: string }[];
+  auditScore: number | null;
+  generatedAt: string;
+}): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const page = doc.addPage([595.28, 841.89]); // A4
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+
+  const margin = 50;
+  let y = 780;
+  const orange = rgb(0.98, 0.45, 0.09);
+  const dark = rgb(0.15, 0.15, 0.15);
+  const gray = rgb(0.45, 0.45, 0.45);
+
+  const draw = (text: string, opts: { size?: number; bold?: boolean; color?: ReturnType<typeof rgb> } = {}) => {
+    const size = opts.size ?? 11;
+    const safeText = Array.from(text).filter(ch => (ch.codePointAt(0) ?? 0) <= 0xff).join("");
+    page.drawText(safeText, { x: margin, y, size, font: opts.bold ? bold : font, color: opts.color ?? dark });
+    y -= size + 8;
+  };
+
+  draw("Relatório de Performance", { size: 20, bold: true, color: orange });
+  draw(params.clientName, { size: 14, bold: true });
+  draw(params.periodLabel, { size: 10, color: gray });
+  y -= 10;
+
+  draw("Resumo do período", { size: 13, bold: true });
+  for (const m of params.metrics) draw(`${m.label}: ${m.value}`, { size: 11 });
+
+  if (params.campaigns.length > 0) {
+    y -= 6;
+    draw("Campanhas ativas (top 5)", { size: 13, bold: true });
+    for (const c of params.campaigns) draw(`- ${c.name} - ${c.spend} | CTR ${c.ctr}`, { size: 10 });
+  }
+
+  if (params.auditScore !== null) {
+    y -= 6;
+    draw(`Auditoria da conta: ${params.auditScore}/100`, { size: 12, bold: true });
+  }
+
+  y -= 20;
+  draw(`Gerado em ${params.generatedAt}`, { size: 9, color: gray });
+  draw("Enviado por MarketProAds", { size: 9, color: gray });
+
+  return doc.save();
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -83,20 +147,23 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
-    const datafyKey = Deno.env.get("DATAFY_API_KEY")!;
+    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL")!;
+    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE")!;
+    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
-    if (!supabaseUrl || !svcKey || !datafyKey) {
+    if (!supabaseUrl || !svcKey || !evolutionApiUrl || !evolutionInstance || !evolutionApiKey) {
       throw new Error("Variáveis de ambiente não configuradas");
     }
 
     // ── 1. Buscar cliente ─────────────────────────────────────────────────────
     const [client] = await dbGet(
       supabaseUrl, svcKey,
-      `clients?id=eq.${client_id}&select=id,name,whatsapp_number,report_template&limit=1`
+      `clients?id=eq.${client_id}&select=id,name,whatsapp_number,whatsapp_group_jid,report_template&limit=1`
     );
 
     if (!client) throw new Error("Cliente não encontrado");
-    if (!client.whatsapp_number) throw new Error("Cliente sem número de WhatsApp cadastrado");
+    const target = client.whatsapp_group_jid || client.whatsapp_number;
+    if (!target) throw new Error("Cliente sem número ou grupo de WhatsApp cadastrado");
 
     const savedTemplate: ReportTemplate = client.report_template ?? {};
     const tpl: ReportTemplate = {
@@ -204,33 +271,83 @@ serve(async (req) => {
       lines.push(`*🔍 Auditoria da conta:* ${emoji} ${auditScore}/100`);
     }
 
-    const siteUrl = Deno.env.get("PUBLIC_SITE_URL") || "https://ad-campaign-hub-one.vercel.app";
     lines.push("");
-    lines.push(`🔗 ${siteUrl}/clients/${client_id}/reports`);
     lines.push("_Enviado por MarketProAds_");
 
     const message = lines.join("\n");
 
-    // ── 8. Enviar via Datafy ──────────────────────────────────────────────────
-    const response = await fetch(`${DATAFY_BASE_URL}/messages/send/text`, {
+    // ── 8. Enviar mensagem de texto via Evolution API ─────────────────────────
+    const response = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${datafyKey}`,
+        apikey: evolutionApiKey,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ to: client.whatsapp_number, text: message }),
+      body: JSON.stringify({ number: target, text: message }),
     });
 
     const result = await response.json();
-    if (!response.ok) throw new Error(result.message || result.error || "Datafy API error");
+    if (!response.ok) throw new Error(result.message || result.error || "Evolution API error");
 
-    // ── 9. Salvar template se solicitado ──────────────────────────────────────
+    // ── 9. Gerar e enviar o PDF do relatório ───────────────────────────────────
+    let pdfSent = false;
+    let pdfError: string | null = null;
+    try {
+      const pdfBytes = await buildReportPdf({
+        clientName: client.name,
+        periodLabel: PERIOD_LABEL[tpl.period],
+        metrics: tpl.metrics.map(m => ({ label: METRIC_LABEL_PLAIN[m], value: metricValues[m] })),
+        campaigns: campaigns.map(c => ({
+          name: c.name,
+          spend: fmtBRL(c.spend ?? 0),
+          ctr: fmtPct(c.ctr ?? 0),
+        })),
+        auditScore: tpl.include_audit ? auditScore : null,
+        generatedAt: now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+      });
+
+      const safeName = client.name
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-zA-Z0-9]+/g, "-")
+        .replace(/(^-+|-+$)/g, "") || "cliente";
+      const fileName = `relatorio-${safeName}.pdf`;
+
+      const mediaResponse = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendMedia/${evolutionInstance}`, {
+        method: "POST",
+        headers: {
+          apikey: evolutionApiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          number: target,
+          mediatype: "document",
+          mimetype: "application/pdf",
+          fileName,
+          media: base64Encode(new Uint8Array(pdfBytes).buffer),
+        }),
+      });
+
+      const mediaResult = await mediaResponse.json();
+      if (!mediaResponse.ok) throw new Error(mediaResult.message || mediaResult.error || "Evolution API error (PDF)");
+      pdfSent = true;
+    } catch (err) {
+      pdfError = (err as Error).message;
+    }
+
+    // ── 10. Salvar template se solicitado ──────────────────────────────────────
     if (save_template) {
       await dbPatch(supabaseUrl, svcKey, `clients?id=eq.${client_id}`, { report_template: tpl });
     }
 
     return new Response(
-      JSON.stringify({ success: true, message_id: result.messages?.[0]?.id, preview: message }),
+      JSON.stringify({
+        success: true,
+        message_id: result.key?.id ?? null,
+        preview: message,
+        pdf_sent: pdfSent,
+        pdf_error: pdfError,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

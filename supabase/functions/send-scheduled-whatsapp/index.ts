@@ -1,0 +1,166 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+};
+
+interface ScheduledMessage {
+  id: string;
+  name: string;
+  message: string;
+  target_group_jids: string[];
+  send_time: string;
+  is_active: boolean;
+  last_sent_date: string | null;
+}
+
+function dbGet(supabaseUrl: string, svcKey: string, path: string) {
+  return fetch(`${supabaseUrl}/rest/v1/${path}`, {
+    headers: {
+      apikey: svcKey,
+      Authorization: `Bearer ${svcKey}`,
+      "Content-Type": "application/json",
+    },
+  }).then(r => r.json());
+}
+
+function dbPatch(supabaseUrl: string, svcKey: string, path: string, body: object) {
+  return fetch(`${supabaseUrl}/rest/v1/${path}`, {
+    method: "PATCH",
+    headers: {
+      apikey: svcKey,
+      Authorization: `Bearer ${svcKey}`,
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function todayInSaoPaulo(): { dateStr: string; minutesOfDay: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? "00";
+  const dateStr = `${get("year")}-${get("month")}-${get("day")}`;
+  const minutesOfDay = parseInt(get("hour")) * 60 + parseInt(get("minute"));
+  return { dateStr, minutesOfDay };
+}
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return h * 60 + m;
+}
+
+async function sendToGroups(
+  evolutionApiUrl: string,
+  evolutionInstance: string,
+  evolutionApiKey: string,
+  jids: string[],
+  text: string
+) {
+  for (const jid of jids) {
+    try {
+      await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
+        method: "POST",
+        headers: { apikey: evolutionApiKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ number: jid, text }),
+      });
+    } catch {
+      // non-blocking — best-effort per group
+    }
+  }
+}
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
+    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL")!;
+    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE")!;
+    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
+
+    if (!supabaseUrl || !svcKey || !evolutionApiUrl || !evolutionInstance || !evolutionApiKey) {
+      throw new Error("Variáveis de ambiente não configuradas");
+    }
+
+    const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+    const testId = body?.test_id as string | undefined;
+
+    // ── Chamada de cron (sem test_id): exige o segredo do pg_cron ──────────────
+    if (!testId) {
+      const cronSecret = Deno.env.get("CRON_SECRET");
+      if (cronSecret && req.headers.get("x-cron-secret") !== cronSecret) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
+    // ── Modo teste: envia imediatamente uma mensagem específica, sem checar horário/data ──
+    if (testId) {
+      const [scheduled]: ScheduledMessage[] = await dbGet(
+        supabaseUrl, svcKey,
+        `whatsapp_scheduled_messages?id=eq.${testId}&select=*&limit=1`
+      );
+      if (!scheduled) throw new Error("Mensagem agendada não encontrada");
+
+      await sendToGroups(evolutionApiUrl, evolutionInstance, evolutionApiKey, scheduled.target_group_jids, scheduled.message);
+
+      return new Response(
+        JSON.stringify({ success: true, tested: scheduled.name, groups: scheduled.target_group_jids.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Modo cron: avalia todas as mensagens ativas ────────────────────────────
+    const { dateStr, minutesOfDay } = todayInSaoPaulo();
+
+    const scheduled: ScheduledMessage[] = await dbGet(
+      supabaseUrl, svcKey,
+      `whatsapp_scheduled_messages?is_active=eq.true&select=*`
+    );
+
+    if (!Array.isArray(scheduled)) {
+      throw new Error(`Erro ao consultar whatsapp_scheduled_messages: ${JSON.stringify(scheduled)}`);
+    }
+
+    let sentCount = 0;
+    for (const item of (scheduled || [])) {
+      try {
+        if (item.last_sent_date === dateStr) continue;
+        if (timeToMinutes(item.send_time) > minutesOfDay) continue;
+        if (!item.target_group_jids || item.target_group_jids.length === 0) continue;
+
+        await sendToGroups(evolutionApiUrl, evolutionInstance, evolutionApiKey, item.target_group_jids, item.message);
+        await dbPatch(supabaseUrl, svcKey, `whatsapp_scheduled_messages?id=eq.${item.id}`, { last_sent_date: dateStr });
+        sentCount++;
+      } catch {
+        // individual failures are non-blocking
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, checked: (scheduled || []).length, sent: sentCount }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  } catch (err) {
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+});

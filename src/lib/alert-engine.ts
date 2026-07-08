@@ -26,6 +26,7 @@ export interface AlertChannels {
   email: boolean;
   emailRecipients: string[];
   whatsapp: boolean;
+  whatsappTarget?: string;
 }
 
 export interface StoredAlert {
@@ -355,6 +356,7 @@ export async function runAllAlerts(
                 alertDescription: alert.description,
                 entities: firedEntities,
                 ruleSnapshot: alert.rule_json,
+                target: channels.whatsappTarget || null,
               },
             });
           } catch {

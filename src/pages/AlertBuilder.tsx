@@ -123,6 +123,9 @@ export default function AlertBuilder() {
   const [channelEmail, setChannelEmail] = useState(false);
   const [emailRecipients, setEmailRecipients] = useState("");
   const [channelWhatsapp, setChannelWhatsapp] = useState(false);
+  const [whatsappTarget, setWhatsappTarget] = useState("");
+  const [waGroups, setWaGroups] = useState<{ id: string; subject: string }[] | null>(null);
+  const [loadingWaGroups, setLoadingWaGroups] = useState(false);
   const [cooldown, setCooldown] = useState(60);
 
   useEffect(() => {
@@ -144,8 +147,24 @@ export default function AlertBuilder() {
     setChannelEmail(!!ch.email);
     setEmailRecipients((ch.emailRecipients || []).join("\n"));
     setChannelWhatsapp(!!ch.whatsapp);
+    setWhatsappTarget(ch.whatsappTarget || "");
     setCooldown(data.cooldown_minutes || 60);
     setShowTemplates(false);
+    if (ch.whatsapp) loadWaGroups();
+  }
+
+  async function loadWaGroups() {
+    if (waGroups || loadingWaGroups) return;
+    setLoadingWaGroups(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
+      if (error) throw new Error(error.message);
+      setWaGroups(data?.groups ?? []);
+    } catch {
+      setWaGroups([]);
+    } finally {
+      setLoadingWaGroups(false);
+    }
   }
 
   function applyTemplate(templateId: string) {
@@ -214,6 +233,7 @@ export default function AlertBuilder() {
           alertDescription: description || null,
           entities,
           ruleSnapshot: { conditions, logic },
+          target: whatsappTarget || null,
         },
       });
       if (error) throw new Error(error.message);
@@ -243,6 +263,7 @@ export default function AlertBuilder() {
         email: channelEmail,
         emailRecipients: emailRecipients.split(/[\n,;]/).map(e => e.trim()).filter(e => e.includes("@")),
         whatsapp: channelWhatsapp,
+        whatsappTarget: whatsappTarget || undefined,
       } as any,
       cooldown_minutes: cooldown,
       is_active: true,
@@ -475,10 +496,29 @@ export default function AlertBuilder() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">WhatsApp</p>
-                <p className="text-xs text-muted-foreground">Mensagem para o gestor via Datafy (WhatsApp Business)</p>
+                <p className="text-xs text-muted-foreground">Mensagem via WhatsApp (Evolution API)</p>
               </div>
-              <Switch checked={channelWhatsapp} onCheckedChange={setChannelWhatsapp} />
+              <Switch
+                checked={channelWhatsapp}
+                onCheckedChange={(v) => { setChannelWhatsapp(v); if (v) loadWaGroups(); }}
+              />
             </div>
+            {channelWhatsapp && (
+              <div className="space-y-1">
+                <Label className="text-xs">Destino</Label>
+                <Select value={whatsappTarget || "manager"} onValueChange={v => setWhatsappTarget(v === "manager" ? "" : v)}>
+                  <SelectTrigger className="text-sm">
+                    {loadingWaGroups ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SelectValue />}
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manager">Gestor (número padrão)</SelectItem>
+                    {(waGroups ?? []).map(g => (
+                      <SelectItem key={g.id} value={g.id}>{g.subject}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <Separator />
             <div className="space-y-1">
               <Label className="text-xs">Cooldown — reenvio mínimo após disparo</Label>
