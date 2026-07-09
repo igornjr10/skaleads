@@ -16,7 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, MessageCircle, Trash2, Pencil, Send, Loader2, Users } from "lucide-react";
+import { Plus, Trash2, Pencil, Send, Loader2, Users } from "lucide-react";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -196,7 +197,7 @@ export default function WhatsappScheduled() {
       ) : items.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <MessageCircle className="h-10 w-10 text-muted-foreground mb-3" />
+            <WhatsAppIcon className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="font-medium">Nenhuma mensagem agendada</p>
             <p className="text-sm text-muted-foreground mt-1">
               Crie um agendamento para enviar mensagens automáticas todos os dias
@@ -212,7 +213,7 @@ export default function WhatsappScheduled() {
           {items.map(item => (
             <Card key={item.id}>
               <CardContent className="flex items-start gap-4 py-4">
-                <MessageCircle className="h-8 w-8 text-green-600 shrink-0 mt-1" />
+                <WhatsAppIcon className="h-8 w-8 text-green-600 shrink-0 mt-1" />
 
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex items-center gap-2 flex-wrap">

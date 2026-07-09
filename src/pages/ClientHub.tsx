@@ -9,9 +9,9 @@ import {
   Megaphone,
   ShieldCheck,
   Bell,
-  MessageCircle,
   ArrowRight,
 } from "lucide-react";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { supabase } from "@/integrations/supabase/client";
 import { loadLatestAudit } from "@/lib/audit/runner";
 import type { AuditReport } from "@/lib/audit/types";
@@ -285,7 +285,7 @@ export default function ClientHub() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground">
-              <MessageCircle className="h-4 w-4" /> WhatsApp / Relatórios
+              <WhatsAppIcon className="h-4 w-4 text-green-600" /> WhatsApp / Relatórios
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
