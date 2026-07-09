@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Calendar, Trash2, Mail } from "lucide-react";
+import { Plus, Calendar, Trash2 } from "lucide-react";
+import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -65,7 +66,6 @@ export default function ReportSchedules() {
   const [formClientId, setFormClientId] = useState("");
   const [formCron, setFormCron] = useState("0 9 1 * *");
   const [formCronPreset, setFormCronPreset] = useState("0 9 1 * *");
-  const [formEmails, setFormEmails] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -119,16 +119,6 @@ export default function ReportSchedules() {
       return;
     }
 
-    const emails = formEmails
-      .split(/[,;\n]/)
-      .map(e => e.trim())
-      .filter(e => e.includes("@"));
-
-    if (emails.length === 0) {
-      toast.error("Informe ao menos um email válido");
-      return;
-    }
-
     setSaving(true);
     const { data: session } = await supabase.auth.getSession();
     const tenantId = session.session?.user.id;
@@ -137,7 +127,6 @@ export default function ReportSchedules() {
       tenant_id: tenantId,
       client_id: formClientId,
       cron: formCron,
-      email_recipients: emails,
       is_active: true,
     });
 
@@ -148,7 +137,6 @@ export default function ReportSchedules() {
       setShowDialog(false);
       setFormClientId("");
       setFormCron("0 9 1 * *");
-      setFormEmails("");
       fetchSchedules();
     }
     setSaving(false);
@@ -159,7 +147,7 @@ export default function ReportSchedules() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Agendamentos de Relatórios</h1>
-          <p className="text-sm text-muted-foreground mt-1">Configure envio automático de relatórios por email</p>
+          <p className="text-sm text-muted-foreground mt-1">Configure envio automático de relatórios via WhatsApp</p>
         </div>
         <Button onClick={() => setShowDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -201,9 +189,9 @@ export default function ReportSchedules() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{cronLabel(schedule.cron)}</p>
                   <div className="flex items-center gap-1 mt-1">
-                    <Mail className="h-3 w-3 text-muted-foreground" />
+                    <WhatsAppIcon className="h-3 w-3 text-green-600" />
                     <p className="text-xs text-muted-foreground truncate">
-                      {schedule.email_recipients.join(", ")}
+                      Reenvia o relatório mais recente pro WhatsApp do cliente
                     </p>
                   </div>
                   {schedule.last_run_at && (
@@ -284,15 +272,10 @@ export default function ReportSchedules() {
               )}
             </div>
 
-            <div className="space-y-1">
-              <Label className="text-xs">Destinatários (um por linha ou separado por vírgula)</Label>
-              <textarea
-                value={formEmails}
-                onChange={e => setFormEmails(e.target.value)}
-                placeholder="cliente@empresa.com&#10;gestor@empresa.com"
-                className="w-full text-sm border rounded-md px-3 py-2 min-h-[80px] bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Reenvia automaticamente o relatório mais recente gerado em Relatórios pro WhatsApp do cliente.
+              Gere um relatório novo antes do horário agendado pra manter os dados atualizados.
+            </p>
 
             <div className="flex gap-2 pt-2">
               <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)}>

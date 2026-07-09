@@ -12,7 +12,7 @@ import { Download, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
-import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
+import { buildReportPdfBlob, blobToBase64, downloadBlob } from "@/lib/report-pdf";
 import { extractPhoneCalls, extractDirections, extractLeads, GOAL_KPIS, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
 
 interface ReportGeneratorDialogProps {
@@ -828,8 +828,10 @@ export function ReportGeneratorDialog({
       const periodLabel = data.period.label;
       const reportName = `${clientName} - ${periodLabel}`;
 
+      const blob = await buildReportPdfBlob(data);
+      const pdfBase64 = await blobToBase64(blob);
+
       if (download) {
-        const blob = await buildReportPdfBlob(data);
         const filename = `relatorio-${clientName.toLowerCase().replace(/\s+/g, "-")}-${startDate}.pdf`;
         downloadBlob(blob, filename);
       }
@@ -844,6 +846,7 @@ export function ReportGeneratorDialog({
         data,
         status: "ready",
         file_url: null,
+        pdf_base64: pdfBase64,
         share_token: shareToken,
       });
 
