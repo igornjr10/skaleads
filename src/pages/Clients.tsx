@@ -83,6 +83,7 @@ interface Client {
   address: string | null;
   service_radius_km: number | null;
   primary_goal: string | null;
+  monthly_budget: number | null;
   meta_ad_account_id: string | null;
   meta_access_token: string | null;
   meta_page_id: string | null;
@@ -186,6 +187,7 @@ export default function Clients() {
   const [newAddress, setNewAddress] = useState("");
   const [newRadius, setNewRadius] = useState("");
   const [newGoal, setNewGoal] = useState("");
+  const [newMonthlyBudget, setNewMonthlyBudget] = useState("");
   const [newWhatsapp, setNewWhatsapp] = useState("");
   const [newWhatsappGroupJid, setNewWhatsappGroupJid] = useState("");
   const [waGroups, setWaGroups] = useState<{ id: string; subject: string }[] | null>(null);
@@ -555,6 +557,7 @@ export default function Clients() {
     setNewAddress("");
     setNewRadius("");
     setNewGoal("");
+    setNewMonthlyBudget("");
     setNewWhatsapp("");
     setNewWhatsappGroupJid("");
   }
@@ -590,6 +593,7 @@ export default function Clients() {
     setNewAddress(client.address ?? "");
     setNewRadius(client.service_radius_km != null ? String(client.service_radius_km) : "");
     setNewGoal(client.primary_goal ?? "");
+    setNewMonthlyBudget(client.monthly_budget != null ? String(client.monthly_budget) : "");
     setNewWhatsapp(client.whatsapp_number ?? "");
     setNewWhatsappGroupJid(client.whatsapp_group_jid ?? "");
     setCreateOpen(true);
@@ -608,6 +612,7 @@ export default function Clients() {
       address: newAddress.trim() || null,
       service_radius_km: newRadius.trim() ? Number(newRadius) : null,
       primary_goal: newGoal || null,
+      monthly_budget: newMonthlyBudget.trim() ? Number(newMonthlyBudget) : null,
       whatsapp_number: newWhatsapp.trim().replace(/\D/g, "") || null,
       whatsapp_group_jid: newWhatsappGroupJid || null,
     };
@@ -922,6 +927,21 @@ export default function Clients() {
                   <div className="space-y-2">
                     <Label htmlFor="address">Endereço</Label>
                     <Input id="address" value={newAddress} onChange={(event) => setNewAddress(event.target.value)} placeholder="Rua, número, bairro" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="monthlyBudget" className="flex items-center gap-1.5">
+                      Verba mensal (R$)
+                      <span className="text-xs font-normal text-muted-foreground">(para o alerta de verba acabando)</span>
+                    </Label>
+                    <Input
+                      id="monthlyBudget"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={newMonthlyBudget}
+                      onChange={(event) => setNewMonthlyBudget(event.target.value)}
+                      placeholder="Ex: 3000"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="logoUrl">Foto ou logo (URL)</Label>

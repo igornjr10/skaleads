@@ -3,7 +3,7 @@ import { subDays, format } from "date-fns";
 
 // ── DSL types ─────────────────────────────────────────────────────────────────
 
-export type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status";
+export type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "budget";
 export type Comparator = "gt" | "gte" | "lt" | "lte" | "eq" | "change_pct";
 export type Period = "1d" | "3d" | "7d" | "14d" | "30d";
 export type EntityType = "CLIENT" | "CAMPAIGN";
@@ -80,12 +80,36 @@ async function getClientDailyTotals(clientId: string, days: number) {
   );
 }
 
+async function getClientMonthToDateSpend(clientId: string): Promise<number> {
+  const now = new Date();
+  const firstOfMonth = format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
+  const { data } = await supabase
+    .from("campaign_daily_metrics")
+    .select("spend")
+    .eq("client_id", clientId)
+    .gte("date", firstOfMonth);
+  return (data || []).reduce((s: number, r: any) => s + (r.spend || 0), 0);
+}
+
 async function computeClientMetric(
   clientId: string,
   metric: MetricKey,
   days: number
 ): Promise<number> {
   if (metric === "status") return 0;
+
+  // Percentual da verba mensal ja consumido no mes atual (ignora `days` — sempre o mes corrente)
+  if (metric === "budget") {
+    const { data: client } = await supabase
+      .from("clients")
+      .select("monthly_budget")
+      .eq("id", clientId)
+      .single();
+    const budget = client?.monthly_budget || 0;
+    if (!budget) return 0;
+    const spent = await getClientMonthToDateSpend(clientId);
+    return (spent / budget) * 100;
+  }
 
   if (metric === "frequency") {
     const since = format(subDays(new Date(), days), "yyyy-MM-dd");
@@ -397,6 +421,7 @@ const METRIC_LABELS: Record<MetricKey, string> = {
   frequency: "Frequência",
   roas: "ROAS",
   status: "Status",
+  budget: "Verba mensal consumida",
 };
 
 const COMPARATOR_LABELS: Record<Comparator, string> = {
@@ -420,8 +445,8 @@ export function ruleToHuman(rule: AlertRule): string {
   if (!rule?.conditions?.length) return "Sem condições";
   return rule.conditions
     .map(c => {
-      const suffix = c.comparator === "change_pct" ? "%" : "";
-      const period = PERIOD_LABELS[c.period] || c.period;
+      const suffix = c.comparator === "change_pct" || c.metric === "budget" ? "%" : "";
+      const period = c.metric === "budget" ? "mês atual" : (PERIOD_LABELS[c.period] || c.period);
       return `${METRIC_LABELS[c.metric]} ${COMPARATOR_LABELS[c.comparator]} ${c.value}${suffix} (${period})`;
     })
     .join(` ${rule.logic} `);

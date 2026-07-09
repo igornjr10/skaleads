@@ -40,6 +40,7 @@ const METRICS: { value: MetricKey; label: string; unit?: string }[] = [
   { value: "cpm", label: "CPM (R$)", unit: "R$" },
   { value: "frequency", label: "Frequência", unit: "x" },
   { value: "roas", label: "ROAS", unit: "x" },
+  { value: "budget", label: "Verba mensal consumida (%)", unit: "%" },
   { value: "status", label: "Status da campanha" },
 ];
 
@@ -175,6 +176,11 @@ export default function AlertBuilder() {
     setLogic(t.rule.logic);
     setConditions(t.rule.conditions);
     setCooldown(t.cooldownMinutes);
+    if (t.enableWhatsapp) {
+      setChannelWhatsapp(true);
+      setWhatsappTarget("");
+      loadWaGroups();
+    }
     setShowTemplates(false);
   }
 
@@ -429,15 +435,21 @@ export default function AlertBuilder() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Período</Label>
-                    <Select value={cond.period} onValueChange={v => updateCondition(i, { period: v as Period })}>
-                      <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-                      <SelectContent>{PERIODS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
-                    </Select>
+                    {cond.metric === "budget" ? (
+                      <div className="h-8 flex items-center rounded-md border border-input bg-muted/50 px-3 text-xs text-muted-foreground">
+                        Mês atual
+                      </div>
+                    ) : (
+                      <Select value={cond.period} onValueChange={v => updateCondition(i, { period: v as Period })}>
+                        <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
+                        <SelectContent>{PERIODS.map(p => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">
-                    {cond.metric === "status" ? "Valor (ex: PAUSED, ACTIVE)" : "Valor"}
+                    {cond.metric === "status" ? "Valor (ex: PAUSED, ACTIVE)" : cond.metric === "budget" ? "% da verba consumida" : "Valor"}
                   </Label>
                   <Input
                     type={cond.metric === "status" ? "text" : "number"}
@@ -445,7 +457,7 @@ export default function AlertBuilder() {
                     value={String(cond.value)}
                     onChange={e => updateCondition(i, { value: cond.metric === "status" ? e.target.value : parseFloat(e.target.value) || 0 })}
                     className="h-8 text-sm"
-                    placeholder={cond.comparator === "change_pct" ? "Ex: -25 (queda de 25%)" : "Ex: 50"}
+                    placeholder={cond.comparator === "change_pct" ? "Ex: -25 (queda de 25%)" : cond.metric === "budget" ? "Ex: 80 (80% da verba)" : "Ex: 50"}
                   />
                 </div>
               </div>

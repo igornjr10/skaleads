@@ -319,6 +319,7 @@ export type Database = {
             meta_page_name: string | null
             meta_sync_runs: number
             meta_sync_status: string
+            monthly_budget: number | null
             name: string
             primary_goal: string | null
             service_radius_km: number | null
@@ -347,6 +348,7 @@ export type Database = {
             meta_page_name?: string | null
             meta_sync_runs?: number
             meta_sync_status?: string
+            monthly_budget?: number | null
             name: string
             primary_goal?: string | null
             service_radius_km?: number | null
@@ -375,6 +377,7 @@ export type Database = {
             meta_page_name?: string | null
             meta_sync_runs?: number
             meta_sync_status?: string
+            monthly_budget?: number | null
             name?: string
             primary_goal?: string | null
             service_radius_km?: number | null

@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status";
+type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "budget";
 type Comparator = "gt" | "gte" | "lt" | "lte" | "eq" | "change_pct";
 type Period = "1d" | "3d" | "7d" | "14d" | "30d";
 type EntityType = "CLIENT" | "CAMPAIGN";
@@ -98,8 +98,23 @@ async function getClientDailyTotals(url: string, key: string, clientId: string, 
   );
 }
 
+async function getClientMonthToDateSpend(url: string, key: string, clientId: string): Promise<number> {
+  const now = new Date();
+  const first = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const rows = await dbGet(url, key, `campaign_daily_metrics?client_id=eq.${clientId}&date=gte.${first}&select=spend`);
+  return (rows || []).reduce((s: number, r: any) => s + (r.spend ?? 0), 0);
+}
+
 async function computeClientMetric(url: string, key: string, clientId: string, metric: MetricKey, days: number): Promise<number> {
   if (metric === "status") return 0;
+
+  if (metric === "budget") {
+    const [client] = await dbGet(url, key, `clients?id=eq.${clientId}&select=monthly_budget&limit=1`);
+    const budget = client?.monthly_budget || 0;
+    if (!budget) return 0;
+    const spent = await getClientMonthToDateSpend(url, key, clientId);
+    return (spent / budget) * 100;
+  }
 
   const totals = await getClientDailyTotals(url, key, clientId, days);
 
@@ -237,10 +252,13 @@ function buildWhatsAppMessage(alert: StoredAlert, entities: FiredEntity[]): stri
   const now = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const siteUrl = Deno.env.get("PUBLIC_SITE_URL") || "https://ad-campaign-hub-one.vercel.app";
 
+  const primaryMetric = alert.rule_json.conditions[0]?.metric;
+  const valueSuffix = primaryMetric === "budget" ? "% da verba consumida" : "";
+
   const entityLines = entities
     .map(e => {
       const tipo = e.entityType === "CAMPAIGN" ? "📊 Campanha" : "👤 Cliente";
-      return `${tipo}: *${e.entityName}* — ${e.metricValue.toFixed(2)}`;
+      return `${tipo}: *${e.entityName}* — ${e.metricValue.toFixed(2)}${valueSuffix ? " " + valueSuffix : ""}`;
     })
     .join("\n");
 

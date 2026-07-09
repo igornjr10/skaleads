@@ -7,9 +7,22 @@ export interface AlertTemplate {
   icon: string;
   rule: AlertRule;
   cooldownMinutes: number;
+  enableWhatsapp?: boolean;
 }
 
 export const ALERT_TEMPLATES: AlertTemplate[] = [
+  {
+    id: "budget_running_out",
+    name: "Verba mensal acabando",
+    description: "Avisa o gestor no WhatsApp quando o cliente consome 80% ou mais da verba mensal cadastrada",
+    icon: "🔔",
+    rule: {
+      conditions: [{ metric: "budget", comparator: "gte", value: 80, period: "30d", entityType: "CLIENT" }],
+      logic: "AND",
+    },
+    cooldownMinutes: 1440,
+    enableWhatsapp: true,
+  },
   {
     id: "cpa_high",
     name: "CPA acima da meta",
