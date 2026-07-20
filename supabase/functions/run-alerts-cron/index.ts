@@ -61,12 +61,20 @@ function dbInsert(url: string, key: string, table: string, body: object) {
   });
 }
 
-function dbPatch(url: string, key: string, path: string, body: object) {
-  return fetch(`${url}/rest/v1/${path}`, {
+// Lanca em falha de HTTP: um PATCH silenciosamente rejeitado deixaria o
+// last_triggered_at desatualizado e o cooldown nunca seria aplicado, fazendo
+// o alerta reenviar a cada execucao do cron.
+async function dbPatch(url: string, key: string, path: string, body: object) {
+  const res = await fetch(`${url}/rest/v1/${path}`, {
     method: "PATCH",
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
     body: JSON.stringify(body),
   });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`PATCH ${path} falhou (${res.status}): ${detail}`);
+  }
+  return res;
 }
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
@@ -328,6 +336,7 @@ serve(async (req) => {
     let totalFired = 0;
     const totalChecked = (alerts || []).length;
     const fired: { alertName: string; count: number }[] = [];
+    const alertErrors: string[] = [];
 
     for (const alert of (alerts || [])) {
       try {
@@ -370,14 +379,15 @@ serve(async (req) => {
         }
 
         fired.push({ alertName: alert.name, count: firedEntities.length });
-      } catch {
-        // individual alert failures are non-blocking
+      } catch (err) {
+        // Falha de um alerta nao derruba os demais, mas precisa ficar visivel no log
+        alertErrors.push(`${alert.name}: ${(err as Error).message}`);
       }
     }
 
-    runSummary = { checked: totalChecked, fired: totalFired };
+    runSummary = { checked: totalChecked, fired: totalFired, errors: alertErrors };
     return new Response(
-      JSON.stringify({ success: true, checked: totalChecked, fired: totalFired, results: fired }),
+      JSON.stringify({ success: true, checked: totalChecked, fired: totalFired, results: fired, errors: alertErrors }),
       { headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
