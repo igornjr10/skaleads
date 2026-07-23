@@ -73,24 +73,70 @@ function timeToMinutes(time: string): number {
   return h * 60 + m;
 }
 
+interface SendResult {
+  jid: string;
+  ok: boolean;
+  status: number | null;
+  error: string | null;
+}
+
 async function sendToGroups(
   evolutionApiUrl: string,
   evolutionInstance: string,
   evolutionApiKey: string,
   jids: string[],
   text: string
-) {
+): Promise<SendResult[]> {
+  const results: SendResult[] = [];
+
   for (const jid of jids) {
     try {
-      await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
-        method: "POST",
-        headers: { apikey: evolutionApiKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ number: jid, text }),
-      });
-    } catch {
-      // non-blocking — best-effort per group
+      const response = await fetch(
+        `${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`,
+        {
+          method: "POST",
+          headers: { apikey: evolutionApiKey, "Content-Type": "application/json" },
+          body: JSON.stringify({ number: jid, text }),
+        }
+      );
+
+      const raw = await response.text();
+      let parsed: any = null;
+      try { parsed = JSON.parse(raw); } catch { /* resposta não-JSON */ }
+
+      if (!response.ok) {
+        const detail =
+          parsed?.response?.message ??
+          parsed?.message ??
+          parsed?.error ??
+          raw.slice(0, 300);
+        results.push({
+          jid,
+          ok: false,
+          status: response.status,
+          error: typeof detail === "string" ? detail : JSON.stringify(detail),
+        });
+        continue;
+      }
+
+      // A Evolution pode devolver 200 sem realmente enfileirar a mensagem
+      if (!parsed?.key?.id) {
+        results.push({
+          jid,
+          ok: false,
+          status: response.status,
+          error: `Resposta sem message id: ${raw.slice(0, 300)}`,
+        });
+        continue;
+      }
+
+      results.push({ jid, ok: true, status: response.status, error: null });
+    } catch (err) {
+      results.push({ jid, ok: false, status: null, error: (err as Error).message });
     }
   }
+
+  return results;
 }
 
 serve(async (req) => {
@@ -140,10 +186,29 @@ serve(async (req) => {
       );
       if (!scheduled) throw new Error("Mensagem agendada não encontrada");
 
-      await sendToGroups(evolutionApiUrl, evolutionInstance, evolutionApiKey, scheduled.target_group_jids, scheduled.message);
+      if (!scheduled.target_group_jids || scheduled.target_group_jids.length === 0) {
+        throw new Error("Este agendamento não tem nenhum grupo de destino selecionado");
+      }
+
+      const results = await sendToGroups(
+        evolutionApiUrl, evolutionInstance, evolutionApiKey,
+        scheduled.target_group_jids, scheduled.message
+      );
+      const failed = results.filter(r => !r.ok);
+
+      if (failed.length === results.length) {
+        throw new Error(`Evolution API recusou todos os envios — ${failed[0].jid}: ${failed[0].error}`);
+      }
 
       return new Response(
-        JSON.stringify({ success: true, tested: scheduled.name, groups: scheduled.target_group_jids.length }),
+        JSON.stringify({
+          success: true,
+          tested: scheduled.name,
+          groups: results.length,
+          sent: results.length - failed.length,
+          failed: failed.length,
+          results,
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -161,23 +226,42 @@ serve(async (req) => {
     }
 
     let sentCount = 0;
+    const failures: { name: string; jid: string; error: string | null }[] = [];
+
     for (const item of (scheduled || [])) {
       try {
         if (item.last_sent_date === dateStr) continue;
         if (timeToMinutes(item.send_time) > minutesOfDay) continue;
         if (!item.target_group_jids || item.target_group_jids.length === 0) continue;
 
-        await sendToGroups(evolutionApiUrl, evolutionInstance, evolutionApiKey, item.target_group_jids, item.message);
-        await dbPatch(supabaseUrl, svcKey, `whatsapp_scheduled_messages?id=eq.${item.id}`, { last_sent_date: dateStr });
-        sentCount++;
-      } catch {
-        // individual failures are non-blocking
+        const results = await sendToGroups(
+          evolutionApiUrl, evolutionInstance, evolutionApiKey,
+          item.target_group_jids, item.message
+        );
+        const delivered = results.filter(r => r.ok).length;
+
+        for (const r of results.filter(r => !r.ok)) {
+          failures.push({ name: item.name, jid: r.jid, error: r.error });
+        }
+
+        // Só marca o dia como enviado se algo saiu — senão o cron tenta de novo em 15min
+        if (delivered > 0) {
+          await dbPatch(supabaseUrl, svcKey, `whatsapp_scheduled_messages?id=eq.${item.id}`, { last_sent_date: dateStr });
+          sentCount++;
+        }
+      } catch (err) {
+        failures.push({ name: item.name, jid: "-", error: (err as Error).message });
       }
     }
 
-    runSummary = { checked: (scheduled || []).length, sent: sentCount };
+    runSuccess = failures.length === 0;
+    runSummary = { checked: (scheduled || []).length, sent: sentCount, failures };
+    if (failures.length > 0) {
+      runError = `${failures.length} envio(s) falharam — ex: ${failures[0].jid}: ${failures[0].error}`;
+    }
+
     return new Response(
-      JSON.stringify({ success: true, checked: (scheduled || []).length, sent: sentCount }),
+      JSON.stringify({ success: true, checked: (scheduled || []).length, sent: sentCount, failures }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

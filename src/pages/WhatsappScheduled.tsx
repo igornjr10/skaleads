@@ -160,11 +160,23 @@ export default function WhatsappScheduled() {
       const { data, error } = await supabase.functions.invoke("send-scheduled-whatsapp", {
         body: { test_id: item.id },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da Evolution
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
       if (data?.error) throw new Error(data.error);
-      toast.success(`Mensagem enviada para ${data.groups} grupo(s)`);
+
+      if (data?.failed > 0) {
+        const first = (data.results ?? []).find((r: any) => !r.ok);
+        toast.warning(
+          `Enviada para ${data.sent} de ${data.groups} grupo(s) — ${data.failed} falhou: ${first?.error ?? "erro desconhecido"}`
+        );
+      } else {
+        toast.success(`Mensagem enviada para ${data.groups} grupo(s)`);
+      }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao enviar");
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar", { duration: 10000 });
     } finally {
       setTestingId(null);
     }
