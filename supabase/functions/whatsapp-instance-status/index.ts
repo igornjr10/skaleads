@@ -22,6 +22,39 @@ function describe(state: ConnectionState): string {
   }
 }
 
+// O campo `state` da Evolution fica preso em "open" mesmo depois do socket do
+// Baileys morrer — o Manager mostra "Connected" enquanto todo envio falha com
+// "Connection Closed". Só uma operação que realmente use o socket revela isso.
+async function probeSocket(
+  baseUrl: string,
+  instance: string,
+  apiKey: string,
+  ownerJid: string | null
+): Promise<{ alive: boolean; error: string | null }> {
+  const number = (ownerJid ?? "").split("@")[0];
+  if (!number) return { alive: true, error: null };
+
+  try {
+    const res = await fetch(`${baseUrl}/chat/whatsappNumbers/${instance}`, {
+      method: "POST",
+      headers: { apikey: apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ numbers: [number] }),
+    });
+
+    if (res.ok) return { alive: true, error: null };
+
+    const raw = await res.text();
+    let parsed: any = null;
+    try { parsed = JSON.parse(raw); } catch { /* resposta não-JSON */ }
+    const detail = parsed?.response?.message ?? parsed?.message ?? parsed?.error ?? raw.slice(0, 200);
+    const text = typeof detail === "string" ? detail : JSON.stringify(detail);
+
+    return { alive: false, error: text };
+  } catch (err) {
+    return { alive: false, error: (err as Error).message };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -70,13 +103,23 @@ serve(async (req) => {
       }
     } catch { /* informativo apenas */ }
 
+    const probe = state === "open"
+      ? await probeSocket(baseUrl, evolutionInstance, evolutionApiKey, ownerJid)
+      : { alive: false, error: null };
+
+    const staleState = state === "open" && !probe.alive;
+
     return new Response(
       JSON.stringify({
         success: true,
         instance: evolutionInstance,
         state,
-        connected: state === "open",
-        message: describe(state),
+        socketAlive: probe.alive,
+        staleState,
+        connected: state === "open" && probe.alive,
+        message: staleState
+          ? `A Evolution reporta "open" mas o socket não responde (${probe.error ?? "erro desconhecido"}). Clique em RESTART no Manager da Evolution; se persistir, refaça a leitura do QR Code`
+          : describe(state),
         ownerJid,
         profileName,
       }),

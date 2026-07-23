@@ -75,7 +75,12 @@ export default function WhatsappScheduled() {
     setLoadingGroups(true);
     try {
       const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
-      if (error) throw new Error(error.message);
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da Evolution
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
+      if (data?.error) throw new Error(data.error);
       setGroups(data?.groups ?? []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar grupos");

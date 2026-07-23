@@ -35,12 +35,28 @@ serve(async (req) => {
       { headers: { apikey: evolutionApiKey } }
     );
 
-    const result = await response.json();
+    const raw = await response.text();
+    let result: any = null;
+    try { result = JSON.parse(raw); } catch { /* resposta não-JSON */ }
+
     if (!response.ok) {
-      throw new Error(result.message || result.error || "Evolution API error");
+      const detail =
+        result?.response?.message ??
+        result?.message ??
+        result?.error ??
+        raw.slice(0, 400);
+      throw new Error(
+        `Evolution API respondeu ${response.status}: ${typeof detail === "string" ? detail : JSON.stringify(detail)}`
+      );
     }
 
-    const groups = (result as EvolutionGroup[]).map(g => ({
+    // A Evolution as vezes responde 200 com um objeto de erro em vez da lista
+    const list = Array.isArray(result) ? result : result?.groups;
+    if (!Array.isArray(list)) {
+      throw new Error(`Evolution API respondeu 200 mas sem lista de grupos: ${raw.slice(0, 400)}`);
+    }
+
+    const groups = (list as EvolutionGroup[]).map(g => ({
       id: g.id,
       subject: g.subject,
       size: g.size,

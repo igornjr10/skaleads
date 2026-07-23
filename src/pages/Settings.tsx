@@ -27,6 +27,8 @@ interface WhatsAppGroup {
 interface InstanceStatus {
   state: "open" | "connecting" | "close" | "unknown";
   connected: boolean;
+  socketAlive: boolean;
+  staleState: boolean;
   message: string;
   instance: string;
   ownerJid: string | null;
@@ -94,11 +96,15 @@ export default function Settings() {
     setLoadingGroups(true);
     try {
       const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
-      if (error) throw new Error(error.message);
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da Evolution
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
       if (data?.error) throw new Error(data.error);
       setWhatsappGroups(data.groups ?? []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao carregar grupos");
+      toast.error(err instanceof Error ? err.message : "Erro ao carregar grupos", { duration: 15000 });
     } finally {
       setLoadingGroups(false);
     }
@@ -280,7 +286,9 @@ export default function Settings() {
                     ? "Não foi possível consultar a instância"
                     : instanceStatus?.connected
                       ? "WhatsApp conectado"
-                      : "WhatsApp desconectado"}
+                      : instanceStatus?.staleState
+                        ? "WhatsApp fora do ar (o painel da Evolution mostra conectado)"
+                        : "WhatsApp desconectado"}
               </p>
               <p className="text-xs text-muted-foreground break-words">
                 {statusError ?? instanceStatus?.message ?? "Consultando a Evolution API"}
