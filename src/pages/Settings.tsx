@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Copy, Loader2, RefreshCw, Users } from "lucide-react";
+import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert } from "lucide-react";
 
 interface Member {
   user_id: string;
@@ -24,6 +24,15 @@ interface WhatsAppGroup {
   pictureUrl: string | null;
 }
 
+interface InstanceStatus {
+  state: "open" | "connecting" | "close" | "unknown";
+  connected: boolean;
+  message: string;
+  instance: string;
+  ownerJid: string | null;
+  profileName: string | null;
+}
+
 const ROLES = ["owner", "admin", "analyst", "viewer"] as const;
 
 export default function Settings() {
@@ -33,6 +42,9 @@ export default function Settings() {
   const [fullName, setFullName] = useState("");
   const [whatsappGroups, setWhatsappGroups] = useState<WhatsAppGroup[] | null>(null);
   const [loadingGroups, setLoadingGroups] = useState(false);
+  const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
 
   async function load() {
     const { data: profiles } = await supabase.from("profiles").select("id, email, full_name");
@@ -49,13 +61,33 @@ export default function Settings() {
     setFullName(me?.full_name ?? "");
   }
 
-  useEffect(() => { if (user) load(); /* eslint-disable-next-line */ }, [user?.id]);
+  useEffect(() => { if (user) { load(); checkInstanceStatus(); } /* eslint-disable-next-line */ }, [user?.id]);
 
   async function saveProfile() {
     if (!user) return;
     const { error } = await supabase.from("profiles").update({ full_name: fullName }).eq("id", user.id);
     if (error) return toast.error(error.message);
     toast.success("Perfil atualizado");
+  }
+
+  async function checkInstanceStatus() {
+    setLoadingStatus(true);
+    setStatusError(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("whatsapp-instance-status");
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da Evolution
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      setInstanceStatus(data as InstanceStatus);
+    } catch (err) {
+      setInstanceStatus(null);
+      setStatusError(err instanceof Error ? err.message : "Erro ao consultar a instância");
+    } finally {
+      setLoadingStatus(false);
+    }
   }
 
   async function loadWhatsappGroups() {
@@ -219,6 +251,60 @@ export default function Settings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div
+            className={`flex items-start gap-3 rounded-lg border p-3 ${
+              loadingStatus || (!instanceStatus && !statusError)
+                ? "border-border bg-muted/40"
+                : instanceStatus?.connected
+                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  : instanceStatus?.state === "connecting"
+                    ? "border-amber-500/30 bg-amber-500/10"
+                    : "border-destructive/30 bg-destructive/10"
+            }`}
+          >
+            {loadingStatus || (!instanceStatus && !statusError) ? (
+              <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+            ) : instanceStatus?.connected ? (
+              <CircleCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+            ) : instanceStatus?.state === "connecting" ? (
+              <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            ) : (
+              <CircleX className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            )}
+
+            <div className="min-w-0 flex-1 space-y-0.5">
+              <p className="text-sm font-medium">
+                {loadingStatus || (!instanceStatus && !statusError)
+                  ? "Verificando a instância..."
+                  : statusError
+                    ? "Não foi possível consultar a instância"
+                    : instanceStatus?.connected
+                      ? "WhatsApp conectado"
+                      : "WhatsApp desconectado"}
+              </p>
+              <p className="text-xs text-muted-foreground break-words">
+                {statusError ?? instanceStatus?.message ?? "Consultando a Evolution API"}
+              </p>
+              {instanceStatus?.connected && (instanceStatus.profileName || instanceStatus.ownerJid) && (
+                <p className="text-xs text-muted-foreground">
+                  {instanceStatus.profileName ?? "Número"}
+                  {instanceStatus.ownerJid ? ` · ${instanceStatus.ownerJid.split("@")[0]}` : ""}
+                  {` · instância ${instanceStatus.instance}`}
+                </p>
+              )}
+            </div>
+
+            <Button
+              onClick={checkInstanceStatus}
+              disabled={loadingStatus}
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingStatus ? "animate-spin" : ""}`} />
+            </Button>
+          </div>
+
           <Button onClick={loadWhatsappGroups} disabled={loadingGroups} variant="outline" size="sm">
             {loadingGroups ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
             {whatsappGroups ? "Atualizar grupos" : "Carregar grupos"}
