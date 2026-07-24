@@ -47,9 +47,19 @@ interface FiredEntity {
 
 // ─── DB helpers ───────────────────────────────────────────────────────────────
 
+// cache: "no-store" + Cache-Control evitam que uma resposta antiga fique
+// presa em algum cache intermediario — a query de gasto do mes usa a mesma
+// URL o mes inteiro, entao qualquer cache por URL travaria o valor no que
+// foi lido na primeira chamada.
 function dbGet(url: string, key: string, path: string) {
   return fetch(`${url}/rest/v1/${path}`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
+    },
+    cache: "no-store",
   }).then(r => r.json());
 }
 
@@ -113,7 +123,9 @@ async function getClientMonthToDateSpend(url: string, key: string, clientId: str
   return (rows || []).reduce((s: number, r: any) => s + (r.spend ?? 0), 0);
 }
 
-async function computeClientMetric(url: string, key: string, clientId: string, metric: MetricKey, days: number): Promise<number> {
+async function computeClientMetric(
+  url: string, key: string, clientId: string, metric: MetricKey, days: number, budgetDebug?: unknown[]
+): Promise<number> {
   if (metric === "status") return 0;
 
   if (metric === "budget") {
@@ -121,7 +133,9 @@ async function computeClientMetric(url: string, key: string, clientId: string, m
     const budget = client?.monthly_budget || 0;
     if (!budget) return 0;
     const spent = await getClientMonthToDateSpend(url, key, clientId);
-    return (spent / budget) * 100;
+    const pct = (spent / budget) * 100;
+    budgetDebug?.push({ clientId, budget, spent, pct: Number(pct.toFixed(2)) });
+    return pct;
   }
 
   const totals = await getClientDailyTotals(url, key, clientId, days);
@@ -162,7 +176,7 @@ function applyComparator(actual: number | string, comparator: Comparator, thresh
 }
 
 async function evaluateConditionForClient(
-  url: string, key: string, clientId: string, condition: AlertCondition
+  url: string, key: string, clientId: string, condition: AlertCondition, budgetDebug?: unknown[]
 ): Promise<{ passes: boolean; value: number }> {
   const days = periodDays(condition.period);
 
@@ -174,7 +188,7 @@ async function evaluateConditionForClient(
     return { passes: delta < threshold, value: delta };
   }
 
-  const value = await computeClientMetric(url, key, clientId, condition.metric, days);
+  const value = await computeClientMetric(url, key, clientId, condition.metric, days, budgetDebug);
   return { passes: applyComparator(value, condition.comparator, condition.value), value };
 }
 
@@ -192,7 +206,7 @@ async function evaluateConditionForCampaign(
   return { passes: applyComparator(value, condition.comparator, condition.value), value };
 }
 
-async function evaluateAlert(url: string, key: string, alert: StoredAlert): Promise<FiredEntity[]> {
+async function evaluateAlert(url: string, key: string, alert: StoredAlert, budgetDebug?: unknown[]): Promise<FiredEntity[]> {
   const { conditions, logic } = alert.rule_json;
   if (!conditions || conditions.length === 0) return [];
 
@@ -215,7 +229,7 @@ async function evaluateAlert(url: string, key: string, alert: StoredAlert): Prom
   if (entityType === "CLIENT") {
     for (const clientId of clientIds) {
       const results = await Promise.all(
-        conditions.map(c => evaluateConditionForClient(url, key, clientId, c))
+        conditions.map(c => evaluateConditionForClient(url, key, clientId, c, budgetDebug))
       );
       const passes = logic === "AND" ? results.every(r => r.passes) : results.some(r => r.passes);
 
@@ -337,10 +351,11 @@ serve(async (req) => {
     const totalChecked = (alerts || []).length;
     const fired: { alertName: string; count: number }[] = [];
     const alertErrors: string[] = [];
+    const budgetDebug: unknown[] = [];
 
     for (const alert of (alerts || [])) {
       try {
-        const firedEntities = await evaluateAlert(supabaseUrl, svcKey, alert);
+        const firedEntities = await evaluateAlert(supabaseUrl, svcKey, alert, budgetDebug);
 
         if (firedEntities.length === 0) continue;
 
@@ -385,7 +400,7 @@ serve(async (req) => {
       }
     }
 
-    runSummary = { checked: totalChecked, fired: totalFired, errors: alertErrors };
+    runSummary = { checked: totalChecked, fired: totalFired, errors: alertErrors, budgetDebug };
     return new Response(
       JSON.stringify({ success: true, checked: totalChecked, fired: totalFired, results: fired, errors: alertErrors }),
       { headers: { "Content-Type": "application/json" } }
