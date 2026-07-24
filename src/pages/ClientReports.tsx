@@ -114,12 +114,16 @@ export default function ClientReports() {
     try {
       const blob = await buildReportPdfBlob(report.data);
       downloadBlob(blob, `${report.name}.pdf`);
+
+      if (client?.whatsapp_group_jid) {
+        await sendWhatsapp(report, blob);
+      }
     } catch {
       toast.error("Erro ao gerar PDF");
     }
   }
 
-  async function sendWhatsapp(report: Report) {
+  async function sendWhatsapp(report: Report, existingBlob?: Blob) {
     if (!report.data) {
       toast.error("Dados do relatorio nao disponiveis");
       return;
@@ -131,7 +135,7 @@ export default function ClientReports() {
 
     setSendingId(report.id);
     try {
-      const blob = await buildReportPdfBlob(report.data);
+      const blob = existingBlob ?? await buildReportPdfBlob(report.data);
       const media_base64 = await blobToBase64(blob);
       const caption = `📊 *Relatório de Performance*\n👤 *${client.name}*\n📅 _${report.period?.label ?? ""}_`;
 
