@@ -1,3 +1,6 @@
+// Chamada pelo pg_cron sem JWT do Supabase (so o header x-cron-secret) — precisa
+// ser deployada com `supabase functions deploy sync-meta-cron --no-verify-jwt`,
+// senao o gateway rejeita a chamada com 401 antes de chegar no handler.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
