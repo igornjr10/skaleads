@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, blobToBase64, downloadBlob } from "@/lib/report-pdf";
 import { extractPhoneCalls, extractDirections, extractLeads, GOAL_KPIS, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
+import { MetricPreferencesBuilder } from "./MetricPreferencesBuilder";
 
 interface ReportGeneratorDialogProps {
   isOpen: boolean;
@@ -794,17 +795,6 @@ export function ReportGeneratorDialog({
     };
   }
 
-  function toggleMetricPreference(metric: ReportMetricPreference) {
-    setMetricPreferences((current) => {
-      if (current.includes(metric)) {
-        if (current.length === 1) return current;
-        return current.filter((item) => item !== metric);
-      }
-
-      return [...current, metric];
-    });
-  }
-
   function toggleSocialMetricPreference(metric: SocialMetricPreference) {
     setSocialMetricPreferences((current) => {
       if (current.includes(metric)) {
@@ -926,24 +916,12 @@ export function ReportGeneratorDialog({
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Preferencias do relatorio</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              {REPORT_METRIC_OPTIONS.map((option) => (
-                <label
-                  key={option.key}
-                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/30"
-                >
-                  <input
-                    type="checkbox"
-                    checked={metricPreferences.includes(option.key)}
-                    onChange={() => toggleMetricPreference(option.key)}
-                    className="mt-1 h-4 w-4 rounded border"
-                  />
-                  <div className="space-y-0.5">
-                    <div className="text-sm font-medium">{option.label}</div>
-                    <div className="text-xs text-muted-foreground">{option.helper}</div>
-                  </div>
-                </label>
-              ))}
+            <CardContent>
+              <MetricPreferencesBuilder
+                options={REPORT_METRIC_OPTIONS}
+                value={metricPreferences}
+                onChange={(next) => setMetricPreferences(next as ReportMetricPreference[])}
+              />
             </CardContent>
           </Card>
 
