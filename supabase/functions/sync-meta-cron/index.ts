@@ -1,6 +1,7 @@
-// Chamada pelo pg_cron sem JWT do Supabase (so o header x-cron-secret) — precisa
-// ser deployada com `supabase functions deploy sync-meta-cron --no-verify-jwt`,
-// senao o gateway rejeita a chamada com 401 antes de chegar no handler.
+// Chamada pelo pg_cron com Authorization: Bearer <anon key> (satisfaz o
+// verify_jwt do gateway) + x-cron-secret proprio, mesmo padrao de
+// run-alerts-cron e run-report-schedules. Sem o Authorization no cron
+// registrado, o gateway rejeita a chamada com 401 antes do handler rodar.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
