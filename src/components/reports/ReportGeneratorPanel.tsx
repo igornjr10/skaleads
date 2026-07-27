@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Download, FileText, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -794,16 +793,6 @@ export function ReportGeneratorPanel({
     };
   }
 
-  function toggleSocialMetricPreference(metric: SocialMetricPreference) {
-    setSocialMetricPreferences((current) => {
-      if (current.includes(metric)) {
-        if (current.length === 1) return current;
-        return current.filter((item) => item !== metric);
-      }
-
-      return [...current, metric];
-    });
-  }
 
   async function handleGenerate(download: boolean) {
     setLoading(true);
@@ -867,113 +856,53 @@ export function ReportGeneratorPanel({
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <div className="grid gap-5 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Periodo</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Select value={preset} onValueChange={applyPreset}>
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Selecione o periodo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PERIOD_PRESETS.map((item) => (
-                    <SelectItem key={item.days} value={String(item.days)}>
-                      {item.label}
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="custom">Personalizado</SelectItem>
-                </SelectContent>
-              </Select>
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Periodo</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Select value={preset} onValueChange={applyPreset}>
+              <SelectTrigger className="text-sm">
+                <SelectValue placeholder="Selecione o periodo" />
+              </SelectTrigger>
+              <SelectContent>
+                {PERIOD_PRESETS.map((item) => (
+                  <SelectItem key={item.days} value={String(item.days)}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+                <SelectItem value="custom">Personalizado</SelectItem>
+              </SelectContent>
+            </Select>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Inicio</Label>
-                  <Input
-                    type="date"
-                    value={startDate}
-                    onChange={(event) => {
-                      setStartDate(event.target.value);
-                      setPreset("custom");
-                    }}
-                    className="text-sm"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Fim</Label>
-                  <Input
-                    type="date"
-                    value={endDate}
-                    onChange={(event) => {
-                      setEndDate(event.target.value);
-                      setPreset("custom");
-                    }}
-                    className="text-sm"
-                  />
-                </div>
+            <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+              <div className="space-y-1">
+                <Label className="text-xs">Inicio</Label>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => {
+                    setStartDate(event.target.value);
+                    setPreset("custom");
+                  }}
+                  className="text-sm"
+                />
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Logo e presenca digital</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-border/70 p-3">
-                <div className="space-y-0.5">
-                  <div className="text-sm font-medium">Mostrar logo do cliente + nome</div>
-                  <div className="text-xs text-muted-foreground">
-                    Usa a logo salva quando a pagina do cliente e conectada na tela de clientes.
-                  </div>
-                </div>
-                <Switch checked={includeSocialPresence} onCheckedChange={setIncludeSocialPresence} />
+              <div className="space-y-1">
+                <Label className="text-xs">Fim</Label>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => {
+                    setEndDate(event.target.value);
+                    setPreset("custom");
+                  }}
+                  className="text-sm"
+                />
               </div>
-
-              {includeSocialPresence && (
-                <div className="space-y-2">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Perfil do Instagram</Label>
-                    <Input
-                      value={instagramProfileSearch}
-                      onChange={(event) => setInstagramProfileSearch(event.target.value)}
-                      placeholder="@perfil"
-                      className="text-sm"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Se vazio, usa o Instagram conectado ao cliente.
-                    </p>
-                  </div>
-
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {SOCIAL_METRIC_OPTIONS.map((option) => (
-                      <label
-                        key={option.key}
-                        className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/30"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={socialMetricPreferences.includes(option.key)}
-                          onChange={() => toggleSocialMetricPreference(option.key)}
-                          className="mt-1 h-4 w-4 rounded border"
-                        />
-                        <div className="space-y-0.5">
-                          <div className="text-sm font-medium">{option.label}</div>
-                          <div className="text-xs text-muted-foreground">{option.helper}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">
-                    O sistema tenta buscar Facebook e Instagram automaticamente. Se algum dado nao estiver disponivel na Meta, o relatorio continua sendo gerado normalmente.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader className="pb-3">
