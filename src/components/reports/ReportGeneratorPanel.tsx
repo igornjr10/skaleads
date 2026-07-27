@@ -3,12 +3,11 @@ import { endOfMonth, format, startOfMonth, subDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { Download, FileText, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
@@ -16,7 +15,7 @@ import { buildReportPdfBlob, blobToBase64, downloadBlob } from "@/lib/report-pdf
 import { extractPhoneCalls, extractDirections, extractLeads, GOAL_KPIS, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
 import { MetricPreferencesBuilder } from "./MetricPreferencesBuilder";
 
-interface ReportGeneratorDialogProps {
+interface ReportGeneratorPanelProps {
   isOpen: boolean;
   onClose: () => void;
   clientId: string;
@@ -180,13 +179,13 @@ function extractPrimaryActionMetric(
   return { type: acceptedTypes[0], total: 0 };
 }
 
-export function ReportGeneratorDialog({
+export function ReportGeneratorPanel({
   isOpen,
   onClose,
   clientId,
   clientName,
   onReportCreated,
-}: ReportGeneratorDialogProps) {
+}: ReportGeneratorPanelProps) {
   const [loading, setLoading] = useState(false);
   const [preset, setPreset] = useState("30");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
@@ -853,17 +852,22 @@ export function ReportGeneratorDialog({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Card className="border-primary/20">
+      <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
+        <div>
+          <CardTitle className="flex items-center gap-2 text-base">
             <FileText className="h-5 w-5 text-primary" />
             Gerar Relatorio - {clientName}
-          </DialogTitle>
-          <DialogDescription>Configure o periodo e personalize o relatorio</DialogDescription>
-        </DialogHeader>
+          </CardTitle>
+          <p className="mt-1 text-sm text-muted-foreground">Configure o periodo e personalize o relatorio</p>
+        </div>
+        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Fechar">
+          <X className="h-4 w-4" />
+        </Button>
+      </CardHeader>
 
-        <div className="space-y-5">
+      <CardContent className="space-y-5">
+        <div className="grid gap-5 lg:grid-cols-2">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm">Periodo</CardTitle>
@@ -914,19 +918,6 @@ export function ReportGeneratorDialog({
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm">Preferencias do relatorio</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <MetricPreferencesBuilder
-                options={REPORT_METRIC_OPTIONS}
-                value={metricPreferences}
-                onChange={(next) => setMetricPreferences(next as ReportMetricPreference[])}
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
               <CardTitle className="text-sm">Logo e presenca digital</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -955,23 +946,25 @@ export function ReportGeneratorDialog({
                     </p>
                   </div>
 
-                  {SOCIAL_METRIC_OPTIONS.map((option) => (
-                    <label
-                      key={option.key}
-                      className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/30"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={socialMetricPreferences.includes(option.key)}
-                        onChange={() => toggleSocialMetricPreference(option.key)}
-                        className="mt-1 h-4 w-4 rounded border"
-                      />
-                      <div className="space-y-0.5">
-                        <div className="text-sm font-medium">{option.label}</div>
-                        <div className="text-xs text-muted-foreground">{option.helper}</div>
-                      </div>
-                    </label>
-                  ))}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {SOCIAL_METRIC_OPTIONS.map((option) => (
+                      <label
+                        key={option.key}
+                        className="flex cursor-pointer items-start gap-3 rounded-xl border border-border/70 p-3 transition-colors hover:bg-muted/30"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={socialMetricPreferences.includes(option.key)}
+                          onChange={() => toggleSocialMetricPreference(option.key)}
+                          className="mt-1 h-4 w-4 rounded border"
+                        />
+                        <div className="space-y-0.5">
+                          <div className="text-sm font-medium">{option.label}</div>
+                          <div className="text-xs text-muted-foreground">{option.helper}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
 
                   <p className="text-xs text-muted-foreground">
                     O sistema tenta buscar Facebook e Instagram automaticamente. Se algum dado nao estiver disponivel na Meta, o relatorio continua sendo gerado normalmente.
@@ -980,19 +973,32 @@ export function ReportGeneratorDialog({
               )}
             </CardContent>
           </Card>
-
-          <div className="flex gap-2">
-            <Button onClick={() => handleGenerate(false)} disabled={loading} className="flex-1" variant="outline">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
-              Salvar
-            </Button>
-            <Button onClick={() => handleGenerate(true)} disabled={loading} className="flex-1">
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-              Salvar e baixar PDF
-            </Button>
-          </div>
         </div>
-      </DialogContent>
-    </Dialog>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Preferencias do relatorio</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MetricPreferencesBuilder
+              options={REPORT_METRIC_OPTIONS}
+              value={metricPreferences}
+              onChange={(next) => setMetricPreferences(next as ReportMetricPreference[])}
+            />
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-end gap-2">
+          <Button onClick={() => handleGenerate(false)} disabled={loading} variant="outline">
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+            Salvar
+          </Button>
+          <Button onClick={() => handleGenerate(true)} disabled={loading}>
+            {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+            Salvar e baixar PDF
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

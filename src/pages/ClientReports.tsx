@@ -28,8 +28,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { blobToBase64, buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
 
-const ReportGeneratorDialog = lazy(() =>
-  import("@/components/reports/ReportGeneratorDialog").then((module) => ({ default: module.ReportGeneratorDialog }))
+const ReportGeneratorPanel = lazy(() =>
+  import("@/components/reports/ReportGeneratorPanel").then((module) => ({ default: module.ReportGeneratorPanel }))
 );
 
 interface Report {
@@ -191,11 +191,25 @@ export default function ClientReports() {
             {client && <p className="text-sm text-muted-foreground">{client.name}</p>}
           </div>
         </div>
-        <Button onClick={() => setShowGenerator(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Relatorio
-        </Button>
+        {!showGenerator && (
+          <Button onClick={() => setShowGenerator(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Novo Relatorio
+          </Button>
+        )}
       </div>
+
+      {showGenerator && client && (
+        <Suspense fallback={null}>
+          <ReportGeneratorPanel
+            isOpen={showGenerator}
+            onClose={() => setShowGenerator(false)}
+            clientId={client.id}
+            clientName={client.name}
+            onReportCreated={fetchReports}
+          />
+        </Suspense>
+      )}
 
       {loading ? (
         <div className="space-y-3">
@@ -300,18 +314,6 @@ export default function ClientReports() {
             );
           })}
         </div>
-      )}
-
-      {showGenerator && client && (
-        <Suspense fallback={null}>
-          <ReportGeneratorDialog
-            isOpen={showGenerator}
-            onClose={() => setShowGenerator(false)}
-            clientId={client.id}
-            clientName={client.name}
-            onReportCreated={fetchReports}
-          />
-        </Suspense>
       )}
 
       <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
