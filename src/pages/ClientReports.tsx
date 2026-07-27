@@ -101,8 +101,12 @@ export default function ClientReports() {
       toast.error(message);
     }
 
-    setReports((data as Report[]) || []);
+    const fetched = (data as Report[]) || [];
+    setReports(fetched);
     setLoading(false);
+    // Cliente sem nenhum relatorio ainda: abre o painel direto, sem precisar
+    // clicar em "Gerar Relatorio" pra so entao ver o formulario.
+    if (fetched.length === 0 && !error) setShowGenerator(true);
   }
 
   async function downloadPdf(report: Report) {
@@ -228,7 +232,7 @@ export default function ClientReports() {
             </Button>
           </CardContent>
         </Card>
-      ) : reports.length === 0 ? (
+      ) : reports.length === 0 && !showGenerator ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16 text-center">
             <FileText className="mb-3 h-10 w-10 text-muted-foreground" />
