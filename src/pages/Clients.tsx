@@ -788,32 +788,24 @@ export default function Clients() {
     toast.success("Link do dashboard copiado — pode enviar pro cliente");
   }
 
+  // So 3 acoes primarias visiveis (as mais usadas no dia a dia); o resto fica
+  // organizado no menu "..." pra nao poluir o card com 9 botoes de uma vez.
   function renderClientActions(client: Client, compact = false) {
+    const connected = !!(client.meta_ad_account_id && client.meta_access_token);
+
     return (
       <div className={`flex ${compact ? "flex-wrap" : "justify-end"} gap-2`}>
-        {canManage && (
-          <>
-            <Button variant="outline" size="sm" onClick={() => openConnectDialog(client)} disabled={syncingId === client.id}>
-              <Link2 className="mr-2 h-3 w-3" />
-              {client.meta_ad_account_id ? "Reconfigurar" : "Conectar Meta"}
-            </Button>
-            {client.meta_ad_account_id && client.meta_access_token && (
-              <Button variant="outline" size="sm" onClick={() => handleQuickSync(client)} disabled={isSyncing}>
-                <RefreshCw className={`mr-2 h-3 w-3 ${syncingId === client.id ? "animate-spin" : ""}`} />
-                {syncingId === client.id ? "Sincronizando..." : "Sincronizar"}
-              </Button>
-            )}
-            {client.meta_ad_account_id && client.meta_access_token && (
-              <Button variant="outline" size="sm" onClick={() => handleVerifyConnection(client)} disabled={verifyingId === client.id}>
-                <ShieldAlert className="mr-2 h-3 w-3" />
-                {verifyingId === client.id ? "Verificando..." : "Verificar"}
-              </Button>
-            )}
-          </>
+        {canManage && !connected && (
+          <Button variant="outline" size="sm" onClick={() => openConnectDialog(client)} disabled={syncingId === client.id}>
+            <Link2 className="mr-2 h-3 w-3" />Conectar Meta
+          </Button>
         )}
-        <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/audit`)}>
-          <ShieldCheck className="mr-2 h-3 w-3" />Auditar
-        </Button>
+        {canManage && connected && (
+          <Button variant="outline" size="sm" onClick={() => handleQuickSync(client)} disabled={isSyncing}>
+            <RefreshCw className={`mr-2 h-3 w-3 ${syncingId === client.id ? "animate-spin" : ""}`} />
+            {syncingId === client.id ? "Sincronizando..." : "Sincronizar"}
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/reports`)}>
           <FileText className="mr-2 h-3 w-3" />Relatorios
         </Button>
@@ -825,52 +817,66 @@ export default function Clients() {
         >
           <Send className="mr-2 h-3 w-3" />Relatório WA
         </Button>
-        <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/creatives`)}>
-          <ImageIcon className="mr-2 h-3 w-3" />Criativos
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/audiences`)}>
-          <Users className="mr-2 h-3 w-3" />Publicos
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => copyDashboardLink(client)}
-        >
-          <ExternalLink className="mr-2 h-3 w-3" />Link do dashboard
-        </Button>
-        {canManage && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" aria-label="Mais acoes">
-                <MoreVertical className="h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => openEditDialog(client)}>
-                <Pencil className="mr-2 h-4 w-4" />Editar
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" aria-label="Mais acoes">
+              <MoreVertical className="h-3 w-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {canManage && connected && (
+              <DropdownMenuItem onClick={() => openConnectDialog(client)} disabled={syncingId === client.id}>
+                <Link2 className="mr-2 h-4 w-4" />Reconfigurar Meta
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => archiveClient(client)}>
-                {client.status === "archived" ? (
-                  <>
-                    <ArchiveRestore className="mr-2 h-4 w-4" />Desarquivar
-                  </>
-                ) : (
-                  <>
-                    <Archive className="mr-2 h-4 w-4" />Arquivar
-                  </>
-                )}
+            )}
+            {canManage && connected && (
+              <DropdownMenuItem onClick={() => handleVerifyConnection(client)} disabled={verifyingId === client.id}>
+                <ShieldAlert className="mr-2 h-4 w-4" />
+                {verifyingId === client.id ? "Verificando..." : "Verificar conexão"}
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setDeleteClient(client)}
-                className="text-rose-600 focus:text-rose-700 focus:bg-rose-50"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />Excluir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
+            )}
+            <DropdownMenuItem onClick={() => navigate(`/clients/${client.id}/audit`)}>
+              <ShieldCheck className="mr-2 h-4 w-4" />Auditar conta
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate(`/clients/${client.id}/creatives`)}>
+              <ImageIcon className="mr-2 h-4 w-4" />Criativos
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate(`/clients/${client.id}/audiences`)}>
+              <Users className="mr-2 h-4 w-4" />Públicos
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => copyDashboardLink(client)}>
+              <ExternalLink className="mr-2 h-4 w-4" />Copiar link do dashboard
+            </DropdownMenuItem>
+            {canManage && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => openEditDialog(client)}>
+                  <Pencil className="mr-2 h-4 w-4" />Editar
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => archiveClient(client)}>
+                  {client.status === "archived" ? (
+                    <>
+                      <ArchiveRestore className="mr-2 h-4 w-4" />Desarquivar
+                    </>
+                  ) : (
+                    <>
+                      <Archive className="mr-2 h-4 w-4" />Arquivar
+                    </>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => setDeleteClient(client)}
+                  className="text-rose-600 focus:text-rose-700 focus:bg-rose-50"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />Excluir
+                </DropdownMenuItem>
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     );
   }
@@ -1386,10 +1392,10 @@ export default function Clients() {
             </div>
           ) : view === "gallery" ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredClients.map(({ client, stats, isActive, isArchived, isConnected, health, syncLabel, lastSyncDate, verifiedAt, syncDue }) => {
+              {filteredClients.map(({ client, stats, isActive, isArchived, isConnected, health, syncLabel, syncDue }) => {
                 const latestText = stats.latest
-                  ? `Ultimo relatorio gerado ${formatDistanceToNow(new Date(stats.latest), { addSuffix: true, locale: ptBR })}`
-                  : "Nenhum relatorio gerado ainda";
+                  ? `ultimo ${formatDistanceToNow(new Date(stats.latest), { addSuffix: true, locale: ptBR })}`
+                  : "nenhum gerado ainda";
 
                 return (
                   <Card key={client.id} className="overflow-hidden border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
@@ -1462,23 +1468,9 @@ export default function Clients() {
                           <Activity className={`h-3.5 w-3.5 ${client.meta_sync_status === "healthy" ? "text-emerald-500" : client.meta_sync_status === "expired" || client.meta_sync_status === "error" ? "text-rose-500" : "text-slate-400"}`} />
                         </div>
                         <p className="mt-2 text-xs text-slate-700">
-                          <span className="font-semibold">{stats.count}</span> {stats.count === 1 ? "relatorio" : "relatorios"}
+                          <span className="font-semibold">{stats.count}</span> {stats.count === 1 ? "relatorio" : "relatorios"} · {latestText}
                         </p>
-                        <p className="mt-1 text-[11px] text-sky-700">{latestText}</p>
                         <p className="mt-1 text-[11px] text-muted-foreground">{syncLabel}</p>
-                        {verifiedAt && (
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            Verificada em {format(verifiedAt, "dd/MM/yyyy HH:mm")}
-                          </p>
-                        )}
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          Criado em {format(new Date(client.created_at), "dd/MM/yyyy")}
-                        </p>
-                        {lastSyncDate && (
-                          <p className="mt-1 text-[11px] text-muted-foreground">
-                            Ultima sync em {format(lastSyncDate, "dd/MM/yyyy HH:mm")}
-                          </p>
-                        )}
                         {client.meta_auto_sync_enabled && (
                           <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2">
                             <div>
