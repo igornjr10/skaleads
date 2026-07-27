@@ -19,6 +19,7 @@ const Andromeda = lazy(() => import("./pages/Andromeda"));
 const ClientAudit = lazy(() => import("./pages/ClientAudit"));
 const ClientReports = lazy(() => import("./pages/ClientReports"));
 const ReportShare = lazy(() => import("./pages/ReportShare"));
+const ClientDashboardShare = lazy(() => import("./pages/ClientDashboardShare"));
 const ReportSchedules = lazy(() => import("./pages/ReportSchedules"));
 const ClientCreatives = lazy(() => import("./pages/ClientCreatives"));
 const ClientAudiences = lazy(() => import("./pages/ClientAudiences"));
@@ -72,6 +73,7 @@ const App = () => (
                 <Route path="/settings" element={<Settings />} />
               </Route>
               <Route path="/share/reports/:token" element={<ReportShare />} />
+              <Route path="/dashboard/:token" element={<ClientDashboardShare />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

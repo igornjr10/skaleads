@@ -3,6 +3,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { NotificationsBell } from "./NotificationsBell";
 import { MarketProLogo } from "./MarketProLogo";
+import { ClientSwitcher } from "./ClientSwitcher";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/":            { title: "Dashboard",        subtitle: "Visão geral das campanhas" },
@@ -54,6 +55,8 @@ export function AppLayout() {
             </div>
 
             <div className="flex-1" />
+
+            <ClientSwitcher />
 
             {/* Right side */}
             <div className="flex items-center gap-2">

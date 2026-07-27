@@ -28,6 +28,7 @@ import {
   Store,
   Send,
   Loader2,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +99,7 @@ interface Client {
   meta_last_verified_at: string | null;
   meta_sync_runs: number;
   meta_sync_status: "pending" | "connected" | "syncing" | "healthy" | "warning" | "error" | "expired";
+  dashboard_share_token: string;
   created_at: string;
   whatsapp_number: string | null;
   whatsapp_group_jid: string | null;
@@ -780,6 +782,12 @@ export default function Clients() {
   const connectedCount = clients.filter((client) => client.meta_ad_account_id).length;
   const expiredClients = clients.filter((client) => client.meta_sync_status === "expired");
 
+  async function copyDashboardLink(client: Client) {
+    const url = `${window.location.origin}/dashboard/${client.dashboard_share_token}`;
+    await navigator.clipboard.writeText(url);
+    toast.success("Link do dashboard copiado — pode enviar pro cliente");
+  }
+
   function renderClientActions(client: Client, compact = false) {
     return (
       <div className={`flex ${compact ? "flex-wrap" : "justify-end"} gap-2`}>
@@ -822,6 +830,13 @@ export default function Clients() {
         </Button>
         <Button variant="outline" size="sm" onClick={() => navigate(`/clients/${client.id}/audiences`)}>
           <Users className="mr-2 h-3 w-3" />Publicos
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => copyDashboardLink(client)}
+        >
+          <ExternalLink className="mr-2 h-3 w-3" />Link do dashboard
         </Button>
         {canManage && (
           <DropdownMenu>

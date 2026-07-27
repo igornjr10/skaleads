@@ -13,7 +13,7 @@ import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { syncClientData } from "@/lib/meta-api";
 import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -225,9 +225,10 @@ function getSeverityClass(severity: CampaignAlert["severity"]) {
 
 export default function Campaigns() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [clients, setClients] = useState<Client[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedClient, setSelectedClient] = useState("all");
+  const [selectedClient, setSelectedClient] = useState(() => searchParams.get("client") || "all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [performanceFilter, setPerformanceFilter] = useState<PerformanceFilter>("all");
   const [objectiveFilter, setObjectiveFilter] = useState("all");
