@@ -439,15 +439,9 @@ export function ReportGeneratorPanel({
   }
 
   async function fetchFacebookPresence(metaPageId?: string | null, metaAccessToken?: string | null) {
-    if (!metaPageId || !metaAccessToken) {
-      return {
-        pageName: null,
-        followers: null,
-        reach: null,
-        engagement: null,
-        instagramAccountId: null,
-      };
-    }
+    // Retorna null (e não um objeto vazio) para que a origem "Facebook" só
+    // apareça no relatório quando a página realmente foi consultada.
+    if (!metaPageId || !metaAccessToken) return null;
 
     const pageInfo = await fetchMetaJson<{
       name?: string;
@@ -490,16 +484,7 @@ export function ReportGeneratorPanel({
   }
 
   async function fetchInstagramPresence(metaInstagramAccountId?: string | null, metaAccessToken?: string | null, usernameSearch?: string) {
-    if (!metaInstagramAccountId || !metaAccessToken) {
-      return {
-        username: null,
-        logoUrl: null,
-        followers: null,
-        profileViews: null,
-        reach: null,
-        engagement: null,
-      };
-    }
+    if (!metaInstagramAccountId || !metaAccessToken) return null;
 
     const searchedUsername = normalizeInstagramUsername(usernameSearch ?? "");
     const profile = searchedUsername
@@ -616,6 +601,21 @@ export function ReportGeneratorPanel({
     const instagramResult = token ? await fetchInstagramPresence(instagramAccountId, token, instagramUsername).catch(() => null) : null;
     const sourceLabels = [pageResult ? "Facebook" : null, instagramResult ? "Instagram" : null].filter(Boolean) as string[];
     const sourceText = sourceLabels.length ? sourceLabels.join(" + ") : "Dados nao disponiveis";
+    const hasInstagram = Boolean(instagramResult);
+
+    if (!hasInstagram && socialMetricPreferences.includes("profileViews")) {
+      toast.warning(
+        "Este cliente nao tem perfil do Instagram vinculado — visitas no perfil, alcance e engajamento saem vazios. Vincule em Clientes > editar cliente > Perfil do Instagram."
+      );
+    }
+
+    // Sem valor, a legenda explica a causa em vez de repetir a origem.
+    function missingSource(key: SocialMetricPreference) {
+      if (!hasInstagram) {
+        return key === "followers" ? "Sem dados no periodo" : "Instagram nao vinculado";
+      }
+      return "Insights do IG indisponiveis";
+    }
 
     const totals = {
       followers:
@@ -642,7 +642,7 @@ export function ReportGeneratorPanel({
         key,
         label: SOCIAL_METRIC_OPTIONS.find((option) => option.key === key)?.label || key,
         value: totals[key],
-        source: sourceText,
+        source: totals[key] != null ? sourceText : missingSource(key),
       })),
     };
   }
