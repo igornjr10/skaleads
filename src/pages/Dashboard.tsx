@@ -7,7 +7,8 @@ import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianG
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp, MessageCircle, Phone, MapPin, UserPlus, Users, Repeat, Heart, Radio } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp, MessageCircle, Phone, MapPin, UserPlus, Users, Repeat, Heart, Radio, Info } from "lucide-react";
 import { subDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { GOAL_KPIS, LOCAL_METRIC_LABELS, goalLabel, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
@@ -28,6 +29,36 @@ const LOCAL_METRIC_ICONS: Record<LocalMetricKey, typeof MessageCircle> = {
   leads: UserPlus,
   profileVisits: Eye,
 };
+
+// Métrica zerada não significa erro: a Meta só devolve cada evento quando o
+// anúncio tem o formato/placement correspondente. Explicitar isso evita que o
+// card "sumido" seja lido como bug de integração.
+const LOCAL_METRIC_HINTS: Record<LocalMetricKey, string> = {
+  messages: "A Meta só registra conversas em campanhas de mensagens (WhatsApp, Direct ou Messenger).",
+  calls: "Só é registrado em anúncios com botão de ligar.",
+  directions: "Só é registrado em anúncios com endereço ou botão de rota/localização.",
+  leads: "Só é registrado em campanhas de cadastro (formulário de leads ou conversão de lead no site).",
+  profileVisits: "Só é registrado em anúncios veiculados no Instagram. Campanhas apenas no Facebook ou WhatsApp não geram esse evento.",
+};
+
+const SYNC_HINT = "Se a conta roda esse tipo de anúncio, sincronize o cliente novamente em Clientes.";
+
+function MetricHint({ text }: { text: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Por que esta métrica está vazia?"
+          className="rounded-full p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 text-xs leading-relaxed">{text}</PopoverContent>
+    </Popover>
+  );
+}
 
 interface Campaign {
   id: string;
@@ -276,32 +307,50 @@ export default function Dashboard() {
     : ["messages", "calls", "directions", "leads", "profileVisits"];
 
   const primaryKey = orderedLocalKeys[0];
-  // Mostra apenas métricas com resultado ou o objetivo principal — evita
-  // exibir cards zerados (ex.: cliente que só roda campanha de conversa).
-  const visibleLocalKeys = orderedLocalKeys.filter((key) => localTotals[key] > 0 || key === primaryKey);
 
-  const localKpis = visibleLocalKeys.map((key) => ({
-    key,
-    label: LOCAL_METRIC_LABELS[key],
-    value: formatNumber(localTotals[key]),
-    delta: pctDelta(localTotals[key], prevLocalTotals[key]),
-    icon: LOCAL_METRIC_ICONS[key],
-  }));
+  // Todas as métricas locais são exibidas sempre: as zeradas mostram "—" com o
+  // motivo, para distinguir "não houve resultado" de "não está configurado".
+  const localKpis = orderedLocalKeys.map((key) => {
+    const total = localTotals[key];
+    return {
+      key,
+      label: LOCAL_METRIC_LABELS[key],
+      value: total > 0 ? formatNumber(total) : "—",
+      empty: total === 0,
+      hint: total === 0 ? `${LOCAL_METRIC_HINTS[key]} ${SYNC_HINT}` : null,
+      delta: pctDelta(total, prevLocalTotals[key]),
+      icon: LOCAL_METRIC_ICONS[key],
+    };
+  });
 
   const primaryResults = localTotals[primaryKey];
   const costPerPrimary = primaryResults > 0 ? currentAgg.spend / primaryResults : 0;
-  const hasLocalResults = Object.values(localTotals).some((v) => v > 0);
 
-  const richStats: { key: string; label: string; value: string; icon: typeof Users }[] = [];
+  const hasInstagram = social?.sources?.includes("Instagram") ?? false;
+  const socialHint = (metric: string) =>
+    hasInstagram
+      ? `A Meta não retornou ${metric} para este perfil no período.`
+      : "Nenhum perfil do Instagram vinculado a este cliente. Vincule em Clientes > editar cliente > Perfil do Instagram.";
+
+  const richStats: { key: string; label: string; value: string; icon: typeof Users; hint?: string | null }[] = [];
   if (reachFreq) {
     richStats.push({ key: "reach", label: "Alcance", value: formatNumber(reachFreq.reach), icon: Radio });
     richStats.push({ key: "freq", label: "Frequência", value: reachFreq.frequency.toFixed(2), icon: Repeat });
   }
   if (social) {
-    if (social.followers != null) richStats.push({ key: "followers", label: "Seguidores", value: formatNumber(social.followers), icon: Users });
-    if (social.profileViews != null) richStats.push({ key: "pviews", label: "Visitas no perfil", value: formatNumber(social.profileViews), icon: Eye });
-    if (social.reach != null) richStats.push({ key: "sreach", label: "Alcance social", value: formatNumber(social.reach), icon: Radio });
-    if (social.engagement != null) richStats.push({ key: "eng", label: "Engajamento", value: formatNumber(social.engagement), icon: Heart });
+    const socialStat = (key: string, label: string, value: number | null | undefined, icon: typeof Users, metric: string) =>
+      richStats.push({
+        key,
+        label,
+        value: value != null ? formatNumber(value) : "—",
+        icon,
+        hint: value != null ? null : socialHint(metric),
+      });
+
+    socialStat("followers", "Seguidores", social.followers, Users, "seguidores");
+    socialStat("pviews", "Visitas no perfil", social.profileViews, Eye, "visitas no perfil (profile_views)");
+    socialStat("sreach", "Alcance social", social.reach, Radio, "alcance");
+    socialStat("eng", "Engajamento", social.engagement, Heart, "engajamento");
   }
 
   // Chart series
@@ -389,37 +438,43 @@ export default function Dashboard() {
           </div>
 
           {/* Resultados locais */}
-          {hasLocalResults && (
-            <Card className="shadow-card">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">Resultados de negócio local</CardTitle>
-                <CardDescription>
-                  {selectedGoal
-                    ? `Objetivo principal: ${goalLabel(selectedGoal)} · custo por ${LOCAL_METRIC_LABELS[primaryKey].toLowerCase()}: ${primaryResults > 0 ? formatCurrency(costPerPrimary) : "-"}`
-                    : "Conversas, ligações, rotas, leads e visitas no perfil no período"}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
-                  {localKpis.map((k) => (
-                    <div key={k.key} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</span>
-                        <k.icon className="h-4 w-4 text-primary" />
+          <Card className="shadow-card">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Resultados de negócio local</CardTitle>
+              <CardDescription>
+                {selectedGoal
+                  ? `Objetivo principal: ${goalLabel(selectedGoal)} · custo por ${LOCAL_METRIC_LABELS[primaryKey].toLowerCase()}: ${primaryResults > 0 ? formatCurrency(costPerPrimary) : "-"}`
+                  : "Conversas, ligações, rotas, leads e visitas no perfil no período"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+                {localKpis.map((k) => (
+                  <div
+                    key={k.key}
+                    className={`rounded-xl border border-slate-100 p-4 ${k.empty ? "bg-slate-50/30" : "bg-slate-50/60"}`}
+                  >
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</span>
+                      <div className="flex shrink-0 items-center gap-1">
+                        {k.hint && <MetricHint text={k.hint} />}
+                        <k.icon className={`h-4 w-4 ${k.empty ? "text-muted-foreground/50" : "text-primary"}`} />
                       </div>
-                      <div className="mt-2 text-xl font-semibold tabular-nums">{k.value}</div>
-                      {k.delta !== 0 && (
-                        <div className={`mt-1 flex items-center gap-1 text-xs ${k.delta >= 0 ? "text-success" : "text-destructive"}`}>
-                          {k.delta >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
-                          {Math.abs(k.delta).toFixed(1)}% vs período anterior
-                        </div>
-                      )}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    <div className={`mt-2 text-xl font-semibold tabular-nums ${k.empty ? "text-muted-foreground/60" : ""}`}>
+                      {k.value}
+                    </div>
+                    {k.delta !== 0 && (
+                      <div className={`mt-1 flex items-center gap-1 text-xs ${k.delta >= 0 ? "text-success" : "text-destructive"}`}>
+                        {k.delta >= 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+                        {Math.abs(k.delta).toFixed(1)}% vs período anterior
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Alcance e presença social (apenas com 1 cliente selecionado) */}
           {clientId && (
@@ -441,15 +496,28 @@ export default function Dashboard() {
                 ) : (
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
                     {richStats.map((s) => (
-                      <div key={s.key} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
-                        <div className="flex items-center justify-between">
+                      <div
+                        key={s.key}
+                        className={`rounded-xl border border-slate-100 p-4 ${s.hint ? "bg-slate-50/30" : "bg-slate-50/60"}`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
                           <span className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</span>
-                          <s.icon className="h-4 w-4 text-primary" />
+                          <div className="flex shrink-0 items-center gap-1">
+                            {s.hint && <MetricHint text={s.hint} />}
+                            <s.icon className={`h-4 w-4 ${s.hint ? "text-muted-foreground/50" : "text-primary"}`} />
+                          </div>
                         </div>
-                        <div className="mt-2 text-xl font-semibold tabular-nums">{s.value}</div>
+                        <div className={`mt-2 text-xl font-semibold tabular-nums ${s.hint ? "text-muted-foreground/60" : ""}`}>
+                          {s.value}
+                        </div>
                       </div>
                     ))}
                   </div>
+                )}
+                {!richLoading && reachFreq && !social && (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Presença social indisponível: nenhuma Página do Facebook ou perfil do Instagram vinculado a este cliente.
+                  </p>
                 )}
               </CardContent>
             </Card>
