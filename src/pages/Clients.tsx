@@ -29,6 +29,7 @@ import {
   Send,
   Loader2,
   ExternalLink,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +68,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { syncClientData, validateMetaConnection } from "@/lib/meta-api";
 import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaPage } from "@/lib/facebook-sdk";
 import { BUSINESS_SEGMENTS, LOCAL_GOALS, segmentLabel } from "@/lib/local-business";
+import { computeBudgetStatus } from "@/lib/client-budget";
+import { formatCurrency } from "@/lib/format";
+import { ClientBudgetMeter, ClientBudgetCell } from "@/components/clients/ClientBudgetMeter";
 import ClientReportDialog from "@/components/ClientReportDialog";
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string;
@@ -113,7 +117,8 @@ interface ReportRow {
 
 type StatusFilter = "all" | "active" | "inactive" | "archived";
 type ConnectionFilter = "all" | "connected" | "disconnected";
-type SortOption = "recent" | "name" | "reports" | "lastSync";
+type SortOption = "recent" | "name" | "reports" | "lastSync" | "budget";
+type BudgetFilter = "all" | "overPace" | "underPace" | "noBudget";
 
 const AUTO_SYNC_OPTIONS = [
   { label: "A cada 6h", value: "6" },
@@ -176,8 +181,10 @@ export default function Clients() {
   const [view, setView] = useState("gallery");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [connectionFilter, setConnectionFilter] = useState<ConnectionFilter>("all");
+  const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>("all");
   const [sortBy, setSortBy] = useState<SortOption>("recent");
   const [reportStats, setReportStats] = useState<Record<string, { count: number; latest: string | null }>>({});
+  const [monthSpend, setMonthSpend] = useState<Record<string, number>>({});
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
@@ -217,15 +224,49 @@ export default function Clients() {
   const [deleting, setDeleting] = useState(false);
   const [reportClient, setReportClient] = useState<Client | null>(null);
 
+  // Gasto do mes corrente por cliente. Paginado porque a tabela tem 1 linha por
+  // cliente/dia e o teto padrao do PostgREST corta em 1000 linhas.
+  async function fetchMonthSpendByClient() {
+    const now = new Date();
+    const firstOfMonth = format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
+    const pageSize = 1000;
+    const totals: Record<string, number> = {};
+
+    for (let page = 0; ; page += 1) {
+      const { data, error } = await supabase
+        .from("campaign_daily_metrics")
+        .select("client_id, spend")
+        .gte("date", firstOfMonth)
+        .order("id", { ascending: true })
+        .range(page * pageSize, page * pageSize + pageSize - 1);
+
+      if (error) throw error;
+      const rows = data ?? [];
+      for (const row of rows) {
+        totals[row.client_id] = (totals[row.client_id] ?? 0) + (Number(row.spend) || 0);
+      }
+      if (rows.length < pageSize) break;
+    }
+
+    return totals;
+  }
+
   async function load() {
     setLoading(true);
-    const [{ data: clientsData, error: clientsError }, { data: reportsData, error: reportsError }] = await Promise.all([
-      supabase.from("clients").select("*, logo_url").order("created_at", { ascending: false }),
-      supabase.from("reports").select("client_id, created_at"),
-    ]);
+    const [{ data: clientsData, error: clientsError }, { data: reportsData, error: reportsError }, spendTotals] =
+      await Promise.all([
+        supabase.from("clients").select("*, logo_url").order("created_at", { ascending: false }),
+        supabase.from("reports").select("client_id, created_at"),
+        fetchMonthSpendByClient().catch((error: unknown) => {
+          toast.error(error instanceof Error ? error.message : "Erro ao carregar verba do mes");
+          return {} as Record<string, number>;
+        }),
+      ]);
 
     if (clientsError) toast.error(clientsError.message);
     if (reportsError) toast.error(reportsError.message);
+
+    setMonthSpend(spendTotals);
 
     setClients((clientsData as Client[]) ?? []);
 
@@ -249,6 +290,7 @@ export default function Clients() {
   const clientsWithStats = useMemo(() => {
     return clients.map((client) => {
       const stats = reportStats[client.id] ?? { count: 0, latest: null };
+      const budget = computeBudgetStatus(client.monthly_budget, monthSpend[client.id] ?? 0);
       const isConnected = Boolean(client.meta_ad_account_id);
       const isActive = client.status === "active";
       const isArchived = client.status === "archived";
@@ -269,6 +311,7 @@ export default function Clients() {
       return {
         client,
         stats,
+        budget,
         isConnected,
         isActive,
         isArchived,
@@ -279,12 +322,12 @@ export default function Clients() {
         syncLabel,
       };
     });
-  }, [clients, reportStats, syncingId, syncProgress]);
+  }, [clients, reportStats, monthSpend, syncingId, syncProgress]);
 
   const filteredClients = useMemo(() => {
     const term = search.trim().toLowerCase();
     return clientsWithStats
-      .filter(({ client, isActive, isArchived, isConnected }) => {
+      .filter(({ client, isActive, isArchived, isConnected, budget }) => {
         const matchesSearch = !term || client.name.toLowerCase().includes(term);
         let matchesStatus = true;
         if (statusFilter === "active") matchesStatus = isActive;
@@ -295,25 +338,57 @@ export default function Clients() {
           connectionFilter === "all" ||
           (connectionFilter === "connected" && isConnected) ||
           (connectionFilter === "disconnected" && !isConnected);
+        const matchesBudget =
+          budgetFilter === "all" ||
+          (budgetFilter === "overPace" && (budget.level === "ahead" || budget.level === "over")) ||
+          (budgetFilter === "underPace" && (budget.level === "behind" || budget.level === "idle")) ||
+          (budgetFilter === "noBudget" && budget.level === "none");
 
-        return matchesSearch && matchesStatus && matchesConnection;
+        return matchesSearch && matchesStatus && matchesConnection && matchesBudget;
       })
       .sort((a, b) => {
         if (sortBy === "name") return a.client.name.localeCompare(b.client.name, "pt-BR");
         if (sortBy === "reports") return b.stats.count - a.stats.count;
         if (sortBy === "lastSync") return (b.lastSyncDate?.getTime() ?? 0) - (a.lastSyncDate?.getTime() ?? 0);
+        if (sortBy === "budget") {
+          // Clientes sem verba cadastrada vao pro fim — nao ha ritmo pra comparar
+          if (a.budget.budget == null) return b.budget.budget == null ? 0 : 1;
+          if (b.budget.budget == null) return -1;
+          return b.budget.pct - a.budget.pct;
+        }
         return new Date(b.client.created_at).getTime() - new Date(a.client.created_at).getTime();
       });
-  }, [clientsWithStats, search, statusFilter, connectionFilter, sortBy]);
+  }, [clientsWithStats, search, statusFilter, connectionFilter, budgetFilter, sortBy]);
 
   const filteredActiveCount = filteredClients.filter(({ isActive }) => isActive).length;
   const filteredConnectedCount = filteredClients.filter(({ isConnected }) => isConnected).length;
   const healthyCount = clients.filter((client) => client.meta_sync_status === "healthy").length;
 
+  const budgetOverview = useMemo(() => {
+    return clientsWithStats.reduce(
+      (acc, { budget, isArchived }) => {
+        if (isArchived) return acc;
+        acc.spent += budget.spent;
+        if (budget.budget != null) {
+          acc.total += budget.budget;
+          acc.withBudget += 1;
+          if (budget.level === "ahead" || budget.level === "over") acc.atRisk += 1;
+        } else {
+          acc.withoutBudget += 1;
+        }
+        return acc;
+      },
+      { total: 0, spent: 0, withBudget: 0, withoutBudget: 0, atRisk: 0 }
+    );
+  }, [clientsWithStats]);
+
+  const budgetOverviewPct = budgetOverview.total > 0 ? (budgetOverview.spent / budgetOverview.total) * 100 : 0;
+
   function resetFilters() {
     setSearch("");
     setStatusFilter("all");
     setConnectionFilter("all");
+    setBudgetFilter("all");
     setSortBy("recent");
   }
 
@@ -1253,7 +1328,32 @@ export default function Clients() {
         </Card>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <Card className="border-slate-200 md:col-span-2 xl:col-span-1">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-violet-100 p-3 text-violet-600">
+                <Wallet className="h-5 w-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-muted-foreground">Verba do mes</p>
+                <p className="text-2xl font-bold">{formatCurrency(budgetOverview.spent)}</p>
+                <p className="text-xs text-muted-foreground">
+                  de {formatCurrency(budgetOverview.total)} · {Math.round(budgetOverviewPct)}%
+                </p>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className={`h-full rounded-full ${budgetOverviewPct >= 100 ? "bg-rose-500" : "bg-violet-500"}`}
+                    style={{ width: `${Math.min(budgetOverviewPct, 100)}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {budgetOverview.atRisk} acima do ritmo · {budgetOverview.withoutBudget} sem verba
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Card className="border-slate-200">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -1347,6 +1447,18 @@ export default function Clients() {
                   <SelectItem value="disconnected">Nao conectada</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={budgetFilter} onValueChange={(value) => setBudgetFilter(value as BudgetFilter)}>
+                <SelectTrigger className="w-[180px]">
+                  <Wallet className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Verba" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toda verba</SelectItem>
+                  <SelectItem value="overPace">Acima do ritmo</SelectItem>
+                  <SelectItem value="underPace">Abaixo do ritmo</SelectItem>
+                  <SelectItem value="noBudget">Sem verba definida</SelectItem>
+                </SelectContent>
+              </Select>
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortOption)}>
                 <SelectTrigger className="w-[170px]">
                   <ArrowUpDown className="mr-2 h-4 w-4" />
@@ -1357,6 +1469,7 @@ export default function Clients() {
                   <SelectItem value="name">Nome A-Z</SelectItem>
                   <SelectItem value="reports">Mais relatorios</SelectItem>
                   <SelectItem value="lastSync">Ultima sync</SelectItem>
+                  <SelectItem value="budget">Verba consumida</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
@@ -1381,6 +1494,10 @@ export default function Clients() {
             <Badge variant="secondary" className="rounded-full bg-sky-500/10 text-sky-200">
               {filteredConnectedCount} com Meta
             </Badge>
+            <Badge variant="secondary" className="gap-1 rounded-full bg-violet-500/10 text-violet-200">
+              <Wallet className="h-3 w-3" />
+              {formatCurrency(budgetOverview.spent)} de {formatCurrency(budgetOverview.total)}
+            </Badge>
           </div>
         </CardHeader>
         <CardContent>
@@ -1392,7 +1509,7 @@ export default function Clients() {
             </div>
           ) : view === "gallery" ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {filteredClients.map(({ client, stats, isActive, isArchived, isConnected, health, syncLabel, syncDue }) => {
+              {filteredClients.map(({ client, stats, budget, isActive, isArchived, isConnected, health, syncLabel, syncDue }) => {
                 const latestText = stats.latest
                   ? `ultimo ${formatDistanceToNow(new Date(stats.latest), { addSuffix: true, locale: ptBR })}`
                   : "nenhum gerado ainda";
@@ -1484,6 +1601,13 @@ export default function Clients() {
                         )}
                       </div>
 
+                      <div className="mt-3">
+                        <ClientBudgetMeter
+                          status={budget}
+                          onSetBudget={canManage ? () => openEditDialog(client) : undefined}
+                        />
+                      </div>
+
                       <div className="mt-5 border-t border-slate-100 pt-4">
                         {renderClientActions(client, true)}
                       </div>
@@ -1499,6 +1623,7 @@ export default function Clients() {
                   <TableHead>Cliente</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Meta Ads</TableHead>
+                  <TableHead>Verba do mes</TableHead>
                   <TableHead>Relatorios</TableHead>
                   <TableHead>Ultima sync</TableHead>
                   <TableHead>Criado em</TableHead>
@@ -1506,7 +1631,7 @@ export default function Clients() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredClients.map(({ client, stats, isConnected, lastSyncDate, syncLabel, health, syncDue }) => {
+                {filteredClients.map(({ client, stats, budget, isConnected, lastSyncDate, syncLabel, health, syncDue }) => {
                   return (
                     <TableRow key={client.id}>
                       <TableCell>
@@ -1556,6 +1681,9 @@ export default function Clients() {
                             )}
                           </div>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <ClientBudgetCell status={budget} />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {stats.count} {stats.count === 1 ? "relatorio" : "relatorios"}
