@@ -8,7 +8,8 @@ const corsHeaders = {
 // Quando a instância trava, o Manager da Evolution manda os comandos e nada
 // acontece. Chamar os mesmos endpoints direto contorna a UI.
 const ACTIONS = {
-  restart: { method: "PUT", path: "instance/restart" },
+  // POST, não PUT: a Evolution v2 trocou o verbo e o v1 responde 404 aqui
+  restart: { method: "POST", path: "instance/restart" },
   logout: { method: "DELETE", path: "instance/logout" },
   connect: { method: "GET", path: "instance/connect" },
 } as const;

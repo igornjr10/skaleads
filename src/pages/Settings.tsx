@@ -8,7 +8,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert } from "lucide-react";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert, QrCode, RotateCw, Power } from "lucide-react";
 
 interface Member {
   user_id: string;
@@ -37,6 +41,27 @@ interface InstanceStatus {
 
 const ROLES = ["owner", "admin", "analyst", "viewer"] as const;
 
+type AdminAction = "restart" | "logout" | "connect";
+
+// A Evolution ora devolve o QR na raiz, ora aninhado em `qrcode`, e o base64
+// às vezes já vem com o prefixo data: e às vezes não.
+function extractQr(response: unknown): { image: string | null; pairingCode: string | null } {
+  const payload = (response as any)?.qrcode ?? response;
+  const raw = payload?.base64 ?? null;
+  return {
+    image: raw ? (String(raw).startsWith("data:") ? raw : `data:image/png;base64,${raw}`) : null,
+    pairingCode: payload?.pairingCode ?? null,
+  };
+}
+
+// O erro real da Evolution vem embrulhado em duas camadas de `response`
+function adminErrorMessage(detail: any, fallback: string): string {
+  const nested = detail?.response?.response?.message ?? detail?.response?.message;
+  if (Array.isArray(nested)) return nested.join(" · ");
+  if (typeof nested === "string") return nested;
+  return detail?.error ?? fallback;
+}
+
 export default function Settings() {
   const { user, role } = useAuth();
   const isOwner = role === "owner";
@@ -47,6 +72,9 @@ export default function Settings() {
   const [instanceStatus, setInstanceStatus] = useState<InstanceStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
+  const [adminBusy, setAdminBusy] = useState<AdminAction | null>(null);
+  const [qrImage, setQrImage] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
 
   async function load() {
     const { data: profiles } = await supabase.from("profiles").select("id, email, full_name");
@@ -64,6 +92,23 @@ export default function Settings() {
   }
 
   useEffect(() => { if (user) { load(); checkInstanceStatus(); } /* eslint-disable-next-line */ }, [user?.id]);
+
+  // Enquanto o QR estiver na tela, detectar o pareamento sozinho — o usuário
+  // está com o celular na mão, não vai clicar em "atualizar"
+  useEffect(() => {
+    if (!qrImage) return;
+    const id = setInterval(async () => {
+      const { data } = await supabase.functions.invoke("whatsapp-instance-status");
+      if (data?.connected) {
+        setInstanceStatus(data as InstanceStatus);
+        setStatusError(null);
+        setQrImage(null);
+        setPairingCode(null);
+        toast.success("WhatsApp conectado");
+      }
+    }, 5000);
+    return () => clearInterval(id);
+  }, [qrImage]);
 
   async function saveProfile() {
     if (!user) return;
@@ -89,6 +134,57 @@ export default function Settings() {
       setStatusError(err instanceof Error ? err.message : "Erro ao consultar a instância");
     } finally {
       setLoadingStatus(false);
+    }
+  }
+
+  async function runAdminAction(action: AdminAction) {
+    setAdminBusy(action);
+    try {
+      const { data, error } = await supabase.functions.invoke("whatsapp-instance-admin", { body: { action } });
+      if (error) {
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(adminErrorMessage(detail, error.message));
+      }
+      if (data?.error) throw new Error(data.error);
+
+      if (action === "connect") {
+        const { image, pairingCode: code } = extractQr(data?.response);
+        if (!image) {
+          setQrImage(null);
+          setPairingCode(null);
+          // A Evolution só oferece QR quando considera a sessão encerrada. Se ela
+          // acha que está "open" — mesmo com o socket morto — devolve só o estado.
+          toast.info(
+            "A Evolution considera esta instância conectada e por isso não gerou QR. " +
+            "Se os envios estão falhando, use Reiniciar instância; se não resolver, Desconectar e então gerar o QR.",
+            { duration: 15000 }
+          );
+          await checkInstanceStatus();
+          return;
+        }
+        setQrImage(image);
+        setPairingCode(code);
+        toast.success("QR Code gerado — leia com o WhatsApp do número da instância");
+        return;
+      }
+
+      if (action === "logout") {
+        setQrImage(null);
+        setPairingCode(null);
+        toast.success("Sessão encerrada. Gere o QR Code para parear de novo");
+        await checkInstanceStatus();
+        return;
+      }
+
+      toast.success("Instância reiniciada — reconectando o socket");
+      // O socket do Baileys leva alguns segundos para subir; consultar na hora
+      // devolveria o estado antigo
+      await new Promise((r) => setTimeout(r, 4000));
+      await checkInstanceStatus();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `Falha ao executar ${action}`, { duration: 15000 });
+    } finally {
+      setAdminBusy(null);
     }
   }
 
@@ -251,9 +347,10 @@ export default function Settings() {
 
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle>WhatsApp — Grupos (Evolution API)</CardTitle>
+          <CardTitle>WhatsApp — Conexão e grupos (Evolution API)</CardTitle>
           <CardDescription>
-            Grupos ativos no número conectado à instância Evolution. Copie o JID para usar como destino de alertas/relatórios.
+            Reinicie, reconecte ou pareie a instância sem sair do sistema. Abaixo, os grupos ativos no número conectado —
+            copie o JID para usar como destino de alertas/relatórios.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -312,6 +409,85 @@ export default function Settings() {
               <RefreshCw className={`h-3.5 w-3.5 ${loadingStatus ? "animate-spin" : ""}`} />
             </Button>
           </div>
+
+          {isOwner ? (
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => runAdminAction("restart")}
+                disabled={adminBusy !== null}
+                variant="outline"
+                size="sm"
+              >
+                {adminBusy === "restart"
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : <RotateCw className="mr-2 h-4 w-4" />}
+                Reiniciar instância
+              </Button>
+
+              <Button
+                onClick={() => runAdminAction("connect")}
+                disabled={adminBusy !== null}
+                variant="outline"
+                size="sm"
+              >
+                {adminBusy === "connect"
+                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  : <QrCode className="mr-2 h-4 w-4" />}
+                {qrImage ? "Gerar novo QR Code" : "Gerar QR Code"}
+              </Button>
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button disabled={adminBusy !== null} variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                    {adminBusy === "logout"
+                      ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      : <Power className="mr-2 h-4 w-4" />}
+                    Desconectar
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Desconectar a instância {instanceStatus?.instance ?? "Evolution"}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Isso encerra a sessão do WhatsApp e exige ler o QR Code de novo, com o celular em mãos.
+                      A instância é compartilhada com outro sistema — ele também para de enviar mensagens até o novo pareamento.
+                      Se o objetivo é só destravar um socket caído, prefira <strong>Reiniciar instância</strong>.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => runAdminAction("logout")}>Desconectar</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Apenas Owners podem reiniciar, desconectar ou reparear a instância.
+            </p>
+          )}
+
+          {qrImage && (
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/40 p-4">
+              <img src={qrImage} alt="QR Code para conectar o WhatsApp" className="h-56 w-56 rounded-md bg-white p-2" />
+              <div className="space-y-1 text-center">
+                <p className="text-sm font-medium">WhatsApp → Aparelhos conectados → Conectar aparelho</p>
+                <p className="text-xs text-muted-foreground">
+                  O QR expira em cerca de 1 minuto. Se não ler a tempo, clique em <strong>Gerar novo QR Code</strong>.
+                </p>
+                {pairingCode && (
+                  <p className="text-xs text-muted-foreground">
+                    Ou use o código de pareamento:{" "}
+                    <code className="rounded bg-muted px-1 font-mono text-xs">{pairingCode}</code>
+                  </p>
+                )}
+              </div>
+              <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Aguardando o pareamento...
+              </span>
+            </div>
+          )}
 
           <Button onClick={loadWhatsappGroups} disabled={loadingGroups} variant="outline" size="sm">
             {loadingGroups ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
