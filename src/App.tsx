@@ -9,6 +9,9 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
+const Landing = lazy(() => import("./pages/Landing"));
+const Privacidade = lazy(() => import("./pages/Privacidade"));
+const Termos = lazy(() => import("./pages/Termos"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Clients = lazy(() => import("./pages/Clients"));
@@ -53,9 +56,13 @@ const App = () => (
         <AuthProvider>
           <Suspense fallback={<RouteFallback />}>
             <Routes>
+              {/* Publicas: a raiz e a pagina de venda, nao o dashboard. */}
+              <Route path="/" element={<Landing />} />
+              <Route path="/privacidade" element={<Privacidade />} />
+              <Route path="/termos" element={<Termos />} />
               <Route path="/auth" element={<Auth />} />
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/clients/:id" element={<ClientHub />} />
                 <Route path="/campaigns" element={<Campaigns />} />

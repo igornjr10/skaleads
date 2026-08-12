@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ScaleAdsLogo } from "./ScaleAdsLogo";
 
 const items = [
-  { title: "Dashboard",      url: "/",           icon: LayoutDashboard },
+  { title: "Dashboard",      url: "/dashboard",  icon: LayoutDashboard },
   { title: "Clientes",       url: "/clients",    icon: Users },
   { title: "Campanhas",      url: "/campaigns",  icon: Megaphone },
   { title: "Alertas",        url: "/alerts",     icon: Bell },
@@ -37,7 +37,7 @@ export function AppSidebar() {
   const { user, signOut, role } = useAuth();
 
   const isActive = (path: string) =>
-    path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
+    location.pathname === path || location.pathname.startsWith(`${path}/`);
 
   return (
     <Sidebar
@@ -110,7 +110,7 @@ export function AppSidebar() {
                         : "rounded-2xl text-sidebar-foreground/75 hover:translate-x-0.5 hover:text-sidebar-foreground hover:bg-sidebar-accent/70"
                     }
                   >
-                    <NavLink to={item.url} end={item.url === "/"}>
+                    <NavLink to={item.url}>
                       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${isActive(item.url) ? "border-emerald-500/30 bg-emerald-500/12 text-emerald-300" : "border-sidebar-border/60 bg-white/[0.03] text-sidebar-foreground/80 group-hover:border-emerald-500/20 group-hover:text-sidebar-foreground"}`}>
                         <item.icon className="h-5 w-5 shrink-0" />
                       </span>

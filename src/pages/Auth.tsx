@@ -23,7 +23,7 @@ export default function Auth() {
   const [submitting, setSubmitting] = useState(false);
 
   if (loading) return null;
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -36,7 +36,7 @@ export default function Auth() {
     setSubmitting(false);
     if (error) return toast.error(error.message);
     toast.success("Bem-vindo de volta!");
-    navigate("/");
+    navigate("/dashboard");
   }
 
   async function handleSignup(e: React.FormEvent<HTMLFormElement>) {

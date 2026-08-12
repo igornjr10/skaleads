@@ -6,7 +6,7 @@ import { ScaleAdsLogo } from "./ScaleAdsLogo";
 import { ClientSwitcher } from "./ClientSwitcher";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
-  "/":            { title: "Dashboard",        subtitle: "Visão geral das campanhas" },
+  "/dashboard":   { title: "Dashboard",        subtitle: "Visão geral das campanhas" },
   "/clients":     { title: "Clientes",         subtitle: "Gerencie as contas anunciantes" },
   "/campaigns":   { title: "Campanhas",        subtitle: "Performance de campanhas Meta Ads" },
   "/alerts":      { title: "Alertas",          subtitle: "Monitoramento em tempo real" },
