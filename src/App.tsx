@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const Landing = lazy(() => import("./pages/Landing"));
+const Vsl = lazy(() => import("./pages/Vsl"));
 const Privacidade = lazy(() => import("./pages/Privacidade"));
 const Termos = lazy(() => import("./pages/Termos"));
 const Auth = lazy(() => import("./pages/Auth"));
@@ -58,6 +59,8 @@ const App = () => (
             <Routes>
               {/* Publicas: a raiz e a pagina de venda, nao o dashboard. */}
               <Route path="/" element={<Landing />} />
+              {/* Pagina de VSL: e para onde o anuncio aponta. */}
+              <Route path="/vsl" element={<Vsl />} />
               <Route path="/privacidade" element={<Privacidade />} />
               <Route path="/termos" element={<Termos />} />
               <Route path="/auth" element={<Auth />} />
