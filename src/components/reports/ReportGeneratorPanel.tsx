@@ -13,6 +13,7 @@ import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, blobToBase64, downloadBlob } from "@/lib/report-pdf";
 import { extractPhoneCalls, extractDirections, extractLeads, GOAL_KPIS, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
 import { MetricPreferencesBuilder } from "./MetricPreferencesBuilder";
+import { metaGet, metaGetAll, type MetaSource } from "@/lib/meta-client";
 
 interface ReportGeneratorPanelProps {
   isOpen: boolean;
@@ -74,7 +75,6 @@ const LOCAL_TO_REPORT_METRIC: Record<LocalMetricKey, ReportMetricPreference> = {
   profileVisits: "instagramProfileVisits",
 };
 
-const META_BASE = "https://graph.facebook.com/v21.0";
 const PURCHASE_ACTION_TYPES = ["omni_purchase", "purchase", "offsite_conversion.fb_pixel_purchase"] as const;
 const SOCIAL_METRIC_OPTIONS = [
   { key: "followers", label: "Seguidores", helper: "Soma Facebook + Instagram quando disponivel" },
@@ -82,6 +82,16 @@ const SOCIAL_METRIC_OPTIONS = [
   { key: "reach", label: "Alcance", helper: "Insights da Meta para o periodo do relatorio" },
   { key: "engagement", label: "Engajamento", helper: "Interacoes retornadas pela Meta quando disponiveis" },
 ] as const;
+
+interface MetaInsightRow {
+  spend?: string;
+  impressions?: string;
+  inline_link_clicks?: string;
+  reach?: string;
+  frequency?: string;
+  actions?: Array<{ action_type?: string; value?: string }>;
+  action_values?: Array<{ action_type?: string; value?: string }>;
+}
 
 function normalizeAccountId(id: string) {
   return id.startsWith("act_") ? id.slice(4) : id.trim();
@@ -91,34 +101,12 @@ function normalizeInstagramUsername(username: string) {
   return username.trim().toLowerCase().replace(/^@+/, "").replace(/[^a-z0-9._]/g, "");
 }
 
-async function fetchMetaJson<T>(path: string, params: Record<string, string>) {
-  const response = await fetch(`${META_BASE}/${path}?${new URLSearchParams(params)}`);
-  const json = await response.json();
-
-  if (!response.ok || json.error) {
-    throw new Error(json.error?.message || "Erro ao buscar dados na Meta");
-  }
-
-  return json as T;
+function fetchMetaJson<T>(source: MetaSource, path: string, params: Record<string, string>) {
+  return metaGet<T>(source, path, params);
 }
 
-async function fetchMetaCollection<T>(path: string, params: Record<string, string>) {
-  let url: string | undefined = `${META_BASE}/${path}?${new URLSearchParams(params)}`;
-  const rows: T[] = [];
-
-  while (url) {
-    const response = await fetch(url);
-    const json = await response.json();
-
-    if (!response.ok || json.error) {
-      throw new Error(json.error?.message || "Erro ao buscar dados na Meta");
-    }
-
-    rows.push(...(Array.isArray(json.data) ? json.data : []));
-    url = json.paging?.next;
-  }
-
-  return rows;
+function fetchMetaCollection<T>(source: MetaSource, path: string, params: Record<string, string>) {
+  return metaGetAll<T>(source, path, params);
 }
 
 function extractMessagesStarted(actions?: Array<{ action_type?: string; value?: string }>) {
@@ -241,22 +229,18 @@ export function ReportGeneratorPanel({
     }
   }
 
-  async function fetchMessagesStarted(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
-    if (!metaAdAccountId || !metaAccessToken) return 0;
+  async function fetchMessagesStarted(metaAdAccountId?: string | null, metaClientId?: string | null) {
+    if (!metaAdAccountId || !metaClientId) return 0;
 
-    const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
-      fields: "actions",
-      level: "account",
-      time_range: JSON.stringify({ since: startDate, until: endDate }),
-      access_token: metaAccessToken.trim(),
-    })}`;
-
-    const response = await fetch(url);
-    const json = await response.json();
-
-    if (!response.ok || json.error) {
-      throw new Error(json.error?.message || "Erro ao buscar mensagens iniciadas na Meta");
-    }
+    const json = await fetchMetaJson<{ data?: MetaInsightRow[] }>(
+      { clientId: metaClientId },
+      `act_${normalizeAccountId(metaAdAccountId)}/insights`,
+      {
+        fields: "actions",
+        level: "account",
+        time_range: JSON.stringify({ since: startDate, until: endDate }),
+      }
+    );
 
     const rows = Array.isArray(json.data) ? json.data : [];
     return rows.reduce(
@@ -266,24 +250,20 @@ export function ReportGeneratorPanel({
     );
   }
 
-  async function fetchAccountConversionMetrics(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
-    if (!metaAdAccountId || !metaAccessToken) {
+  async function fetchAccountConversionMetrics(metaAdAccountId?: string | null, metaClientId?: string | null) {
+    if (!metaAdAccountId || !metaClientId) {
       return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     }
 
-    const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
-      fields: "actions,action_values,spend,impressions,inline_link_clicks,reach,frequency",
-      level: "account",
-      time_range: JSON.stringify({ since: startDate, until: endDate }),
-      access_token: metaAccessToken.trim(),
-    })}`;
-
-    const response = await fetch(url);
-    const json = await response.json();
-
-    if (!response.ok || json.error) {
-      throw new Error(json.error?.message || "Erro ao buscar metricas de conversao na Meta");
-    }
+    const json = await fetchMetaJson<{ data?: MetaInsightRow[] }>(
+      { clientId: metaClientId },
+      `act_${normalizeAccountId(metaAdAccountId)}/insights`,
+      {
+        fields: "actions,action_values,spend,impressions,inline_link_clicks,reach,frequency",
+        level: "account",
+        time_range: JSON.stringify({ since: startDate, until: endDate }),
+      }
+    );
 
     const rows = Array.isArray(json.data) ? json.data : [];
     const purchaseMetric = extractPrimaryActionMetric(rows, "actions", PURCHASE_ACTION_TYPES);
@@ -339,8 +319,8 @@ export function ReportGeneratorPanel({
     };
   }
 
-  async function fetchMetaCampaignSummaries(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
-    if (!metaAdAccountId || !metaAccessToken) return [];
+  async function fetchMetaCampaignSummaries(metaAdAccountId?: string | null, metaClientId?: string | null) {
+    if (!metaAdAccountId || !metaClientId) return [];
 
       const rows = await fetchMetaCollection<Array<{
         name?: string;
@@ -354,10 +334,9 @@ export function ReportGeneratorPanel({
             action_values?: Array<{ action_type?: string; value?: string }>;
           }>;
         };
-      }>[number]>(`act_${normalizeAccountId(metaAdAccountId)}/campaigns`, {
+      }>[number]>({ clientId: metaClientId }, `act_${normalizeAccountId(metaAdAccountId)}/campaigns`, {
       fields: `name,status,insights.time_range(${JSON.stringify({ since: startDate, until: endDate })}){spend,impressions,inline_link_clicks,actions,action_values}`,
       limit: "200",
-      access_token: metaAccessToken.trim(),
     });
 
     return rows
@@ -388,8 +367,8 @@ export function ReportGeneratorPanel({
       .slice(0, 10);
   }
 
-  async function fetchMetaAdSummaries(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
-    if (!metaAdAccountId || !metaAccessToken) return [];
+  async function fetchMetaAdSummaries(metaAdAccountId?: string | null, metaClientId?: string | null) {
+    if (!metaAdAccountId || !metaClientId) return [];
 
     const rows = await fetchMetaCollection<Array<{
       name?: string;
@@ -407,10 +386,9 @@ export function ReportGeneratorPanel({
           inline_link_clicks?: string;
         }>;
       };
-    }>[number]>(`act_${normalizeAccountId(metaAdAccountId)}/ads`, {
+    }>[number]>({ clientId: metaClientId }, `act_${normalizeAccountId(metaAdAccountId)}/ads`, {
       fields: `name,status,creative{thumbnail_url,image_url,object_type,video_id},insights.time_range(${JSON.stringify({ since: startDate, until: endDate })}){spend,impressions,inline_link_clicks}`,
       limit: "200",
-      access_token: metaAccessToken.trim(),
     });
 
     return rows
@@ -438,19 +416,18 @@ export function ReportGeneratorPanel({
       .slice(0, 12);
   }
 
-  async function fetchFacebookPresence(metaPageId?: string | null, metaAccessToken?: string | null) {
+  async function fetchFacebookPresence(metaPageId?: string | null, metaClientId?: string | null) {
     // Retorna null (e não um objeto vazio) para que a origem "Facebook" só
     // apareça no relatório quando a página realmente foi consultada.
-    if (!metaPageId || !metaAccessToken) return null;
+    if (!metaPageId || !metaClientId) return null;
 
     const pageInfo = await fetchMetaJson<{
       name?: string;
       fan_count?: number;
       followers_count?: number;
       instagram_business_account?: { id?: string };
-    }>(metaPageId, {
+    }>({ clientId: metaClientId }, metaPageId, {
       fields: "name,fan_count,followers_count,instagram_business_account{id}",
-      access_token: metaAccessToken.trim(),
     });
 
     let reach: number | null = null;
@@ -459,11 +436,10 @@ export function ReportGeneratorPanel({
     try {
       const insights = await fetchMetaJson<{
         data?: Array<{ name?: string; values?: Array<{ value?: number }> }>;
-      }>(`${metaPageId}/insights`, {
+      }>({ clientId: metaClientId }, `${metaPageId}/insights`, {
         metric: "page_impressions_unique,page_actions_post_reactions_total",
         since: startDate,
         until: endDate,
-        access_token: metaAccessToken.trim(),
       });
 
       const rows = insights.data || [];
@@ -483,8 +459,8 @@ export function ReportGeneratorPanel({
     };
   }
 
-  async function fetchInstagramPresence(metaInstagramAccountId?: string | null, metaAccessToken?: string | null, usernameSearch?: string) {
-    if (!metaInstagramAccountId || !metaAccessToken) return null;
+  async function fetchInstagramPresence(metaInstagramAccountId?: string | null, metaClientId?: string | null, usernameSearch?: string) {
+    if (!metaInstagramAccountId || !metaClientId) return null;
 
     const searchedUsername = normalizeInstagramUsername(usernameSearch ?? "");
     const profile = searchedUsername
@@ -494,13 +470,11 @@ export function ReportGeneratorPanel({
             followers_count?: number;
             profile_picture_url?: string;
           };
-        }>(metaInstagramAccountId, {
+        }>({ clientId: metaClientId }, metaInstagramAccountId, {
           fields: `business_discovery.username(${searchedUsername}){username,followers_count,profile_picture_url}`,
-          access_token: metaAccessToken.trim(),
         })).business_discovery ?? {}
-      : await fetchMetaJson<{ username?: string; followers_count?: number; profile_picture_url?: string }>(metaInstagramAccountId, {
+      : await fetchMetaJson<{ username?: string; followers_count?: number; profile_picture_url?: string }>({ clientId: metaClientId }, metaInstagramAccountId, {
           fields: "username,followers_count,profile_picture_url",
-          access_token: metaAccessToken.trim(),
         });
 
     let reach: number | null = null;
@@ -525,7 +499,6 @@ export function ReportGeneratorPanel({
             period: "day",
             since: cappedSince,
             until: endDate,
-            access_token: metaAccessToken.trim(),
           };
           if (useTotalValue) params.metric_type = "total_value";
           try {
@@ -535,7 +508,7 @@ export function ReportGeneratorPanel({
                 total_value?: { value?: number };
                 values?: Array<{ value?: number | string }>;
               }>;
-            }>(`${metaInstagramAccountId}/insights`, params);
+            }>({ clientId: metaClientId }, `${metaInstagramAccountId}/insights`, params);
             const row = (insights.data || []).find((r) => r.name === metric);
             if (row?.total_value?.value !== undefined) return row.total_value.value;
             if (row?.values?.length) {
@@ -590,15 +563,13 @@ export function ReportGeneratorPanel({
     meta_page_name?: string | null;
     meta_instagram_account_id?: string | null;
     meta_instagram_username?: string | null;
-    meta_access_token?: string | null;
   }): Promise<SocialPresenceSnapshot | undefined> {
     if (!includeSocialPresence) return undefined;
 
-    const token = client.meta_access_token?.trim();
-    const pageResult = token ? await fetchFacebookPresence(client.meta_page_id, token).catch(() => null) : null;
+    const pageResult = await fetchFacebookPresence(client.meta_page_id, clientId).catch(() => null);
     const instagramAccountId = pageResult?.instagramAccountId || client.meta_instagram_account_id || null;
     const instagramUsername = normalizeInstagramUsername(instagramProfileSearch);
-    const instagramResult = token ? await fetchInstagramPresence(instagramAccountId, token, instagramUsername).catch(() => null) : null;
+    const instagramResult = await fetchInstagramPresence(instagramAccountId, clientId, instagramUsername).catch(() => null);
     const sourceLabels = [pageResult ? "Facebook" : null, instagramResult ? "Instagram" : null].filter(Boolean) as string[];
     const sourceText = sourceLabels.length ? sourceLabels.join(" + ") : "Dados nao disponiveis";
     const hasInstagram = Boolean(instagramResult);
@@ -650,7 +621,7 @@ export function ReportGeneratorPanel({
   async function buildReportData(): Promise<ReportData> {
     const { data: clientRaw, error: clientError } = await supabase
       .from("clients")
-      .select("name, logo_url, meta_ad_account_id, meta_access_token, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username")
+      .select("name, logo_url, meta_ad_account_id, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username")
       .eq("id", clientId)
       .single();
 
@@ -684,10 +655,10 @@ export function ReportGeneratorPanel({
 
     let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, phoneCalls: 0, directions: 0, leads: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     try {
-      conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientId);
     } catch {
       try {
-        conversionMetrics.messagesStarted = await fetchMessagesStarted(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+        conversionMetrics.messagesStarted = await fetchMessagesStarted(clientRaw.meta_ad_account_id, clientId);
       } catch {
         conversionMetrics.messagesStarted = 0;
       }
@@ -736,7 +707,7 @@ export function ReportGeneratorPanel({
       .slice(0, 10);
 
     try {
-      const metaCampaigns = await fetchMetaCampaignSummaries(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      const metaCampaigns = await fetchMetaCampaignSummaries(clientRaw.meta_ad_account_id, clientId);
       if (metaCampaigns.length > 0) {
         topCampaigns = metaCampaigns;
       }
@@ -761,7 +732,7 @@ export function ReportGeneratorPanel({
       .slice(0, 12);
 
     try {
-      const metaAds = await fetchMetaAdSummaries(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      const metaAds = await fetchMetaAdSummaries(clientRaw.meta_ad_account_id, clientId);
       if (metaAds.length > 0) {
         topAds = metaAds;
       }
@@ -789,7 +760,7 @@ export function ReportGeneratorPanel({
       topCampaigns,
       topAds,
       metricPreferences,
-      branding: { primaryColor: "#2563eb", agencyName: "MarketProAds" },
+      branding: { primaryColor: "#2563eb", agencyName: "Scale Ads" },
     };
   }
 

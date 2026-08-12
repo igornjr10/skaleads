@@ -305,7 +305,8 @@ export type Database = {
             created_at: string
             id: string
             logo_url: string | null
-            meta_access_token: string | null
+            meta_token_configured: boolean | null
+            team_id: string | null
             meta_ad_account_id: string | null
             meta_auto_sync_enabled: boolean
             meta_auto_sync_frequency_hours: number
@@ -334,7 +335,8 @@ export type Database = {
           created_at?: string
           id?: string
             logo_url?: string | null
-            meta_access_token?: string | null
+            meta_token_configured?: boolean | null
+            team_id?: string | null
             meta_ad_account_id?: string | null
             meta_auto_sync_enabled?: boolean
             meta_auto_sync_frequency_hours?: number
@@ -363,7 +365,8 @@ export type Database = {
           created_at?: string
           id?: string
             logo_url?: string | null
-            meta_access_token?: string | null
+            meta_token_configured?: boolean | null
+            team_id?: string | null
             meta_ad_account_id?: string | null
             meta_auto_sync_enabled?: boolean
             meta_auto_sync_frequency_hours?: number

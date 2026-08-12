@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { MarketProLogo } from "@/components/MarketProLogo";
+import { ScaleAdsLogo } from "@/components/ScaleAdsLogo";
 
 interface DashboardData {
   client: { name: string; logoUrl: string | null; businessSegment: string | null };
@@ -116,7 +116,7 @@ export default function ClientDashboardShare() {
             </div>
           </div>
           <div className="hidden opacity-60 md:block">
-            <MarketProLogo size={28} />
+            <ScaleAdsLogo size={28} />
           </div>
         </div>
       </div>

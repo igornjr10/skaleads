@@ -159,7 +159,7 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
         ...metrics.map(m => `${ALL_METRICS.find(x => x.key === m)?.label ?? m}: *—*`),
         includeCampaigns ? `\n*🏃 Campanhas ativas (top 5):*\n• (dados reais ao enviar)` : "",
         includeAudit ? `\n*🔍 Auditoria da conta:* 🟡 —/100` : "",
-        `\n_Enviado por MarketProAds_`,
+        `\n_Enviado por Scale Ads_`,
       ].filter(Boolean).join("\n");
       setPreview(lines);
       setShowPreview(true);

@@ -77,7 +77,7 @@ interface Client {
   id: string;
   name: string;
   meta_ad_account_id: string | null;
-  meta_access_token: string | null;
+  meta_token_configured: boolean | null;
 }
 
 type PerformanceFilter = "all" | "healthy" | "monitor" | "warning" | "critical" | "no-conversions";
@@ -261,7 +261,7 @@ export default function Campaigns() {
   useEffect(() => {
     supabase
       .from("clients")
-      .select("id, name, meta_ad_account_id, meta_access_token")
+      .select("id, name, meta_ad_account_id, meta_token_configured")
       .eq("status", "active")
       .order("name")
       .then(({ data }) => setClients((data as Client[]) ?? []));
@@ -293,7 +293,7 @@ export default function Campaigns() {
 
   async function handleSync() {
     if (selectedClient === "all") {
-      const connected = clients.filter((client) => client.meta_ad_account_id && client.meta_access_token);
+      const connected = clients.filter((client) => client.meta_ad_account_id && client.meta_token_configured);
       if (!connected.length) {
         toast.error("Nenhum cliente conectado ao Meta Ads. Configure em Clientes.");
         return;
@@ -305,7 +305,7 @@ export default function Campaigns() {
       for (const client of connected) {
         setSyncProgress(`Sincronizando ${client.name}...`);
         try {
-          await syncClientData(client.id, client.meta_ad_account_id!, client.meta_access_token!, setSyncProgress);
+          await syncClientData(client.id, client.meta_ad_account_id!, setSyncProgress);
         } catch {
           errors++;
         }
@@ -322,7 +322,7 @@ export default function Campaigns() {
     }
 
     const client = clients.find((item) => item.id === selectedClient);
-    if (!client?.meta_ad_account_id || !client?.meta_access_token) {
+    if (!client?.meta_ad_account_id || !client?.meta_token_configured) {
       toast.error("Este cliente nao esta conectado ao Meta Ads. Configure em Clientes.");
       return;
     }
@@ -332,7 +332,6 @@ export default function Campaigns() {
       const result = await syncClientData(
         client.id,
         client.meta_ad_account_id,
-        client.meta_access_token,
         setSyncProgress
       );
 
@@ -471,13 +470,13 @@ export default function Campaigns() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="border-orange-100 bg-gradient-to-br from-white via-orange-50/40 to-amber-50/60 shadow-card">
+        <Card className="border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/60 shadow-card">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
-              <div className="rounded-2xl bg-orange-100 p-3 text-orange-600">
+              <div className="rounded-2xl bg-emerald-600 p-3 text-white shadow-sm">
                 <Sparkles className="h-5 w-5" />
               </div>
-              <Badge variant="outline" className="border-orange-200 bg-white/80 text-orange-700">
+              <Badge variant="outline" className="border-emerald-200 bg-white/80 text-emerald-700">
                 {filteredCampaigns.length} no filtro
               </Badge>
             </div>

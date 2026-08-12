@@ -58,7 +58,7 @@ function buildEmailHtml(payload: AlertEmailPayload): string {
     <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:32px 40px;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
         <div style="width:40px;height:40px;background:rgba(255,255,255,0.2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;">⚠️</div>
-        <span style="color:rgba(255,255,255,0.8);font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">MarketProAds — Alerta</span>
+        <span style="color:rgba(255,255,255,0.8);font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;">Scale Ads — Alerta</span>
       </div>
       <h1 style="margin:0;color:#fff;font-size:24px;font-weight:700;">${alertName}</h1>
       ${alertDescription ? `<p style="margin:8px 0 0;color:rgba(255,255,255,0.8);font-size:14px;">${alertDescription}</p>` : ""}
@@ -98,7 +98,7 @@ function buildEmailHtml(payload: AlertEmailPayload): string {
     <!-- Footer -->
     <div style="padding:20px 40px;background:#f9fafb;border-top:1px solid #e5e7eb;">
       <p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">
-        MarketProAds • Você recebe este email porque está cadastrado nos alertas desta plataforma.<br>
+        Scale Ads • Você recebe este email porque está cadastrado nos alertas desta plataforma.<br>
         Para cancelar, desative o canal de email no alerta correspondente.
       </p>
     </div>

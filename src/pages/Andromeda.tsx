@@ -41,7 +41,7 @@ interface Client {
   meta_auto_sync_enabled: boolean;
   meta_last_sync_at: string | null;
   meta_ad_account_id?: string | null;
-  meta_access_token?: string | null;
+  meta_token_configured?: boolean | null;
 }
 
 interface Ad {
@@ -531,7 +531,7 @@ export default function Andromeda() {
     const [clientsRes, campaignsRes, metricsRes] = await Promise.all([
       supabase
         .from("clients")
-        .select("id, name, status, meta_sync_status, meta_auto_sync_enabled, meta_last_sync_at, meta_ad_account_id, meta_access_token")
+        .select("id, name, status, meta_sync_status, meta_auto_sync_enabled, meta_last_sync_at, meta_ad_account_id, meta_token_configured")
         .eq("status", "active")
         .order("name"),
       supabase
@@ -555,14 +555,14 @@ export default function Andromeda() {
     if (selectedClient === "all") return;
 
     const client = clients.find((item) => item.id === selectedClient);
-    if (!client?.meta_ad_account_id || !client?.meta_access_token) return;
+    if (!client?.meta_ad_account_id || !client?.meta_token_configured) return;
 
     setAdvancedLoading(true);
     try {
       const context: AuditContext = {
         clientId: client.id,
         adAccountId: normalizeAdAccountId(client.meta_ad_account_id),
-        accessToken: client.meta_access_token.trim(),
+        source: { clientId: client.id },
       };
 
       const checks = ALL_CHECKS.filter((check) => ADVANCED_CHECK_IDS.includes(check.id as (typeof ADVANCED_CHECK_IDS)[number]));
@@ -702,7 +702,7 @@ export default function Andromeda() {
   const scoreTone = getScoreTone(score.overall);
   const scoreClasses = getToneClasses(scoreTone);
   const selectedClientRecord = selectedClient === "all" ? null : clients.find((client) => client.id === selectedClient) || null;
-  const canRunAdvancedDiagnostics = !!selectedClientRecord?.meta_ad_account_id && !!selectedClientRecord?.meta_access_token;
+  const canRunAdvancedDiagnostics = !!selectedClientRecord?.meta_ad_account_id && !!selectedClientRecord?.meta_token_configured;
   const advancedSummary = useMemo(() => {
     return advancedResults.reduce(
       (acc, result) => {
@@ -754,7 +754,7 @@ export default function Andromeda() {
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-orange-600">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
               <Brain className="h-6 w-6" />
             </div>
             <div>
@@ -800,7 +800,7 @@ export default function Andromeda() {
       ) : (
         <>
           <div className="grid gap-3 lg:grid-cols-[1.15fr_0.85fr]">
-            <Card className="overflow-hidden border-orange-200 bg-gradient-to-br from-white via-orange-50/60 to-amber-50/80 shadow-card">
+            <Card className="overflow-hidden border-emerald-200 bg-gradient-to-br from-white via-emerald-50/60 to-teal-50/80 shadow-card">
               <CardContent className="p-6">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                   <div className="space-y-3">
@@ -1205,7 +1205,7 @@ export default function Andromeda() {
                       },
                     ].map((item) => (
                       <div key={item.step} className="flex gap-3 rounded-2xl border border-border/70 p-4">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-sm font-semibold text-orange-700">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-sm font-semibold text-emerald-700">
                           {item.step}
                         </div>
                         <div>
@@ -1302,7 +1302,7 @@ export default function Andromeda() {
                 ))}
               </div>
 
-              <Card className="shadow-card border-orange-200 bg-gradient-to-br from-white via-orange-50/50 to-amber-50/70">
+              <Card className="shadow-card border-emerald-200 bg-gradient-to-br from-white via-emerald-50/50 to-teal-50/70">
                 <CardHeader>
                   <CardTitle>Proximo passo sugerido</CardTitle>
                   <CardDescription>Use a leitura da Andromeda para acionar a proxima etapa do produto.</CardDescription>

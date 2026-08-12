@@ -2,7 +2,7 @@ import { Outlet, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { NotificationsBell } from "./NotificationsBell";
-import { MarketProLogo } from "./MarketProLogo";
+import { ScaleAdsLogo } from "./ScaleAdsLogo";
 import { ClientSwitcher } from "./ClientSwitcher";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
@@ -18,7 +18,7 @@ function getPageMeta(pathname: string) {
   const key = Object.keys(PAGE_TITLES)
     .sort((a, b) => b.length - a.length)
     .find(k => pathname === k || (k !== "/" && pathname.startsWith(k)));
-  return key ? PAGE_TITLES[key] : { title: "MarketProAds", subtitle: "" };
+  return key ? PAGE_TITLES[key] : { title: "Scale Ads", subtitle: "" };
 }
 
 export function AppLayout() {
@@ -63,7 +63,7 @@ export function AppLayout() {
               <NotificationsBell />
               {/* Brand mark (shown when sidebar collapsed) */}
               <div className="hidden md:flex items-center gap-1.5 opacity-40 hover:opacity-70 transition-opacity">
-                <MarketProLogo size={22} />
+                <ScaleAdsLogo size={22} />
               </div>
             </div>
           </header>
@@ -76,7 +76,7 @@ export function AppLayout() {
           {/* ── Footer ───────────────────────────────────────── */}
           <footer className="mx-2 mb-2 flex items-center justify-between rounded-2xl border border-white/[0.05] bg-background/40 px-6 py-2 backdrop-blur-md">
             <span className="text-[10px] text-muted-foreground/40 tracking-wide uppercase">
-              MarketProAds © {new Date().getFullYear()}
+              Scale Ads © {new Date().getFullYear()}
             </span>
             <span className="text-[10px] text-muted-foreground/40">
               Meta Graph API v21.0

@@ -1,4 +1,4 @@
-# MarketPro Design System
+# Scale Ads Design System
 
 Esta base concentra o visual principal do projeto para reaproveitar em outros apps.
 
@@ -54,7 +54,7 @@ Esta base concentra o visual principal do projeto para reaproveitar em outros ap
 
 ### Paleta
 
-- `primary`: laranja forte para CTA e foco
+- `primary`: verde emerald (`hsl(160 84% 44%)`) para CTA e foco
 - `background`: preto quase absoluto
 - `card`: cinza escuro elevado
 - `muted`: superfice secundaria
@@ -66,7 +66,7 @@ Esta base concentra o visual principal do projeto para reaproveitar em outros ap
 
 - cantos grandes: `rounded-xl` e `rounded-2xl`
 - blur em topo, footer e paineis flutuantes
-- sombra escura com glow laranja pontual
+- sombra escura com glow verde pontual
 - destaque de item ativo com gradiente suave e trilha lateral
 
 ## Padrões de uso
@@ -100,7 +100,7 @@ Esta base concentra o visual principal do projeto para reaproveitar em outros ap
 ## Import rapido
 
 ```ts
-import { marketProDesignTokens, marketProUtilityClasses } from "@/design-system";
+import { scaleAdsDesignTokens, scaleAdsUtilityClasses } from "@/design-system";
 ```
 
 ```ts

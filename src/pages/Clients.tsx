@@ -66,6 +66,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { syncClientData, validateMetaConnection } from "@/lib/meta-api";
+import { metaGetAll } from "@/lib/meta-client";
 import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaPage } from "@/lib/facebook-sdk";
 import { BUSINESS_SEGMENTS, LOCAL_GOALS, segmentLabel } from "@/lib/local-business";
 import { computeBudgetStatus } from "@/lib/client-budget";
@@ -90,7 +91,7 @@ interface Client {
   primary_goal: string | null;
   monthly_budget: number | null;
   meta_ad_account_id: string | null;
-  meta_access_token: string | null;
+  meta_token_configured: boolean | null;
   meta_page_id: string | null;
   meta_page_name: string | null;
   meta_instagram_account_id: string | null;
@@ -131,7 +132,7 @@ const AUTO_SYNC_OPTIONS = [
 const HEALTH_STYLES: Record<Client["meta_sync_status"], { label: string; badge: string }> = {
   pending: { label: "Pendente", badge: "border-slate-200 bg-slate-50 text-slate-600" },
   connected: { label: "Conectado", badge: "border-sky-200 bg-sky-50 text-sky-700" },
-  syncing: { label: "Sincronizando", badge: "border-orange-200 bg-orange-50 text-orange-700" },
+  syncing: { label: "Sincronizando", badge: "border-indigo-200 bg-indigo-50 text-indigo-700" },
   healthy: { label: "Saudavel", badge: "border-emerald-200 bg-emerald-50 text-emerald-700" },
   warning: { label: "Atencao", badge: "border-amber-200 bg-amber-50 text-amber-700" },
   error: { label: "Erro", badge: "border-rose-200 bg-rose-50 text-rose-700" },
@@ -171,8 +172,10 @@ function isAutoSyncDue(client: Client) {
 }
 
 export default function Clients() {
-  const { role } = useAuth();
-  const canManage = role === "owner" || role === "admin";
+  const { user, role } = useAuth();
+  // A carteira e isolada por dono, entao quem esta aqui gerencia o que e dele.
+  // O papel so restringe o viewer, que continua sendo perfil de leitura.
+  const canManage = role !== "viewer";
   const navigate = useNavigate();
 
   const [clients, setClients] = useState<Client[]>([]);
@@ -394,7 +397,9 @@ export default function Clients() {
 
   function openConnectDialog(client: Client) {
     setAdAccountId(client.meta_ad_account_id ?? "");
-    setAccessToken(client.meta_access_token ?? "");
+    // O token fica no cofre, fora do alcance do browser: reconectar exige colar
+    // um novo. So o "ja configurado" e visivel aqui.
+    setAccessToken("");
     setAutoSyncEnabled(client.meta_auto_sync_enabled ?? false);
     setAutoSyncFrequencyHours(String(client.meta_auto_sync_frequency_hours ?? 24));
     setAdAccounts([]);
@@ -418,45 +423,23 @@ export default function Clients() {
     setAutoSyncFrequencyHours("24");
   }
 
+  // Roda no momento da conexao, com o token que o operador acabou de obter e que
+  // ainda nao foi salvo — por isso rawToken em vez de clientId.
   async function fetchFacebookPages(token: string) {
-    const pageFields = "id,name,access_token,fan_count,followers_count,instagram_business_account{id,username,profile_picture_url},picture.width(256).height(256)";
+    const source = { rawToken: token };
+    const pageFields = "id,name,fan_count,followers_count,instagram_business_account{id,username,profile_picture_url},picture.width(256).height(256)";
 
-    async function fetchAllPaginated(initialUrl: string): Promise<MetaPage[]> {
-      const out: MetaPage[] = [];
-      let url: string | null = initialUrl;
-      while (url) {
-        const res = await fetch(url);
-        const json = await res.json();
-        if (!res.ok || json.error) {
-          throw new Error(json.error?.message || "Erro ao buscar paginas do Facebook");
-        }
-        for (const p of (json.data as MetaPage[]) ?? []) out.push(p);
-        url = json.paging?.next ?? null;
-      }
-      return out;
-    }
+    const directPages = await metaGetAll<MetaPage>(source, "me/accounts", { fields: pageFields, limit: 25 });
 
-    const directPages = await fetchAllPaginated(
-      `https://graph.facebook.com/v21.0/me/accounts?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "25" })}`
-    );
-
-    const businessesRes = await fetch(
-      `https://graph.facebook.com/v21.0/me/businesses?${new URLSearchParams({ fields: "id,name", access_token: token, limit: "100" })}`
-    );
-    const businessesData = await businessesRes.json();
-    if (!businessesRes.ok || businessesData.error) {
-      throw new Error(businessesData.error?.message || "Erro ao buscar Business Managers");
-    }
-    const businesses = (businessesData.data as { id: string; name: string }[]) ?? [];
+    const businesses = await metaGetAll<{ id: string; name: string }>(source, "me/businesses", {
+      fields: "id,name",
+      limit: 100,
+    });
 
     const bmPagesNested = await Promise.all(
       businesses.flatMap((bm) => [
-        fetchAllPaginated(
-          `https://graph.facebook.com/v21.0/${bm.id}/owned_pages?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "25" })}`
-        ).catch(() => [] as MetaPage[]),
-        fetchAllPaginated(
-          `https://graph.facebook.com/v21.0/${bm.id}/client_pages?${new URLSearchParams({ fields: pageFields, access_token: token, limit: "25" })}`
-        ).catch(() => [] as MetaPage[]),
+        metaGetAll<MetaPage>(source, `${bm.id}/owned_pages`, { fields: pageFields, limit: 25 }).catch(() => [] as MetaPage[]),
+        metaGetAll<MetaPage>(source, `${bm.id}/client_pages`, { fields: pageFields, limit: 25 }).catch(() => [] as MetaPage[]),
       ])
     );
 
@@ -470,7 +453,6 @@ export default function Clients() {
         merged.set(page.id, {
           ...existing,
           ...page,
-          access_token: existing.access_token || page.access_token,
           instagram_business_account: existing.instagram_business_account || page.instagram_business_account,
           picture: existing.picture || page.picture,
         });
@@ -570,11 +552,20 @@ export default function Clients() {
     try {
       const instagramFromPage = selectedPage?.instagram_business_account ?? null;
       const instagramFinal = explicitInstagram ?? instagramFromPage;
+
+      // O token vai para o cofre pela Edge Function; o resto do cadastro segue
+      // sendo update normal na tabela clients.
+      const { data: stored, error: storeError } = await supabase.functions.invoke("meta-store-token", {
+        body: { clientId: client.id, token: token.trim() },
+      });
+      if (storeError || stored?.error) {
+        throw new Error(stored?.error || storeError?.message || "Erro ao guardar o token da Meta");
+      }
+
       const { error } = await supabase
         .from("clients")
         .update({
           meta_ad_account_id: accountId.replace("act_", ""),
-          meta_access_token: token.trim(),
           meta_page_id: selectedPage?.id || client.meta_page_id,
           meta_page_name: selectedPage?.name || client.meta_page_name,
           meta_instagram_account_id: instagramFinal?.id || client.meta_instagram_account_id,
@@ -589,7 +580,7 @@ export default function Clients() {
 
       if (error) throw error;
 
-      const result = await syncClientData(client.id, accountId, token, setSyncProgress);
+      const result = await syncClientData(client.id, accountId, setSyncProgress);
       toast.success(
         `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anuncios`,
         { duration: 6000 }
@@ -605,13 +596,13 @@ export default function Clients() {
   }
 
   async function handleQuickSync(client: Client) {
-    if (!client.meta_ad_account_id || !client.meta_access_token) {
+    if (!client.meta_ad_account_id || !client.meta_token_configured) {
       toast.error("Configure a conta Meta antes de sincronizar");
       return;
     }
     setSyncingId(client.id);
     try {
-      const result = await syncClientData(client.id, client.meta_ad_account_id, client.meta_access_token, setSyncProgress);
+      const result = await syncClientData(client.id, client.meta_ad_account_id, setSyncProgress);
       toast.success(
         `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anuncios`,
         { duration: 6000 }
@@ -693,6 +684,7 @@ export default function Clients() {
       whatsapp_number: newWhatsapp.trim().replace(/\D/g, "") || null,
       whatsapp_group_jid: newWhatsappGroupJid || null,
     };
+    // O team_id sai do trigger set_client_team, a partir do time de quem criou.
     const { error } = editClient
       ? await supabase.from("clients").update(payload).eq("id", editClient.id)
       : await supabase.from("clients").insert({ ...payload, status: "active" });
@@ -737,14 +729,14 @@ export default function Clients() {
   }
 
   async function handleVerifyConnection(client: Client) {
-    if (!client.meta_ad_account_id || !client.meta_access_token) {
+    if (!client.meta_ad_account_id || !client.meta_token_configured) {
       toast.error("Configure a conta Meta antes de verificar");
       return;
     }
 
     setVerifyingId(client.id);
     try {
-      const result = await validateMetaConnection(client.meta_ad_account_id, client.meta_access_token);
+      const result = await validateMetaConnection(client.meta_ad_account_id, { clientId: client.id });
       const { error } = await supabase
         .from("clients")
         .update({
@@ -789,7 +781,7 @@ export default function Clients() {
 
   async function runDueSyncs() {
     const dueClients = clients.filter(
-      (client) => client.meta_ad_account_id && client.meta_access_token && isAutoSyncDue(client)
+      (client) => client.meta_ad_account_id && client.meta_token_configured && isAutoSyncDue(client)
     );
 
     if (dueClients.length === 0) {
@@ -800,7 +792,7 @@ export default function Clients() {
     try {
       for (const client of dueClients) {
         setSyncingId(client.id);
-        await syncClientData(client.id, client.meta_ad_account_id!, client.meta_access_token!, setSyncProgress);
+        await syncClientData(client.id, client.meta_ad_account_id!, setSyncProgress);
       }
       toast.success(`${dueClients.length} cliente(s) sincronizado(s)`);
       load();
@@ -814,7 +806,7 @@ export default function Clients() {
   }
 
   async function verifyConnectedClients() {
-    const connectedClients = clients.filter((client) => client.meta_ad_account_id && client.meta_access_token);
+    const connectedClients = clients.filter((client) => client.meta_ad_account_id && client.meta_token_configured);
     if (connectedClients.length === 0) {
       toast("Nenhum cliente conectado para verificar");
       return;
@@ -824,7 +816,7 @@ export default function Clients() {
       for (const client of connectedClients) {
         setVerifyingId(client.id);
         try {
-          const result = await validateMetaConnection(client.meta_ad_account_id!, client.meta_access_token!);
+          const result = await validateMetaConnection(client.meta_ad_account_id!, { clientId: client.id });
           await supabase
             .from("clients")
             .update({
@@ -866,7 +858,7 @@ export default function Clients() {
   // So 3 acoes primarias visiveis (as mais usadas no dia a dia); o resto fica
   // organizado no menu "..." pra nao poluir o card com 9 botoes de uma vez.
   function renderClientActions(client: Client, compact = false) {
-    const connected = !!(client.meta_ad_account_id && client.meta_access_token);
+    const connected = !!(client.meta_ad_account_id && client.meta_token_configured);
 
     return (
       <div className={`flex ${compact ? "flex-wrap" : "justify-end"} gap-2`}>
@@ -1357,7 +1349,7 @@ export default function Clients() {
         <Card className="border-slate-200">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-orange-100 p-3 text-orange-600">
+              <div className="rounded-2xl bg-indigo-100 p-3 text-indigo-600">
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
@@ -1484,7 +1476,7 @@ export default function Clients() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 px-6 pb-2">
-            <Badge variant="secondary" className="gap-1 rounded-full bg-orange-500/10 text-orange-200">
+            <Badge variant="secondary" className="gap-1 rounded-full bg-emerald-500/10 text-emerald-200">
               <Sparkles className="h-3 w-3" />
               {filteredClients.length} em foco
             </Badge>
@@ -1567,7 +1559,7 @@ export default function Clients() {
                         </div>
                         <div className="shrink-0 text-right">
                           {syncingId === client.id ? (
-                            <span className="inline-flex items-center text-xs font-medium text-orange-600">
+                            <span className="inline-flex items-center text-xs font-medium text-indigo-600">
                               <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
                               Sync...
                             </span>
@@ -1690,7 +1682,7 @@ export default function Clients() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {syncingId === client.id ? (
-                          <span className="inline-flex items-center text-orange-600">
+                          <span className="inline-flex items-center text-indigo-600">
                             <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
                             {syncProgress || "Sincronizando"}
                           </span>

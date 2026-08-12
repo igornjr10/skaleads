@@ -83,7 +83,7 @@ export default function Chat() {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border/60 bg-card/60 px-6 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/30">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30">
             <Bot className="h-5 w-5" />
           </div>
           <div>
@@ -111,7 +111,7 @@ export default function Chat() {
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-6">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
               <Bot className="h-8 w-8" />
             </div>
             <div className="text-center">
@@ -125,7 +125,7 @@ export default function Chat() {
                 <button
                   key={s}
                   onClick={() => handleSend(s)}
-                  className="rounded-xl border border-border/60 bg-card/60 px-3 py-2 text-[13px] text-muted-foreground transition-colors hover:border-orange-500/40 hover:text-foreground"
+                  className="rounded-xl border border-border/60 bg-card/60 px-3 py-2 text-[13px] text-muted-foreground transition-colors hover:border-emerald-500/40 hover:text-foreground"
                 >
                   {s}
                 </button>
@@ -137,14 +137,14 @@ export default function Chat() {
             {messages.map((msg, i) => (
               <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.role === "assistant" && (
-                  <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/25">
+                  <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25">
                     <Bot className="h-4 w-4" />
                   </div>
                 )}
                 <div
                   className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                     msg.role === "user"
-                      ? "rounded-tr-sm bg-orange-500/15 text-foreground ring-1 ring-orange-500/20"
+                      ? "rounded-tr-sm bg-emerald-500/15 text-foreground ring-1 ring-emerald-500/20"
                       : "rounded-tl-sm bg-card/80 text-foreground ring-1 ring-border/60"
                   }`}
                 >
@@ -155,7 +155,7 @@ export default function Chat() {
                         ul: ({ children }) => <ul className="mb-2 list-disc pl-4">{children}</ul>,
                         ol: ({ children }) => <ol className="mb-2 list-decimal pl-4">{children}</ol>,
                         li: ({ children }) => <li className="mb-0.5">{children}</li>,
-                        strong: ({ children }) => <strong className="font-semibold text-orange-300">{children}</strong>,
+                        strong: ({ children }) => <strong className="font-semibold text-emerald-300">{children}</strong>,
                         h2: ({ children }) => <h2 className="mb-1 mt-3 text-base font-semibold first:mt-0">{children}</h2>,
                         h3: ({ children }) => <h3 className="mb-1 mt-2 text-sm font-semibold first:mt-0">{children}</h3>,
                         code: ({ children }) => <code className="rounded bg-white/5 px-1 py-0.5 text-xs font-mono">{children}</code>,
@@ -177,11 +177,11 @@ export default function Chat() {
 
             {loading && (
               <div className="flex gap-3 justify-start">
-                <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-500/15 text-orange-400 ring-1 ring-orange-500/25">
+                <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25">
                   <Bot className="h-4 w-4" />
                 </div>
                 <div className="rounded-2xl rounded-tl-sm bg-card/80 px-4 py-3 ring-1 ring-border/60">
-                  <Loader2 className="h-4 w-4 animate-spin text-orange-400" />
+                  <Loader2 className="h-4 w-4 animate-spin text-emerald-400" />
                 </div>
               </div>
             )}
@@ -199,13 +199,13 @@ export default function Chat() {
             onKeyDown={handleKeyDown}
             placeholder="Digite sua pergunta... (Enter para enviar)"
             rows={1}
-            className="min-h-[40px] max-h-32 resize-none rounded-xl border-border/60 bg-background/60 text-sm focus-visible:ring-orange-500/40"
+            className="min-h-[40px] max-h-32 resize-none rounded-xl border-border/60 bg-background/60 text-sm focus-visible:ring-emerald-500/40"
           />
           <Button
             onClick={() => handleSend()}
             disabled={!input.trim() || loading}
             size="icon"
-            className="h-10 w-10 shrink-0 rounded-xl bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-40"
+            className="h-10 w-10 shrink-0 rounded-xl bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-40"
           >
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>

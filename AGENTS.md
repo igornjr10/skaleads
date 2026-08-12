@@ -26,7 +26,7 @@ supabase/
 ## Convencoes
 - Sem comentarios exceto quando o WHY e nao-obvio
 - Supabase e o unico backend - sem Express/Next.js
-- Meta API calls sao client-side (token armazenado em `clients.meta_access_token`)
+- Meta API calls passam pela Edge Function `meta-proxy`: o token vive em `client_secrets` (sem grant para `authenticated`) e nunca chega no browser
 - Imports: usar `@/` como alias para `src/`
 - Toasts: usar `sonner` (`import { toast } from "sonner"`)
 

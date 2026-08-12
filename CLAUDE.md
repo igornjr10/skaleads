@@ -26,7 +26,7 @@ supabase/
 ## Convencoes
 - Sem comentarios exceto quando o WHY e nao-obvio
 - Supabase e o unico backend - sem Express/Next.js
-- Meta API calls sao client-side (token armazenado em `clients.meta_access_token`)
+- Meta API calls passam pela Edge Function `meta-proxy`: o token vive em `client_secrets` (sem grant para `authenticated`) e nunca chega no browser. No front use `metaGet`/`metaGetAll` de `@/lib/meta-client`; `clients.meta_token_configured` diz se a conta esta conectada
 - Imports: usar `@/` como alias para `src/`
 - Toasts: usar `sonner` (`import { toast } from "sonner"`)
 
@@ -42,7 +42,7 @@ Push para `main` -> Vercel auto-deploya. Edge Functions precisam de deploy manua
 Use esta skill sempre que alterar sidebar, topbar, tipografia global ou a experiencia da pagina `Clientes`.
 
 ### Objetivo visual
-- Manter aparencia premium escura com destaque laranja
+- Manter aparencia premium escura com destaque verde (emerald)
 - Priorizar legibilidade, hover claro e feedback visual de estado
 - Evitar regressao para menu lateral simples ou cards sem contexto operacional
 

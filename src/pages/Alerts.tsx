@@ -42,7 +42,7 @@ interface AlertRow {
 export default function Alerts() {
   const navigate = useNavigate();
   const { role } = useAuth();
-  const canManage = role === "owner" || role === "admin";
+  const canManage = role !== "viewer";
 
   const [alerts, setAlerts] = useState<AlertRow[]>([]);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);

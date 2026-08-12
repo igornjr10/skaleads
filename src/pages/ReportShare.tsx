@@ -13,8 +13,6 @@ interface SharedReport {
   name: string;
   data: ReportData;
   period: { start: string; end: string; label: string };
-  share_token: string;
-  view_count: number;
 }
 
 function KpiCard({ label, value }: { label: string; value: string }) {
@@ -134,14 +132,14 @@ export default function ReportShare() {
     if (token) fetchReport();
   }, [token]);
 
+  // A tabela reports nao e legivel por anon: quem serve o link publico e a
+  // Edge Function, que valida o token com service role e conta a visita.
   async function fetchReport() {
-    const { data, error } = await supabase
-      .from("reports")
-      .select("id, name, data, period, share_token, view_count")
-      .eq("share_token", token!)
-      .single();
+    const { data, error } = await supabase.functions.invoke("get-shared-report", {
+      body: { token },
+    });
 
-    if (error || !data) {
+    if (error || !data || data.error) {
       setNotFound(true);
       setLoading(false);
       return;
@@ -149,8 +147,6 @@ export default function ReportShare() {
 
     setReport(data as SharedReport);
     setLoading(false);
-
-    supabase.rpc("increment_report_views", { p_share_token: token! }).then(() => {});
   }
 
   async function handleDownload() {
@@ -198,7 +194,7 @@ export default function ReportShare() {
   const { data } = report;
   const generatedAt = data?.generatedAt;
   const primaryColor = data?.branding?.primaryColor || "#6366f1";
-  const agencyName = data?.branding?.agencyName || "MarketProAds";
+  const agencyName = data?.branding?.agencyName || "Scale Ads";
   const preferredMetrics = getPreferredMetrics(data);
 
   return (
