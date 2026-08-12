@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getUser, ownsClient, isServiceRole, jsonResponse } from "../_shared/auth.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
@@ -145,6 +146,15 @@ serve(async (req) => {
 
   try {
     const { client_id, template: templateOverride, save_template, targets: targetsOverride }: RequestPayload = await req.json();
+
+    // service_role ignora RLS: a carteira do usuario e checada aqui.
+    if (!isServiceRole(req)) {
+      const user = await getUser(req);
+      if (!user) return jsonResponse(corsHeaders, { error: "Não autenticado" }, 401);
+      if (!(await ownsClient(user.id, client_id))) {
+        return jsonResponse(corsHeaders, { error: "Cliente não encontrado na sua carteira" }, 404);
+      }
+    }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;

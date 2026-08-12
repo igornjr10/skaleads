@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getUser, ownsClient, jsonResponse } from "../_shared/auth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -132,16 +133,25 @@ serve(async (req) => {
   const dbAuthHeader = `Bearer ${serviceKey}`;
 
   try {
-    const { messages, clientId, tenantId } = await req.json() as {
+    const { messages, clientId } = await req.json() as {
       messages: Message[];
       clientId?: string;
-      tenantId: string;
     };
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       throw new Error("messages é obrigatório");
     }
-    if (!tenantId) throw new Error("tenantId é obrigatório");
+
+    const user = await getUser(req);
+    if (!user) return jsonResponse(cors, { error: "Não autenticado" }, 401);
+    // tenantId vinha do corpo — bastava trocar o valor para furar o rate limit.
+    const tenantId = user.id;
+
+    // O contexto e lido com service role, que ignora RLS: sem esta checagem,
+    // passar o clientId de outra carteira traria as campanhas dela para o chat.
+    if (clientId && !(await ownsClient(user.id, clientId))) {
+      return jsonResponse(cors, { error: "Cliente não encontrado na sua carteira" }, 404);
+    }
 
     const context = await fetchContext(baseUrl, serviceKey, dbAuthHeader, clientId);
 

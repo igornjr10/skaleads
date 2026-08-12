@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { getUser, ownsClient, isServiceRole, jsonResponse } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -30,6 +31,17 @@ serve(async (req) => {
 
     if (!client_id || !file_name || !media_base64) {
       throw new Error("client_id, file_name e media_base64 são obrigatórios");
+    }
+
+    // service_role ignora RLS: a carteira do usuario e checada aqui. O
+    // run-report-schedules chama esta function com a propria service key —
+    // nesse caminho nao ha usuario e o agendamento ja definiu o cliente.
+    if (!isServiceRole(req)) {
+      const user = await getUser(req);
+      if (!user) return jsonResponse(corsHeaders, { error: "Não autenticado" }, 401);
+      if (!(await ownsClient(user.id, client_id))) {
+        return jsonResponse(corsHeaders, { error: "Cliente não encontrado na sua carteira" }, 404);
+      }
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;

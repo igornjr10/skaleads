@@ -17,10 +17,9 @@ async function callEdgeFunction<T>(
   const { data: user } = await supabase.auth.getUser();
   if (!user?.user?.id) throw new Error("Usuario nao autenticado");
 
-  const fullPayload = { ...payload, tenantId: user.user.id };
-
+  // O tenant sai do JWT no servidor; mandar no corpo so daria margem a spoof.
   const { data, error } = await supabase.functions.invoke(functionName, {
-    body: fullPayload,
+    body: payload,
   });
 
   const response = data as EdgeFunctionResponse<T> | null;
@@ -146,7 +145,7 @@ export async function sendChatMessage(
   if (!user?.user?.id) throw new Error("Usuario nao autenticado");
 
   const { data, error } = await supabase.functions.invoke("chat-assistant", {
-    body: { messages, clientId, tenantId: user.user.id },
+    body: { messages, clientId },
   });
 
   const response = data as { success: boolean; reply: string; tokens: { input: number; output: number }; cost_usd: string; error?: string } | null;
