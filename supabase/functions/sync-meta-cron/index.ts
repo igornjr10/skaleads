@@ -323,14 +323,14 @@ interface ClientRow {
   id: string;
   name: string;
   meta_ad_account_id: string | null;
-  meta_access_token: string | null;
+  meta_token_configured: boolean | null;
   meta_auto_sync_enabled: boolean;
   meta_auto_sync_frequency_hours: number;
   meta_last_sync_at: string | null;
 }
 
 function isDue(client: ClientRow): boolean {
-  if (!client.meta_auto_sync_enabled || !client.meta_ad_account_id || !client.meta_access_token) return false;
+  if (!client.meta_auto_sync_enabled || !client.meta_ad_account_id || !client.meta_token_configured) return false;
   if (!client.meta_last_sync_at) return true;
   const lastSync = new Date(client.meta_last_sync_at).getTime();
   const frequencyMs = (client.meta_auto_sync_frequency_hours || 24) * 60 * 60 * 1000;
@@ -367,7 +367,7 @@ serve(async (req) => {
 
     const clients: ClientRow[] = await dbGet(
       supabaseUrl, svcKey,
-      `clients?status=eq.active&meta_auto_sync_enabled=eq.true&select=id,name,meta_ad_account_id,meta_access_token,meta_auto_sync_enabled,meta_auto_sync_frequency_hours,meta_last_sync_at`
+      `clients?status=eq.active&meta_auto_sync_enabled=eq.true&select=id,name,meta_ad_account_id,meta_token_configured,meta_auto_sync_enabled,meta_auto_sync_frequency_hours,meta_last_sync_at`
     );
 
     // Limita quantos clientes sincroniza por execucao: com dezenas de clientes
@@ -387,7 +387,15 @@ serve(async (req) => {
 
     for (const client of dueClients) {
       try {
-        const result = await syncClientData(supabaseUrl, svcKey, client.id, client.meta_ad_account_id!, client.meta_access_token!);
+        // O token vive em client_secrets, que so o service_role enxerga.
+        const [secret]: Array<{ meta_access_token: string | null }> = await dbGet(
+          supabaseUrl, svcKey,
+          `client_secrets?client_id=eq.${client.id}&select=meta_access_token&limit=1`
+        );
+        const token = secret?.meta_access_token?.trim();
+        if (!token) throw new Error("Cliente sem token da Meta no cofre");
+
+        const result = await syncClientData(supabaseUrl, svcKey, client.id, client.meta_ad_account_id!, token);
         results.push({ client: client.name, ok: true, campaigns: result.campaigns, days: result.days });
       } catch (err) {
         const message = (err as Error).message;

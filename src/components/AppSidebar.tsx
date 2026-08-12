@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { MarketProLogo } from "./MarketProLogo";
+import { ScaleAdsLogo } from "./ScaleAdsLogo";
 
 const items = [
   { title: "Dashboard",      url: "/",           icon: LayoutDashboard },
@@ -53,37 +53,37 @@ export function AppSidebar() {
     >
       {/* ── Header ─────────────────────────────────────────── */}
       <SidebarHeader className="relative overflow-hidden border-b border-sidebar-border/70 bg-gradient-to-b from-[#151515] via-[#101010] to-[#0b0b0b]">
-        <div className="pointer-events-none absolute inset-x-4 top-0 h-20 rounded-full bg-orange-500/10 blur-2xl" />
+        <div className="pointer-events-none absolute inset-x-4 top-0 h-20 rounded-full bg-emerald-500/10 blur-2xl" />
         {collapsed ? (
           <div className="flex items-center justify-center py-4">
             <div className="relative">
-              <div className="absolute inset-0 rounded-xl bg-orange-500/20 blur-md" />
-              <MarketProLogo size={36} className="relative shrink-0 rounded-xl ring-1 ring-orange-500/30" />
+              <div className="absolute inset-0 rounded-xl bg-emerald-500/20 blur-md" />
+              <ScaleAdsLogo size={36} className="relative shrink-0 rounded-xl ring-1 ring-emerald-500/30" />
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3 px-3 py-5">
             {/* Logo com glow */}
             <div className="relative">
-              <div className="absolute inset-0 rounded-2xl bg-orange-500/25 blur-lg scale-110" />
-              <MarketProLogo
+              <div className="absolute inset-0 rounded-2xl bg-emerald-500/25 blur-lg scale-110" />
+              <ScaleAdsLogo
                 size={64}
-                className="relative shrink-0 rounded-2xl ring-1 ring-orange-500/40 shadow-[0_0_24px_rgba(249,115,22,0.25)]"
+                className="relative shrink-0 rounded-2xl ring-1 ring-emerald-500/40 shadow-[0_0_24px_rgba(16,185,129,0.25)]"
               />
             </div>
 
             {/* Brand name */}
             <div className="flex flex-col items-center gap-0.5 text-center">
               <span className="text-[17px] font-extrabold tracking-tight text-white leading-none">
-                MarketPro<span className="text-orange-400">Ads</span>
+                Scale <span className="text-emerald-400">Ads</span>
               </span>
-              <span className="text-[10px] font-medium tracking-[0.22em] uppercase text-orange-500/80">
+              <span className="text-[10px] font-medium tracking-[0.22em] uppercase text-emerald-500/80">
                 Manager
               </span>
             </div>
 
             {/* Linha decorativa */}
-            <div className="h-px w-full bg-gradient-to-r from-transparent via-orange-500/40 to-transparent" />
+            <div className="h-px w-full bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent" />
           </div>
         )}
       </SidebarHeader>
@@ -106,12 +106,12 @@ export function AppSidebar() {
                     isActive={isActive(item.url)}
                     className={
                       isActive(item.url)
-                        ? "relative translate-x-0.5 rounded-2xl bg-gradient-to-r from-orange-500/18 via-orange-500/10 to-transparent text-primary font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_24px_rgba(249,115,22,0.10)] before:absolute before:left-0 before:inset-y-2 before:w-[3px] before:rounded-full before:bg-primary"
+                        ? "relative translate-x-0.5 rounded-2xl bg-gradient-to-r from-emerald-500/18 via-emerald-500/10 to-transparent text-primary font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_8px_24px_rgba(16,185,129,0.10)] before:absolute before:left-0 before:inset-y-2 before:w-[3px] before:rounded-full before:bg-primary"
                         : "rounded-2xl text-sidebar-foreground/75 hover:translate-x-0.5 hover:text-sidebar-foreground hover:bg-sidebar-accent/70"
                     }
                   >
                     <NavLink to={item.url} end={item.url === "/"}>
-                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${isActive(item.url) ? "border-orange-500/30 bg-orange-500/12 text-orange-300" : "border-sidebar-border/60 bg-white/[0.03] text-sidebar-foreground/80 group-hover:border-orange-500/20 group-hover:text-sidebar-foreground"}`}>
+                      <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border transition-colors ${isActive(item.url) ? "border-emerald-500/30 bg-emerald-500/12 text-emerald-300" : "border-sidebar-border/60 bg-white/[0.03] text-sidebar-foreground/80 group-hover:border-emerald-500/20 group-hover:text-sidebar-foreground"}`}>
                         <item.icon className="h-5 w-5 shrink-0" />
                       </span>
                       {!collapsed && <span className="text-[15px] font-semibold tracking-[-0.01em]">{item.title}</span>}

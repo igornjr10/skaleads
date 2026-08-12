@@ -1,4 +1,4 @@
-const META_BASE = "https://graph.facebook.com/v21.0";
+import { metaGet, type MetaSource } from "@/lib/meta-client";
 
 function normalizeAccountId(id: string) {
   return id.startsWith("act_") ? id.slice(4) : id.trim();
@@ -6,15 +6,6 @@ function normalizeAccountId(id: string) {
 
 function normalizeInstagramUsername(username: string) {
   return username.trim().toLowerCase().replace(/^@+/, "").replace(/[^a-z0-9._]/g, "");
-}
-
-async function fetchMetaJson<T>(path: string, params: Record<string, string>): Promise<T> {
-  const response = await fetch(`${META_BASE}/${path}?${new URLSearchParams(params)}`);
-  const json = await response.json();
-  if (!response.ok || json.error) {
-    throw new Error(json.error?.message || "Erro ao buscar dados na Meta");
-  }
-  return json as T;
 }
 
 export interface ReachFrequency {
@@ -25,17 +16,17 @@ export interface ReachFrequency {
 
 export async function fetchAccountReachFrequency(
   adAccountId: string,
-  accessToken: string,
+  source: MetaSource,
   since: string,
   until: string
 ): Promise<ReachFrequency> {
-  const json = await fetchMetaJson<{ data?: Array<{ reach?: string; frequency?: string; impressions?: string }> }>(
+  const json = await metaGet<{ data?: Array<{ reach?: string; frequency?: string; impressions?: string }> }>(
+    source,
     `act_${normalizeAccountId(adAccountId)}/insights`,
     {
       fields: "reach,frequency,impressions",
       level: "account",
       time_range: JSON.stringify({ since, until }),
-      access_token: accessToken.trim(),
     }
   );
   const row = json.data?.[0];
@@ -61,33 +52,32 @@ interface SocialPresenceInput {
   pageName?: string | null;
   instagramAccountId?: string | null;
   instagramUsername?: string | null;
-  accessToken?: string | null;
+  clientId?: string | null;
   logoUrl?: string | null;
   since: string;
   until: string;
 }
 
-async function fetchFacebookPresence(pageId: string, token: string, since: string, until: string) {
-  const pageInfo = await fetchMetaJson<{
+async function fetchFacebookPresence(pageId: string, source: MetaSource, since: string, until: string) {
+  const pageInfo = await metaGet<{
     name?: string;
     fan_count?: number;
     followers_count?: number;
     instagram_business_account?: { id?: string };
-  }>(pageId, {
+  }>(source, pageId, {
     fields: "name,fan_count,followers_count,instagram_business_account{id}",
-    access_token: token,
   });
 
   let reach: number | null = null;
   let engagement: number | null = null;
   try {
-    const insights = await fetchMetaJson<{ data?: Array<{ name?: string; values?: Array<{ value?: number }> }> }>(
+    const insights = await metaGet<{ data?: Array<{ name?: string; values?: Array<{ value?: number }> }> }>(
+      source,
       `${pageId}/insights`,
       {
         metric: "page_impressions_unique,page_actions_post_reactions_total",
         since,
         until,
-        access_token: token,
       }
     );
     const rows = insights.data || [];
@@ -106,11 +96,12 @@ async function fetchFacebookPresence(pageId: string, token: string, since: strin
   };
 }
 
-async function fetchInstagramPresence(igId: string, token: string, since: string, until: string) {
-  const profile = await fetchMetaJson<{ username?: string; followers_count?: number; profile_picture_url?: string }>(igId, {
-    fields: "username,followers_count,profile_picture_url",
-    access_token: token,
-  });
+async function fetchInstagramPresence(igId: string, source: MetaSource, since: string, until: string) {
+  const profile = await metaGet<{ username?: string; followers_count?: number; profile_picture_url?: string }>(
+    source,
+    igId,
+    { fields: "username,followers_count,profile_picture_url" }
+  );
 
   // A janela de insights do IG é limitada a ~30 dias.
   const untilObj = new Date(`${until}T00:00:00`);
@@ -126,13 +117,12 @@ async function fetchInstagramPresence(igId: string, token: string, since: string
         period: "day",
         since: cappedSince,
         until,
-        access_token: token,
       };
       if (useTotalValue) params.metric_type = "total_value";
       try {
-        const insights = await fetchMetaJson<{
+        const insights = await metaGet<{
           data?: Array<{ name?: string; total_value?: { value?: number }; values?: Array<{ value?: number | string }> }>;
-        }>(`${igId}/insights`, params);
+        }>(source, `${igId}/insights`, params);
         const row = (insights.data || []).find((r) => r.name === metric);
         if (row?.total_value?.value !== undefined) return row.total_value.value;
         if (row?.values?.length) return row.values.reduce((s, i) => s + (Number(i.value) || 0), 0);
@@ -162,12 +152,13 @@ async function fetchInstagramPresence(igId: string, token: string, since: string
 }
 
 export async function fetchSocialPresence(input: SocialPresenceInput): Promise<SocialPresence | null> {
-  const token = input.accessToken?.trim();
-  if (!token) return null;
+  const clientId = input.clientId?.trim();
+  if (!clientId) return null;
+  const source: MetaSource = { clientId };
 
-  const page = input.pageId ? await fetchFacebookPresence(input.pageId, token, input.since, input.until).catch(() => null) : null;
+  const page = input.pageId ? await fetchFacebookPresence(input.pageId, source, input.since, input.until).catch(() => null) : null;
   const igId = page?.instagramAccountId || input.instagramAccountId || null;
-  const ig = igId ? await fetchInstagramPresence(igId, token, input.since, input.until).catch(() => null) : null;
+  const ig = igId ? await fetchInstagramPresence(igId, source, input.since, input.until).catch(() => null) : null;
 
   if (!page && !ig) return null;
 

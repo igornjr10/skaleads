@@ -145,7 +145,7 @@ serve(async (req) => {
 
     const context = await fetchContext(baseUrl, serviceKey, dbAuthHeader, clientId);
 
-    const systemPrompt = `Você é um assistente especialista em gestão de tráfego pago e campanhas Meta Ads. Seu nome é Assistente IA do MarketPro Manager.
+    const systemPrompt = `Você é um assistente especialista em gestão de tráfego pago e campanhas Meta Ads. Seu nome é Assistente IA do Scale Ads.
 
 Você tem acesso aos dados reais das campanhas do sistema. Responda sempre em português brasileiro, de forma clara e acionável.
 

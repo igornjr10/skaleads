@@ -103,7 +103,7 @@ async function buildReportPdf(params: {
 
   const margin = 50;
   let y = 780;
-  const orange = rgb(0.98, 0.45, 0.09);
+  const brand = rgb(0.07, 0.80, 0.57);
   const dark = rgb(0.15, 0.15, 0.15);
   const gray = rgb(0.45, 0.45, 0.45);
 
@@ -114,7 +114,7 @@ async function buildReportPdf(params: {
     y -= size + 8;
   };
 
-  draw("Relatório de Performance", { size: 20, bold: true, color: orange });
+  draw("Relatório de Performance", { size: 20, bold: true, color: brand });
   draw(params.clientName, { size: 14, bold: true });
   draw(params.periodLabel, { size: 10, color: gray });
   y -= 10;
@@ -135,7 +135,7 @@ async function buildReportPdf(params: {
 
   y -= 20;
   draw(`Gerado em ${params.generatedAt}`, { size: 9, color: gray });
-  draw("Enviado por MarketProAds", { size: 9, color: gray });
+  draw("Enviado por Scale Ads", { size: 9, color: gray });
 
   return doc.save();
 }
@@ -274,7 +274,7 @@ serve(async (req) => {
     }
 
     lines.push("");
-    lines.push("_Enviado por MarketProAds_");
+    lines.push("_Enviado por Scale Ads_");
 
     const message = lines.join("\n");
 
