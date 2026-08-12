@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Megaphone, Bell, Settings, Brain, LogOut, MessageSquare, Activity } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Bell, Settings, Brain, LogOut, MessageSquare, Activity, ClipboardList } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import {
   Sidebar,
@@ -21,6 +21,7 @@ import { ScaleAdsLogo } from "./ScaleAdsLogo";
 const items = [
   { title: "Dashboard",      url: "/dashboard",  icon: LayoutDashboard },
   { title: "Clientes",       url: "/clients",    icon: Users },
+  { title: "Planner",        url: "/planner",    icon: ClipboardList },
   { title: "Campanhas",      url: "/campaigns",  icon: Megaphone },
   { title: "Alertas",        url: "/alerts",     icon: Bell },
   { title: "WhatsApp",       url: "/whatsapp-scheduled", icon: WhatsAppIcon },

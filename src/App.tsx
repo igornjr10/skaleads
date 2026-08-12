@@ -15,6 +15,7 @@ const Privacidade = lazy(() => import("./pages/Privacidade"));
 const Termos = lazy(() => import("./pages/Termos"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Planner = lazy(() => import("./pages/Planner"));
 const Clients = lazy(() => import("./pages/Clients"));
 const ClientHub = lazy(() => import("./pages/ClientHub"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
@@ -66,6 +67,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/planner" element={<Planner />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/clients/:id" element={<ClientHub />} />
                 <Route path="/campaigns" element={<Campaigns />} />

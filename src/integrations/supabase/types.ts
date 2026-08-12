@@ -297,6 +297,53 @@ export type Database = {
           },
         ]
       }
+      client_tasks: {
+        Row: {
+          client_id: string
+          created_at: string
+          descricao: string | null
+          done: boolean
+          done_at: string | null
+          done_by: string | null
+          fase: string
+          id: string
+          posicao: number
+          titulo: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          descricao?: string | null
+          done?: boolean
+          done_at?: string | null
+          done_by?: string | null
+          fase?: string
+          id?: string
+          posicao?: number
+          titulo: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          descricao?: string | null
+          done?: boolean
+          done_at?: string | null
+          done_by?: string | null
+          fase?: string
+          id?: string
+          posicao?: number
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
           Row: {
             address: string | null
@@ -475,6 +522,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin_or_owner: { Args: { _user_id: string }; Returns: boolean }
+      seed_client_tasks: { Args: { _client_id: string }; Returns: number }
     }
     Enums: {
       app_role: "owner" | "admin" | "analyst" | "viewer"
