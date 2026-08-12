@@ -39,13 +39,15 @@ serve(async (req) => {
     const { clientId, token, clear } = await req.json().catch(() => ({}));
     if (!clientId || !UUID_RE.test(clientId)) return json({ error: "clientId inválido" }, 400);
 
-    // service_role ignora RLS: a posse do cliente e checada aqui.
-    const owned = await fetch(
-      `${supabaseUrl}/rest/v1/clients?id=eq.${clientId}&owner_id=eq.${user.id}&select=id&limit=1`,
-      { headers: svcHeaders }
-    ).then(r => r.json()).catch(() => null);
+    // service_role ignora RLS: o acesso do time e checado pela mesma funcao que
+    // as policies usam.
+    const allowed = await fetch(`${supabaseUrl}/rest/v1/rpc/user_can_access_client`, {
+      method: "POST",
+      headers: svcHeaders,
+      body: JSON.stringify({ _user_id: user.id, _client_id: clientId }),
+    }).then(r => r.json()).catch(() => false);
 
-    if (!Array.isArray(owned) || owned.length === 0) {
+    if (allowed !== true) {
       return json({ error: "Cliente não encontrado na sua carteira" }, 404);
     }
 

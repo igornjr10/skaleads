@@ -684,10 +684,10 @@ export default function Clients() {
       whatsapp_number: newWhatsapp.trim().replace(/\D/g, "") || null,
       whatsapp_group_jid: newWhatsappGroupJid || null,
     };
-    // owner_id define a carteira: sem ele a policy de insert recusa a linha.
+    // O team_id sai do trigger set_client_team, a partir do time de quem criou.
     const { error } = editClient
       ? await supabase.from("clients").update(payload).eq("id", editClient.id)
-      : await supabase.from("clients").insert({ ...payload, status: "active", owner_id: user?.id });
+      : await supabase.from("clients").insert({ ...payload, status: "active" });
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success(editClient ? "Cliente atualizado" : "Cliente criado");

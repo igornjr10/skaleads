@@ -75,10 +75,15 @@ serve(async (req) => {
     if (!token) {
       if (!clientId) return json({ error: "Informe clientId ou rawToken" }, 400);
 
-      // A carteira e isolada por dono: esta function roda com service_role, que
-      // ignora RLS, entao a posse precisa ser checada na unha aqui.
-      const owned = await firstRow(`clients?id=eq.${clientId}&owner_id=eq.${user.id}&select=id&limit=1`);
-      if (!owned) return json({ error: "Cliente não encontrado na sua carteira" }, 404);
+      // service_role ignora RLS: o acesso do time e checado pela mesma funcao
+      // que as policies usam, para nao existir uma segunda regra aqui.
+      const allowed = await fetch(`${supabaseUrl}/rest/v1/rpc/user_can_access_client`, {
+        method: "POST",
+        headers: svcHeaders,
+        body: JSON.stringify({ _user_id: user.id, _client_id: clientId }),
+      }).then(r => r.json()).catch(() => false);
+
+      if (allowed !== true) return json({ error: "Cliente não encontrado na sua carteira" }, 404);
 
       const secret = await firstRow(`client_secrets?client_id=eq.${clientId}&select=meta_access_token&limit=1`);
       token = secret?.meta_access_token?.trim() ?? "";

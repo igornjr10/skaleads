@@ -54,15 +54,20 @@ export async function getUser(req: Request): Promise<AuthedUser | null> {
   return user?.id ? { id: user.id, email: user.email } : null;
 }
 
-/** O cliente esta na carteira desse usuario? */
+/**
+ * O cliente esta na carteira do time desse usuario?
+ * A regra vive no banco (user_can_access_client) para nao existir uma segunda
+ * versao dela aqui que possa divergir das policies.
+ */
 export async function ownsClient(userId: string, clientId: unknown): Promise<boolean> {
   if (!isUuid(clientId)) return false;
   const { supabaseUrl, svcKey } = env();
-  const rows = await fetch(
-    `${supabaseUrl}/rest/v1/clients?id=eq.${clientId}&owner_id=eq.${userId}&select=id&limit=1`,
-    { headers: svcHeaders(svcKey) }
-  ).then(r => r.json()).catch(() => null);
-  return Array.isArray(rows) && rows.length > 0;
+  const result = await fetch(`${supabaseUrl}/rest/v1/rpc/user_can_access_client`, {
+    method: "POST",
+    headers: svcHeaders(svcKey),
+    body: JSON.stringify({ _user_id: userId, _client_id: clientId }),
+  }).then(r => r.json()).catch(() => false);
+  return result === true;
 }
 
 /** O usuario tem algum destes papeis na plataforma? */
