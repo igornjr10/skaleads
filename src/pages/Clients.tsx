@@ -172,8 +172,10 @@ function isAutoSyncDue(client: Client) {
 }
 
 export default function Clients() {
-  const { role } = useAuth();
-  const canManage = role === "owner" || role === "admin";
+  const { user, role } = useAuth();
+  // A carteira e isolada por dono, entao quem esta aqui gerencia o que e dele.
+  // O papel so restringe o viewer, que continua sendo perfil de leitura.
+  const canManage = role !== "viewer";
   const navigate = useNavigate();
 
   const [clients, setClients] = useState<Client[]>([]);
@@ -682,9 +684,10 @@ export default function Clients() {
       whatsapp_number: newWhatsapp.trim().replace(/\D/g, "") || null,
       whatsapp_group_jid: newWhatsappGroupJid || null,
     };
+    // owner_id define a carteira: sem ele a policy de insert recusa a linha.
     const { error } = editClient
       ? await supabase.from("clients").update(payload).eq("id", editClient.id)
-      : await supabase.from("clients").insert({ ...payload, status: "active" });
+      : await supabase.from("clients").insert({ ...payload, status: "active", owner_id: user?.id });
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success(editClient ? "Cliente atualizado" : "Cliente criado");

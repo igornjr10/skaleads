@@ -12,10 +12,6 @@ const META_BASE = "https://graph.facebook.com/v21.0";
 const PATH_RE = /^[A-Za-z0-9_.\-/]{1,200}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Viewer e observador: le o que ja foi sincronizado, nao dispara chamada nova
-// na conta de anuncio do cliente.
-const ALLOWED_ROLES = ["owner", "admin", "analyst"];
-
 const MAX_PAGES = 50;
 
 interface ProxyRequest {
@@ -56,14 +52,6 @@ serve(async (req) => {
     const user = await userRes.json().catch(() => null);
     if (!userRes.ok || !user?.id) return json({ error: "Não autenticado" }, 401);
 
-    const roles: Array<{ role: string }> = await fetch(
-      `${supabaseUrl}/rest/v1/user_roles?user_id=eq.${user.id}&select=role`,
-      { headers: svcHeaders }
-    ).then(r => r.json()).catch(() => []);
-
-    const allowed = Array.isArray(roles) && roles.some(r => ALLOWED_ROLES.includes(r.role));
-    if (!allowed) return json({ error: "Seu perfil não tem permissão para consultar a Meta" }, 403);
-
     // 2. O que esta sendo pedido.
     const body: ProxyRequest = await req.json().catch(() => ({}));
     const { clientId, rawToken, path, params = {}, mode = "object" } = body;
@@ -86,6 +74,11 @@ serve(async (req) => {
 
     if (!token) {
       if (!clientId) return json({ error: "Informe clientId ou rawToken" }, 400);
+
+      // A carteira e isolada por dono: esta function roda com service_role, que
+      // ignora RLS, entao a posse precisa ser checada na unha aqui.
+      const owned = await firstRow(`clients?id=eq.${clientId}&owner_id=eq.${user.id}&select=id&limit=1`);
+      if (!owned) return json({ error: "Cliente não encontrado na sua carteira" }, 404);
 
       const secret = await firstRow(`client_secrets?client_id=eq.${clientId}&select=meta_access_token&limit=1`);
       token = secret?.meta_access_token?.trim() ?? "";

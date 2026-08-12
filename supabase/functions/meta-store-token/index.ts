@@ -7,9 +7,6 @@ const corsHeaders = {
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Conectar uma conta de anuncio e gestao de cliente, nao consulta.
-const ALLOWED_ROLES = ["owner", "admin"];
-
 // Guarda o token da Meta no cofre (client_secrets), que nao tem grant para
 // authenticated. O browser envia o token uma vez e nunca mais consegue le-lo.
 serve(async (req) => {
@@ -39,17 +36,18 @@ serve(async (req) => {
     const user = await userRes.json().catch(() => null);
     if (!userRes.ok || !user?.id) return json({ error: "Não autenticado" }, 401);
 
-    const roles: Array<{ role: string }> = await fetch(
-      `${supabaseUrl}/rest/v1/user_roles?user_id=eq.${user.id}&select=role`,
-      { headers: svcHeaders }
-    ).then(r => r.json()).catch(() => []);
-
-    if (!Array.isArray(roles) || !roles.some(r => ALLOWED_ROLES.includes(r.role))) {
-      return json({ error: "Apenas admin ou owner pode conectar uma conta Meta" }, 403);
-    }
-
     const { clientId, token, clear } = await req.json().catch(() => ({}));
     if (!clientId || !UUID_RE.test(clientId)) return json({ error: "clientId inválido" }, 400);
+
+    // service_role ignora RLS: a posse do cliente e checada aqui.
+    const owned = await fetch(
+      `${supabaseUrl}/rest/v1/clients?id=eq.${clientId}&owner_id=eq.${user.id}&select=id&limit=1`,
+      { headers: svcHeaders }
+    ).then(r => r.json()).catch(() => null);
+
+    if (!Array.isArray(owned) || owned.length === 0) {
+      return json({ error: "Cliente não encontrado na sua carteira" }, 404);
+    }
 
     if (clear) {
       await fetch(`${supabaseUrl}/rest/v1/client_secrets?client_id=eq.${clientId}`, {
