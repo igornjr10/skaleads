@@ -23,7 +23,7 @@ const items = [
   { title: "Clientes",       url: "/clients",    icon: Users },
   { title: "Campanhas",      url: "/campaigns",  icon: Megaphone },
   { title: "Alertas",        url: "/alerts",     icon: Bell },
-  { title: "Msgs WhatsApp",  url: "/whatsapp-scheduled", icon: WhatsAppIcon },
+  { title: "WhatsApp",       url: "/whatsapp-scheduled", icon: WhatsAppIcon },
   { title: "Automações",    url: "/automations", icon: Activity },
   { title: "Assistente IA",  url: "/chat",       icon: MessageSquare },
   { title: "Andromeda IA",   url: "/andromeda",  icon: Brain },
