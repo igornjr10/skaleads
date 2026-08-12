@@ -67,6 +67,7 @@ import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { syncClientData, validateMetaConnection } from "@/lib/meta-api";
 import { metaGetAll } from "@/lib/meta-client";
+import { ClientAvatar } from "@/components/ClientAvatar";
 import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaPage } from "@/lib/facebook-sdk";
 import { BUSINESS_SEGMENTS, LOCAL_GOALS, segmentLabel } from "@/lib/local-business";
 import { computeBudgetStatus } from "@/lib/client-budget";
@@ -1514,19 +1515,7 @@ export default function Clients() {
                           className="flex items-center min-w-0 cursor-pointer group/clientlink"
                           onClick={() => navigate(`/clients/${client.id}`)}
                         >
-                          {client.logo_url ? (
-                            <img
-                              src={client.logo_url}
-                              alt={client.name}
-                              className="w-10 h-10 rounded-full mr-4"
-                            />
-                          ) : (
-                            <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center mr-4">
-                              <span className="text-gray-500 font-bold">
-                                {client.name.slice(0, 2).toUpperCase()}
-                              </span>
-                            </div>
-                          )}
+                          <ClientAvatar name={client.name} logoUrl={client.logo_url} className="mr-4 h-10 w-10" />
                           <div className="min-w-0">
                             <h3 className="text-lg font-semibold truncate group-hover/clientlink:text-primary group-hover/clientlink:underline">{client.name}</h3>
                             <div className="mt-1 flex flex-wrap gap-2">

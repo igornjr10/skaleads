@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { ScaleAdsLogo } from "@/components/ScaleAdsLogo";
+import { ClientAvatar } from "@/components/ClientAvatar";
 
 interface DashboardData {
   client: { name: string; logoUrl: string | null; businessSegment: string | null };
@@ -107,9 +108,7 @@ export default function ClientDashboardShare() {
       <div className="bg-background px-4 py-6 md:px-8">
         <div className="mx-auto flex max-w-4xl items-center justify-between">
           <div className="flex items-center gap-4">
-            {client.logoUrl && (
-              <img src={client.logoUrl} alt={client.name} className="h-14 w-14 rounded-full border object-cover" />
-            )}
+            <ClientAvatar name={client.name} logoUrl={client.logoUrl} className="h-14 w-14" />
             <div>
               <h1 className="text-2xl font-bold">{client.name}</h1>
               <p className="text-sm text-muted-foreground">Desempenho das campanhas — últimos 30 dias</p>
@@ -155,8 +154,8 @@ export default function ClientDashboardShare() {
               <AreaChart data={dailySeries} margin={{ left: 4, right: 12, top: 8 }}>
                 <defs>
                   <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(24 95% 55%)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="hsl(24 95% 55%)" stopOpacity={0} />
+                    <stop offset="0%" stopColor="hsl(160 84% 44%)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(160 84% 44%)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -168,7 +167,7 @@ export default function ClientDashboardShare() {
                 />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} width={40} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="spend" stroke="hsl(24 95% 55%)" strokeWidth={2} fill="url(#spendFill)" />
+                <Area type="monotone" dataKey="spend" stroke="hsl(160 84% 44%)" strokeWidth={2} fill="url(#spendFill)" />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>

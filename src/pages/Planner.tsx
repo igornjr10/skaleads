@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ClientAvatar } from "@/components/ClientAvatar";
 
 interface Cliente {
   id: string;
@@ -282,13 +283,7 @@ export default function Planner() {
                   onClick={() => alternarAberto(cliente.id)}
                   className="flex w-full items-center gap-4 p-5 text-left transition-colors hover:bg-white/[0.02]"
                 >
-                  {cliente.logo_url ? (
-                    <img src={cliente.logo_url} alt="" className="h-10 w-10 shrink-0 rounded-xl object-cover" />
-                  ) : (
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-bold text-primary">
-                      {cliente.name.slice(0, 2).toUpperCase()}
-                    </div>
-                  )}
+                  <ClientAvatar name={cliente.name} logoUrl={cliente.logo_url} />
 
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">

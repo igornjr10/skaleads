@@ -7,6 +7,7 @@ import { AlertCircle, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
+import { ClientAvatar } from "@/components/ClientAvatar";
 
 interface SharedReport {
   id: string;
@@ -202,9 +203,7 @@ export default function ReportShare() {
       <div style={{ backgroundColor: primaryColor }} className="px-8 py-6 text-white">
         <p className="mb-1 text-sm opacity-75">{agencyName}</p>
         <div className="flex items-center gap-4">
-          {data?.client?.logoUrl && (
-            <img src={data.client.logoUrl} alt={data.client.name} className="h-14 w-14 rounded-full border border-white/20 object-cover" />
-          )}
+          <ClientAvatar name={data?.client?.name ?? "Cliente"} logoUrl={data?.client?.logoUrl} className="h-14 w-14" />
           <div>
             <h1 className="text-2xl font-bold">{data?.client?.name}</h1>
             <p className="mt-1 text-sm opacity-85">Relatorio de Performance - Meta Ads</p>

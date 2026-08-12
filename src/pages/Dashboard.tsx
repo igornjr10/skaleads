@@ -540,8 +540,8 @@ export default function Dashboard() {
                     <AreaChart data={chartSeries} margin={{ left: 10, right: 10, top: 10 }}>
                       <defs>
                         <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(24 95% 55%)" stopOpacity={0.5} />
-                          <stop offset="100%" stopColor="hsl(24 95% 55%)" stopOpacity={0} />
+                          <stop offset="0%" stopColor="hsl(160 84% 44%)" stopOpacity={0.5} />
+                          <stop offset="100%" stopColor="hsl(160 84% 44%)" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="clicksFill" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="hsl(28 100% 65%)" stopOpacity={0.4} />
@@ -565,7 +565,7 @@ export default function Dashboard() {
                       />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Area yAxisId="left" type="monotone" dataKey="spend" name="Gasto"
-                        stroke="hsl(24 95% 55%)" strokeWidth={2} fill="url(#spendFill)" />
+                        stroke="hsl(160 84% 44%)" strokeWidth={2} fill="url(#spendFill)" />
                       <Area yAxisId="right" type="monotone" dataKey="clicks" name="Cliques"
                         stroke="hsl(28 100% 65%)" strokeWidth={2} fill="url(#clicksFill)" />
                     </AreaChart>

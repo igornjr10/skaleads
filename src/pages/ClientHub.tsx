@@ -15,6 +15,7 @@ import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { supabase } from "@/integrations/supabase/client";
 import { loadLatestAudit } from "@/lib/audit/runner";
 import type { AuditReport } from "@/lib/audit/types";
+import { ClientAvatar } from "@/components/ClientAvatar";
 
 interface ClientRow {
   id: string;
@@ -176,13 +177,7 @@ export default function ClientHub() {
           <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="flex items-center gap-3 min-w-0">
-          {client.logo_url ? (
-            <img src={client.logo_url} alt={client.name} className="h-10 w-10 rounded-full" />
-          ) : (
-            <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-500">
-              {client.name.slice(0, 2).toUpperCase()}
-            </div>
-          )}
+          <ClientAvatar name={client.name} logoUrl={client.logo_url} />
           <div className="min-w-0">
             <h1 className="text-2xl font-bold truncate">{client.name}</h1>
             <div className="flex flex-wrap gap-2 mt-1">
