@@ -1,4 +1,4 @@
-import { Link, Navigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Activity,
   ArrowRight,
@@ -78,10 +78,12 @@ function Secao({ children, className = "" }: { children: React.ReactNode; classN
 }
 
 export default function Landing() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
 
-  // Quem ja tem sessao nao precisa da pagina de venda.
-  if (!loading && user) return <Navigate to="/dashboard" replace />;
+  // A landing continua acessivel com sessao aberta — o que muda e o destino dos
+  // botoes. Redirecionar quem esta logado impediria ate de revisar a pagina.
+  const destino = user ? "/dashboard" : "/auth";
+  const rotuloPrincipal = user ? "Ir para o painel" : "Começar agora";
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
@@ -108,12 +110,20 @@ export default function Landing() {
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Button asChild variant="ghost" className="text-muted-foreground hover:text-foreground">
-              <Link to="/auth">Entrar</Link>
-            </Button>
-            <Button asChild className="rounded-xl font-semibold">
-              <Link to="/auth">Criar conta</Link>
-            </Button>
+            {user ? (
+              <Button asChild className="rounded-xl font-semibold">
+                <Link to="/dashboard">Ir para o painel</Link>
+              </Button>
+            ) : (
+              <>
+                <Button asChild variant="ghost" className="text-muted-foreground hover:text-foreground">
+                  <Link to="/auth">Entrar</Link>
+                </Button>
+                <Button asChild className="rounded-xl font-semibold">
+                  <Link to="/auth">Criar conta</Link>
+                </Button>
+              </>
+            )}
           </div>
         </Secao>
       </header>
@@ -141,8 +151,8 @@ export default function Landing() {
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg" className="h-12 rounded-xl px-7 text-[15px] font-bold shadow-glow">
-              <Link to="/auth">
-                Começar agora
+              <Link to={destino}>
+                {rotuloPrincipal}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -248,8 +258,8 @@ export default function Landing() {
               Crie sua conta, conecte um cliente e veja os dados entrarem. Se fizer sentido, traga o resto da carteira.
             </p>
             <Button asChild size="lg" className="mt-7 h-12 rounded-xl px-8 text-[15px] font-bold shadow-glow">
-              <Link to="/auth">
-                Criar minha conta
+              <Link to={destino}>
+                {user ? "Ir para o painel" : "Criar minha conta"}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
@@ -274,8 +284,8 @@ export default function Landing() {
             <Link to="/termos" className="transition-colors hover:text-foreground">
               Termos de uso
             </Link>
-            <Link to="/auth" className="transition-colors hover:text-foreground">
-              Entrar
+            <Link to={destino} className="transition-colors hover:text-foreground">
+              {user ? "Painel" : "Entrar"}
             </Link>
             <span className="inline-flex items-center gap-1.5">
               <WhatsAppIcon className="h-3.5 w-3.5" />
