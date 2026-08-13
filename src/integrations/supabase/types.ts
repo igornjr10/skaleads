@@ -297,6 +297,171 @@ export type Database = {
           },
         ]
       }
+      billing_settings: {
+        Row: {
+          team_id: string
+          pix_key: string | null
+          payment_link: string | null
+          regua: number[]
+          template_antes: string
+          template_vencimento: string
+          template_atraso: string
+          modo_teste: boolean
+          teste_numero: string | null
+          updated_at: string
+        }
+        Insert: {
+          team_id: string
+          pix_key?: string | null
+          payment_link?: string | null
+          regua?: number[]
+          template_antes?: string
+          template_vencimento?: string
+          template_atraso?: string
+          modo_teste?: boolean
+          teste_numero?: string | null
+          updated_at?: string
+        }
+        Update: {
+          team_id?: string
+          pix_key?: string | null
+          payment_link?: string | null
+          regua?: number[]
+          template_antes?: string
+          template_vencimento?: string
+          template_atraso?: string
+          modo_teste?: boolean
+          teste_numero?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+        ]
+      }
+      client_billing: {
+        Row: {
+          client_id: string
+          monthly_fee: number
+          billing_day: number
+          enabled: boolean
+          destino: string
+          observacao: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          monthly_fee: number
+          billing_day?: number
+          enabled?: boolean
+          destino?: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          monthly_fee?: number
+          billing_day?: number
+          enabled?: boolean
+          destino?: string
+          observacao?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_billing_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          id: string
+          client_id: string
+          competencia: string
+          due_date: string
+          amount: number
+          status: string
+          paid_at: string | null
+          paid_amount: number | null
+          payment_link: string | null
+          external_id: string | null
+          gateway: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          competencia: string
+          due_date: string
+          amount: number
+          status?: string
+          paid_at?: string | null
+          paid_amount?: number | null
+          payment_link?: string | null
+          external_id?: string | null
+          gateway?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          competencia?: string
+          due_date?: string
+          amount?: number
+          status?: string
+          paid_at?: string | null
+          paid_amount?: number | null
+          payment_link?: string | null
+          external_id?: string | null
+          gateway?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_reminders: {
+        Row: {
+          id: string
+          invoice_id: string
+          offset_dias: number
+          canal: string
+          destino: string | null
+          sucesso: boolean
+          erro: string | null
+          sent_at: string
+        }
+        Insert: {
+          id?: string
+          invoice_id: string
+          offset_dias: number
+          canal?: string
+          destino?: string | null
+          sucesso?: boolean
+          erro?: string | null
+          sent_at?: string
+        }
+        Update: {
+          id?: string
+          invoice_id?: string
+          offset_dias?: number
+          canal?: string
+          destino?: string | null
+          sucesso?: boolean
+          erro?: string | null
+          sent_at?: string
+        }
+        Relationships: [
+        ]
+      }
       client_tasks: {
         Row: {
           client_id: string
@@ -353,6 +518,8 @@ export type Database = {
             id: string
             logo_url: string | null
             meta_token_configured: boolean | null
+            whatsapp_number: string | null
+            whatsapp_group_jid: string | null
             team_id: string | null
             meta_ad_account_id: string | null
             meta_auto_sync_enabled: boolean
@@ -383,6 +550,8 @@ export type Database = {
           id?: string
             logo_url?: string | null
             meta_token_configured?: boolean | null
+            whatsapp_number?: string | null
+            whatsapp_group_jid?: string | null
             team_id?: string | null
             meta_ad_account_id?: string | null
             meta_auto_sync_enabled?: boolean
@@ -413,6 +582,8 @@ export type Database = {
           id?: string
             logo_url?: string | null
             meta_token_configured?: boolean | null
+            whatsapp_number?: string | null
+            whatsapp_group_jid?: string | null
             team_id?: string | null
             meta_ad_account_id?: string | null
             meta_auto_sync_enabled?: boolean
@@ -523,6 +694,7 @@ export type Database = {
       }
       is_admin_or_owner: { Args: { _user_id: string }; Returns: boolean }
       seed_client_tasks: { Args: { _client_id: string }; Returns: number }
+      my_team_id: { Args: Record<string, never>; Returns: string }
     }
     Enums: {
       app_role: "owner" | "admin" | "analyst" | "viewer"

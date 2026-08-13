@@ -16,6 +16,7 @@ const Termos = lazy(() => import("./pages/Termos"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Planner = lazy(() => import("./pages/Planner"));
+const Financeiro = lazy(() => import("./pages/Financeiro"));
 const Clients = lazy(() => import("./pages/Clients"));
 const ClientHub = lazy(() => import("./pages/ClientHub"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
@@ -70,6 +71,7 @@ const App = () => (
                 <Route path="/planner" element={<Planner />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/clients/:id" element={<ClientHub />} />
+                <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/andromeda" element={<Andromeda />} />

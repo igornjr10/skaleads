@@ -9,6 +9,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard":   { title: "Dashboard",        subtitle: "Visão geral das campanhas" },
   "/clients":     { title: "Clientes",         subtitle: "Gerencie as contas anunciantes" },
   "/planner":     { title: "Planner",          subtitle: "Onboarding de clientes novos" },
+  "/financeiro":  { title: "Financeiro",       subtitle: "Mensalidades e cobranca automatica" },
   "/campaigns":   { title: "Campanhas",        subtitle: "Performance de campanhas Meta Ads" },
   "/alerts":      { title: "Alertas",          subtitle: "Monitoramento em tempo real" },
   "/andromeda":   { title: "Andromeda IA",     subtitle: "Motor de inteligência artificial" },
