@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getUser, ownsClient, isServiceRole, jsonResponse } from "../_shared/auth.ts";
+import { loadWhatsappConfig, sendDocument } from "../_shared/whatsapp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -46,13 +47,12 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL")!;
-    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE")!;
-    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
-    if (!supabaseUrl || !svcKey || !evolutionApiUrl || !evolutionInstance || !evolutionApiKey) {
+    if (!supabaseUrl || !svcKey) {
       throw new Error("Variáveis de ambiente não configuradas");
     }
+
+    const cfg = await loadWhatsappConfig();
 
     const [client] = await dbGet(
       supabaseUrl, svcKey,
@@ -63,27 +63,15 @@ serve(async (req) => {
     const target = client.whatsapp_group_jid || client.whatsapp_number;
     if (!target) throw new Error("Cliente sem número ou grupo de WhatsApp cadastrado");
 
-    const response = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendMedia/${evolutionInstance}`, {
-      method: "POST",
-      headers: {
-        apikey: evolutionApiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        number: target,
-        mediatype: "document",
-        mimetype: "application/pdf",
-        fileName: file_name,
-        caption: caption ?? "",
-        media: media_base64,
-      }),
+    const { messageId } = await sendDocument(cfg, {
+      to: target,
+      base64: media_base64,
+      fileName: file_name,
+      caption: caption ?? "",
     });
 
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || result.error || "Evolution API error");
-
     return new Response(
-      JSON.stringify({ success: true, message_id: result.key?.id ?? null }),
+      JSON.stringify({ success: true, message_id: messageId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

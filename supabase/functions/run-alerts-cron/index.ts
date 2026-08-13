@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { loadWhatsappConfig, sendText } from "../_shared/whatsapp.ts";
 
 type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "budget";
 type Comparator = "gt" | "gte" | "lt" | "lte" | "eq" | "change_pct";
@@ -335,12 +336,13 @@ serve(async (req) => {
   let runError: string | null = null;
 
   try {
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL") ?? "";
-    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE") ?? "";
-    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY") ?? "";
     const managerNumber = Deno.env.get("MANAGER_WHATSAPP_NUMBER") ?? "";
 
     if (!supabaseUrl || !svcKey) throw new Error("SUPABASE_URL / SVC_ROLE_KEY não configurados");
+
+    // WhatsApp aqui e um canal opcional do alerta: sem provedor configurado o
+    // cron precisa seguir gravando os eventos em vez de abortar a rodada.
+    const whatsappCfg = await loadWhatsappConfig().catch(() => null);
 
     const alerts: StoredAlert[] = await dbGet(
       supabaseUrl, svcKey,
@@ -380,14 +382,9 @@ serve(async (req) => {
         const channels: AlertChannels = alert.channels;
 
         const whatsappTarget = channels.whatsappTarget || managerNumber;
-        if (channels.whatsapp && evolutionApiUrl && evolutionInstance && evolutionApiKey && whatsappTarget) {
+        if (channels.whatsapp && whatsappCfg && whatsappTarget) {
           try {
-            const message = buildWhatsAppMessage(alert, firedEntities);
-            await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
-              method: "POST",
-              headers: { apikey: evolutionApiKey, "Content-Type": "application/json" },
-              body: JSON.stringify({ number: whatsappTarget, text: message }),
-            });
+            await sendText(whatsappCfg, whatsappTarget, buildWhatsAppMessage(alert, firedEntities));
           } catch {
             // non-blocking
           }

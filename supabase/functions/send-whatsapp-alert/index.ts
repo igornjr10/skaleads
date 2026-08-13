@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { loadWhatsappConfig, sendText } from "../_shared/whatsapp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -61,17 +62,8 @@ serve(async (req) => {
   try {
     const payload: WhatsAppAlertPayload = await req.json();
 
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
-    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE");
-    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
+    const cfg = await loadWhatsappConfig();
     const managerNumber = Deno.env.get("MANAGER_WHATSAPP_NUMBER");
-
-    if (!evolutionApiUrl || !evolutionInstance || !evolutionApiKey) {
-      return new Response(
-        JSON.stringify({ error: "EVOLUTION_API_URL / EVOLUTION_INSTANCE / EVOLUTION_API_KEY não configurados" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
     const target = payload.target || managerNumber;
 
@@ -84,26 +76,10 @@ serve(async (req) => {
 
     const message = buildMessage(payload);
 
-    const response = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
-      method: "POST",
-      headers: {
-        apikey: evolutionApiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        number: target,
-        text: message,
-      }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      throw new Error(result.message || result.error || "Evolution API error");
-    }
+    const { messageId } = await sendText(cfg, target, message);
 
     return new Response(
-      JSON.stringify({ success: true, message_id: result.key?.id ?? null }),
+      JSON.stringify({ success: true, message_id: messageId }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

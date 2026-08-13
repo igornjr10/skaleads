@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { loadWhatsappConfig, sendText, type WhatsappConfig } from "../_shared/whatsapp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,9 +82,7 @@ interface SendResult {
 }
 
 async function sendToGroups(
-  evolutionApiUrl: string,
-  evolutionInstance: string,
-  evolutionApiKey: string,
+  cfg: WhatsappConfig,
   jids: string[],
   text: string
 ): Promise<SendResult[]> {
@@ -91,46 +90,15 @@ async function sendToGroups(
 
   for (const jid of jids) {
     try {
-      const response = await fetch(
-        `${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`,
-        {
-          method: "POST",
-          headers: { apikey: evolutionApiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: jid, text }),
-        }
-      );
+      const { messageId } = await sendText(cfg, jid, text);
 
-      const raw = await response.text();
-      let parsed: any = null;
-      try { parsed = JSON.parse(raw); } catch { /* resposta não-JSON */ }
-
-      if (!response.ok) {
-        const detail =
-          parsed?.response?.message ??
-          parsed?.message ??
-          parsed?.error ??
-          raw.slice(0, 300);
-        results.push({
-          jid,
-          ok: false,
-          status: response.status,
-          error: typeof detail === "string" ? detail : JSON.stringify(detail),
-        });
+      // O provedor pode devolver 200 sem realmente enfileirar a mensagem
+      if (!messageId) {
+        results.push({ jid, ok: false, status: 200, error: "Resposta sem message id" });
         continue;
       }
 
-      // A Evolution pode devolver 200 sem realmente enfileirar a mensagem
-      if (!parsed?.key?.id) {
-        results.push({
-          jid,
-          ok: false,
-          status: response.status,
-          error: `Resposta sem message id: ${raw.slice(0, 300)}`,
-        });
-        continue;
-      }
-
-      results.push({ jid, ok: true, status: response.status, error: null });
+      results.push({ jid, ok: true, status: 200, error: null });
     } catch (err) {
       results.push({ jid, ok: false, status: null, error: (err as Error).message });
     }
@@ -153,13 +121,11 @@ serve(async (req) => {
   let runError: string | null = null;
 
   try {
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL")!;
-    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE")!;
-    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
-
-    if (!supabaseUrl || !svcKey || !evolutionApiUrl || !evolutionInstance || !evolutionApiKey) {
+    if (!supabaseUrl || !svcKey) {
       throw new Error("Variáveis de ambiente não configuradas");
     }
+
+    const cfg = await loadWhatsappConfig();
 
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const testId = body?.test_id as string | undefined;
@@ -190,14 +156,11 @@ serve(async (req) => {
         throw new Error("Este agendamento não tem nenhum grupo de destino selecionado");
       }
 
-      const results = await sendToGroups(
-        evolutionApiUrl, evolutionInstance, evolutionApiKey,
-        scheduled.target_group_jids, scheduled.message
-      );
+      const results = await sendToGroups(cfg, scheduled.target_group_jids, scheduled.message);
       const failed = results.filter(r => !r.ok);
 
       if (failed.length === results.length) {
-        throw new Error(`Evolution API recusou todos os envios — ${failed[0].jid}: ${failed[0].error}`);
+        throw new Error(`O provedor recusou todos os envios — ${failed[0].jid}: ${failed[0].error}`);
       }
 
       return new Response(
@@ -234,10 +197,7 @@ serve(async (req) => {
         if (timeToMinutes(item.send_time) > minutesOfDay) continue;
         if (!item.target_group_jids || item.target_group_jids.length === 0) continue;
 
-        const results = await sendToGroups(
-          evolutionApiUrl, evolutionInstance, evolutionApiKey,
-          item.target_group_jids, item.message
-        );
+        const results = await sendToGroups(cfg, item.target_group_jids, item.message);
         const delivered = results.filter(r => r.ok).length;
 
         for (const r of results.filter(r => !r.ok)) {

@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getUser, ownsClient, isServiceRole, jsonResponse } from "../_shared/auth.ts";
+import { loadWhatsappConfig, sendDocument, sendText } from "../_shared/whatsapp.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
@@ -158,13 +159,12 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL")!;
-    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE")!;
-    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY")!;
 
-    if (!supabaseUrl || !svcKey || !evolutionApiUrl || !evolutionInstance || !evolutionApiKey) {
+    if (!supabaseUrl || !svcKey) {
       throw new Error("Variáveis de ambiente não configuradas");
     }
+
+    const cfg = await loadWhatsappConfig();
 
     // ── 1. Buscar cliente ─────────────────────────────────────────────────────
     const [client] = await dbGet(
@@ -288,23 +288,13 @@ serve(async (req) => {
 
     const message = lines.join("\n");
 
-    // ── 8. Enviar mensagem de texto via Evolution API (para cada destino) ─────
+    // ── 8. Enviar mensagem de texto pelo provedor ativo (para cada destino) ───
     let lastMessageId: string | null = null;
     const textErrors: string[] = [];
     for (const target of targets) {
       try {
-        const response = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
-          method: "POST",
-          headers: {
-            apikey: evolutionApiKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ number: target, text: message }),
-        });
-
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message || result.error || "Evolution API error");
-        lastMessageId = result.key?.id ?? lastMessageId;
+        const { messageId } = await sendText(cfg, target, message);
+        lastMessageId = messageId ?? lastMessageId;
       } catch (err) {
         textErrors.push(`${target}: ${(err as Error).message}`);
       }
@@ -337,23 +327,7 @@ serve(async (req) => {
       const mediaBase64 = base64Encode(new Uint8Array(pdfBytes).buffer);
 
       for (const target of targets) {
-        const mediaResponse = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendMedia/${evolutionInstance}`, {
-          method: "POST",
-          headers: {
-            apikey: evolutionApiKey,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            number: target,
-            mediatype: "document",
-            mimetype: "application/pdf",
-            fileName,
-            media: mediaBase64,
-          }),
-        });
-
-        const mediaResult = await mediaResponse.json();
-        if (!mediaResponse.ok) throw new Error(mediaResult.message || mediaResult.error || "Evolution API error (PDF)");
+        await sendDocument(cfg, { to: target, base64: mediaBase64, fileName });
         pdfSent = true;
       }
     } catch (err) {

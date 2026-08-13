@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getUser, hasAnyRole, isServiceRole, jsonResponse } from "../_shared/auth.ts";
+import { loadWhatsappConfig, sendText } from "../_shared/whatsapp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,28 +30,17 @@ serve(async (req) => {
   try {
     const { targets, text }: RequestPayload = await req.json();
 
-    const evolutionApiUrl = Deno.env.get("EVOLUTION_API_URL");
-    const evolutionInstance = Deno.env.get("EVOLUTION_INSTANCE");
-    const evolutionApiKey = Deno.env.get("EVOLUTION_API_KEY");
-
-    if (!evolutionApiUrl || !evolutionInstance || !evolutionApiKey) {
-      throw new Error("EVOLUTION_API_URL / EVOLUTION_INSTANCE / EVOLUTION_API_KEY não configurados");
-    }
     if (!targets || targets.length === 0) throw new Error("Selecione ao menos um destino");
     if (!text || !text.trim()) throw new Error("Mensagem vazia");
+
+    const cfg = await loadWhatsappConfig();
 
     const errors: string[] = [];
     let sentCount = 0;
 
     for (const target of targets) {
       try {
-        const response = await fetch(`${evolutionApiUrl.replace(/\/$/, "")}/message/sendText/${evolutionInstance}`, {
-          method: "POST",
-          headers: { apikey: evolutionApiKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ number: target, text }),
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.message || result.error || "Evolution API error");
+        await sendText(cfg, target, text);
         sentCount++;
       } catch (err) {
         errors.push(`${target}: ${(err as Error).message}`);
