@@ -35,7 +35,21 @@ Tabelas principais: `clients`, `campaigns`, `ad_sets`, `ads`, `campaign_daily_me
 RLS habilitado em todas. Funcoes SECURITY DEFINER: `get_my_role()`, `has_role()`, `is_admin_or_owner()`
 
 ## Deploy
-Push para `main` -> Vercel auto-deploya. Edge Functions precisam de deploy manual no dashboard do Supabase.
+**Nao existe branch `main`.** O repo (renomeado de `marketpro-manager` para
+`skaleads`) tem como default a branch `fix/whatsapp-connection-ui` — push nela
+dispara o CI e o deploy do projeto `scale-ads` no Vercel.
+
+Edge Functions saem pela CLI, sem precisar de Docker:
+```
+supabase functions deploy <nome> --project-ref npfcxgijwrxrssinpkdw
+```
+O deploy sobe junto os arquivos de `_shared/` que a function importa.
+
+Migrations rodam uma a uma — `supabase db push` tentaria reaplicar todo o
+historico, que foi aplicado a mao:
+```
+supabase db query "<sql>" --linked
+```
 
 ## Skill: Navegacao e UX de Clientes
 
