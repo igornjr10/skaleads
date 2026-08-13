@@ -1,0 +1,488 @@
+<title>Pacote LGPD Scale Ads</title>
+<style>
+  :root {
+    --paper: #F6F8F7;
+    --sheet: #FFFFFF;
+    --ink: #101F1A;
+    --ink-soft: #4A5A55;
+    --ink-faint: #74847E;
+    --rule: #DCE4E1;
+    --rule-soft: #E9EFEC;
+    --accent: #0B7A57;
+    --accent-soft: #E4F2EC;
+    --flag: #9A5B08;
+    --flag-soft: #FBF0DE;
+    --flag-rule: #E8C88F;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0B100E;
+      --sheet: #121A17;
+      --ink: #E8EFEB;
+      --ink-soft: #9FB0AA;
+      --ink-faint: #7A8C86;
+      --rule: #23302B;
+      --rule-soft: #1A2521;
+      --accent: #34D399;
+      --accent-soft: #14261F;
+      --flag: #F0B450;
+      --flag-soft: #241B0C;
+      --flag-rule: #4A3A1A;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0B100E;
+    --sheet: #121A17;
+    --ink: #E8EFEB;
+    --ink-soft: #9FB0AA;
+    --ink-faint: #7A8C86;
+    --rule: #23302B;
+    --rule-soft: #1A2521;
+    --accent: #34D399;
+    --accent-soft: #14261F;
+    --flag: #F0B450;
+    --flag-soft: #241B0C;
+    --flag-rule: #4A3A1A;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: Georgia, "Iowan Old Style", "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.72;
+    margin: 0;
+  }
+
+  .sans { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+
+  nav {
+    position: sticky; top: 0; z-index: 10;
+    background: color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--rule);
+  }
+  nav div {
+    max-width: 78ch; margin: 0 auto; padding: 12px 24px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 22px;
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px;
+  }
+  nav strong { font-weight: 650; letter-spacing: -0.01em; margin-right: auto; }
+  nav a { color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid transparent; }
+  nav a:hover, nav a:focus-visible { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 78ch; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.capa { padding: 64px 0 40px; border-bottom: 2px solid var(--ink); }
+  header.capa p.olho {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 14px;
+  }
+  h1 {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: clamp(30px, 5vw, 44px); line-height: 1.1; letter-spacing: -0.025em;
+    font-weight: 700; margin: 0 0 16px; text-wrap: balance;
+  }
+  header.capa p.sub { color: var(--ink-soft); margin: 0; max-width: 58ch; }
+
+  section { margin-top: 56px; }
+  section > h2 {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 26px; letter-spacing: -0.02em; font-weight: 700;
+    margin: 0 0 6px; text-wrap: balance;
+  }
+  section > p.doc-meta {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--ink-faint); margin: 0 0 28px;
+  }
+  h3 {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 17px; font-weight: 650; letter-spacing: -0.01em;
+    margin: 36px 0 10px;
+  }
+  h4 {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 14px; font-weight: 650; margin: 24px 0 8px; color: var(--ink-soft);
+  }
+  p { margin: 0 0 16px; }
+  ul, ol { margin: 0 0 16px; padding-left: 22px; }
+  li { margin-bottom: 8px; }
+
+  .campo {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.84em; background: var(--flag-soft); color: var(--flag);
+    border: 1px solid var(--flag-rule); border-radius: 4px; padding: 1px 6px;
+    white-space: nowrap;
+  }
+
+  .aviso {
+    border-left: 3px solid var(--flag); background: var(--flag-soft);
+    padding: 18px 22px; margin: 0 0 32px; border-radius: 0 8px 8px 0;
+  }
+  .aviso p { margin: 0; font-size: 15px; }
+  .aviso p + p { margin-top: 10px; }
+
+  .nota {
+    border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 18px 22px; margin: 28px 0; border-radius: 0 8px 8px 0;
+  }
+  .nota p { margin: 0; font-size: 15px; }
+
+  .tabela { overflow-x: auto; margin: 0 0 24px; }
+  table {
+    width: 100%; border-collapse: collapse;
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  th, td { text-align: left; padding: 10px 14px 10px 0; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+  th {
+    font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--ink-faint); font-weight: 600; border-bottom: 1px solid var(--rule);
+  }
+  td.rot { color: var(--ink-soft); width: 30%; }
+
+  .clausula { margin-bottom: 26px; }
+  .clausula > p:first-child { font-weight: 600; }
+
+  .assinaturas {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 40px; margin: 48px 0 8px;
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px;
+  }
+  .assinaturas div { border-top: 1px solid var(--ink); padding-top: 8px; color: var(--ink-soft); }
+
+  hr.doc { border: 0; border-top: 2px solid var(--ink); margin: 72px 0 0; }
+
+  footer {
+    margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--rule);
+    font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; color: var(--ink-faint);
+  }
+
+  @media print {
+    nav { display: none; }
+    body { background: #fff; color: #000; font-size: 11pt; }
+    main { max-width: none; padding: 0; }
+    section { break-inside: auto; }
+    h2, h3 { break-after: avoid; }
+    tr, .clausula, .aviso, .nota { break-inside: avoid; }
+    .campo { background: none; border: 1px solid #999; color: #000; }
+  }
+</style>
+
+<nav>
+  <div>
+    <strong class="sans">Pacote LGPD · Scale Ads</strong>
+    <a href="#pendencias">O que falta</a>
+    <a href="#registro">Registro de Tratamento</a>
+    <a href="#adendo">Adendo (DPA)</a>
+  </div>
+</nav>
+
+<main>
+  <header class="capa">
+    <p class="olho">Rascunho para revisão jurídica</p>
+    <h1>Conformidade LGPD</h1>
+    <p class="sub">
+      Dois documentos levantados a partir do que o sistema realmente faz: o registro de operações
+      exigido pelo art. 37 e o adendo que dá base contratual ao tratamento dos dados das contas de
+      anúncios dos seus clientes.
+    </p>
+  </header>
+
+  <div class="aviso" style="margin-top:40px">
+    <p><strong>Isto não é parecer jurídico.</strong> Cada operação descrita corresponde a código em
+    produção, e a lista de suboperadores saiu das chamadas externas reais do sistema — mas cláusula
+    contratual precisa passar por advogado antes de ir para a mesa de um cliente.</p>
+    <p>Tudo marcado como <span class="campo">[COLCHETE]</span> depende de decisão sua. Enquanto
+    estiver assim, o documento não vale.</p>
+  </div>
+
+  <!-- ─────────────────────────────────────────────────────────────── -->
+  <section id="pendencias">
+    <h2>O que falta antes de valer</h2>
+    <p class="doc-meta">Checklist de preenchimento</p>
+
+    <h3>Só você pode responder</h3>
+    <ol>
+      <li>Razão social, CNPJ e endereço</li>
+      <li><strong>Encarregado de dados (DPO)</strong> — nome e e-mail públicos. A lei exige a indicação; pode ser você mesmo.</li>
+      <li>E-mail do canal do titular — pode ser o mesmo do encarregado</li>
+      <li><strong>Prazos de retenção</strong> — quanto tempo guardar dado de cliente encerrado</li>
+      <li>Onde está hospedado o provedor de WhatsApp, e o que o serviço Manus faz com os dados — os dois aparecem como suboperadores e não consegui responder pelo código</li>
+    </ol>
+
+    <h3>Três pendências que documento nenhum resolve</h3>
+    <p>Levantadas do próprio sistema. Nenhuma se corrige escrevendo texto:</p>
+    <ol>
+      <li><strong>Cadastro público aberto.</strong> Qualquer pessoa com o endereço cria conta. Ela cai numa equipe vazia e não alcança dado de ninguém, mas o controle deveria começar antes disso.</li>
+      <li><strong>Retenção não automatizada.</strong> Você declara prazo de guarda no documento, mas nada apaga sozinho. Prometer no papel o que o sistema não cumpre é pior que não prometer.</li>
+      <li><strong>Canal do titular manual.</strong> Pedido de acesso ou exclusão é atendido por e-mail, na mão. Aceitável no começo; vira problema com volume.</li>
+    </ol>
+  </section>
+
+  <hr class="doc">
+
+  <!-- ─────────────────────────────────────────────────────────────── -->
+  <section id="registro">
+    <h2>Registro de Operações de Tratamento</h2>
+    <p class="doc-meta">Documento interno · art. 37 da LGPD · revisão de 12 de agosto de 2026</p>
+
+    <div class="tabela">
+      <table>
+        <tr><td class="rot">Controlador</td><td><span class="campo">[RAZÃO SOCIAL]</span>, CNPJ <span class="campo">[CNPJ]</span></td></tr>
+        <tr><td class="rot">Encarregado (DPO)</td><td><span class="campo">[NOME]</span> — <span class="campo">[E-MAIL]</span></td></tr>
+        <tr><td class="rot">Sistema</td><td>Scale Ads — gestão de campanhas Meta Ads</td></tr>
+      </table>
+    </div>
+
+    <h3>1. Quando somos controlador e quando somos operador</h3>
+    <p>Este é o ponto mais importante do documento, e o que a maioria das agências erra.</p>
+    <p><strong>Controladores</strong> dos dados de quem usa o sistema: nome, e-mail, senha, papel na
+    equipe e registros de acesso. Decidimos sozinhos sobre esses dados.</p>
+    <p><strong>Operadores</strong> dos dados das contas de anúncios: quem decide o que fazer com eles
+    é o anunciante, ou a agência que o representa. Nós apenas executamos. É daí que nasce a
+    obrigação do adendo — sem ele assinado, esse tratamento não tem base contratual.</p>
+
+    <h3>2. Operações</h3>
+
+    <h4>2.1 Conta de usuário</h4>
+    <div class="tabela"><table>
+      <tr><td class="rot">Dados</td><td>nome, e-mail, senha (hash), papel, equipe</td></tr>
+      <tr><td class="rot">Finalidade</td><td>autenticação e controle de acesso</td></tr>
+      <tr><td class="rot">Base legal</td><td>execução de contrato (art. 7º, V)</td></tr>
+      <tr><td class="rot">Retenção</td><td>enquanto a conta existir + <span class="campo">[PRAZO]</span></td></tr>
+    </table></div>
+
+    <h4>2.2 Cadastro de cliente anunciante</h4>
+    <div class="tabela"><table>
+      <tr><td class="rot">Dados</td><td>razão social, segmento, cidade, estado, endereço, WhatsApp, verba mensal, mensalidade contratada</td></tr>
+      <tr><td class="rot">Finalidade</td><td>organizar a carteira, gerar relatório e cobrança</td></tr>
+      <tr><td class="rot">Base legal</td><td>execução de contrato (art. 7º, V); legítimo interesse (art. 7º, IX) para a cobrança</td></tr>
+      <tr><td class="rot">Retenção</td><td>enquanto o cliente estiver na carteira + <span class="campo">[PRAZO]</span></td></tr>
+    </table></div>
+
+    <h4>2.3 Credencial de acesso à conta de anúncios</h4>
+    <div class="tabela"><table>
+      <tr><td class="rot">Dados</td><td>token de acesso da API da Meta</td></tr>
+      <tr><td class="rot">Onde fica</td><td>tabela segregada, sem permissão de leitura para a aplicação no navegador nem para usuários autenticados — apenas o servidor acessa</td></tr>
+      <tr><td class="rot">Exclusão</td><td>imediata ao desconectar a conta</td></tr>
+    </table></div>
+
+    <h4>2.4 Dados de campanha vindos da Meta</h4>
+    <div class="tabela"><table>
+      <tr><td class="rot">Dados</td><td>campanhas, conjuntos, anúncios, criativos e métricas de gasto, impressões, cliques, alcance, frequência e conversões; dados públicos da Página e do perfil do Instagram vinculados</td></tr>
+      <tr><td class="rot">Titulares</td><td>não identificam pessoa natural — são agregados de desempenho</td></tr>
+      <tr><td class="rot">Origem</td><td>API Oficial da Meta (Graph API v21.0)</td></tr>
+      <tr><td class="rot">Não coletamos</td><td>mensagens privadas, listas de contatos, dados pessoais de quem visualizou ou clicou nos anúncios</td></tr>
+    </table></div>
+
+    <h4>2.5 Comunicação com o cliente final</h4>
+    <div class="tabela"><table>
+      <tr><td class="rot">Dados</td><td>número de WhatsApp ou identificador de grupo; conteúdo das mensagens de relatório e cobrança</td></tr>
+      <tr><td class="rot">Base legal</td><td>execução de contrato e legítimo interesse</td></tr>
+      <tr><td class="rot">Retenção</td><td>registro de envio mantido no log de cobranças e automações</td></tr>
+    </table></div>
+
+    <h4>2.6 Uso de inteligência artificial</h4>
+    <div class="tabela"><table>
+      <tr><td class="rot">Dados enviados</td><td>métricas agregadas da conta e trechos de texto dos criativos</td></tr>
+      <tr><td class="rot">Não enviamos</td><td>credenciais, dados pessoais dos clientes finais, conteúdo de mensagens</td></tr>
+      <tr><td class="rot">Decisão automatizada</td><td><strong>não há.</strong> A IA produz texto de apoio; nenhuma decisão com efeito jurídico é tomada por ela, de modo que o art. 20 não se aplica</td></tr>
+    </table></div>
+
+    <h3>3. Suboperadores</h3>
+    <p>Levantado do código em produção, não de memória. Os que ficam fora do Brasil exigem base para
+    transferência internacional (art. 33).</p>
+    <div class="tabela">
+      <table>
+        <thead><tr><th>Suboperador</th><th>Para quê</th><th>País</th></tr></thead>
+        <tbody>
+          <tr><td>Supabase</td><td>banco de dados, autenticação e funções</td><td>EUA</td></tr>
+          <tr><td>Vercel</td><td>hospedagem da aplicação</td><td>EUA</td></tr>
+          <tr><td>Meta Platforms</td><td>origem dos dados de campanha</td><td>EUA</td></tr>
+          <tr><td>Anthropic</td><td>análise de criativos e auditoria</td><td>EUA</td></tr>
+          <tr><td>Groq</td><td>assistente de análise</td><td>EUA</td></tr>
+          <tr><td>Resend</td><td>envio de e-mail de alerta</td><td>EUA</td></tr>
+          <tr><td>Evolution / Uazapi</td><td>envio de WhatsApp</td><td><span class="campo">[verificar]</span></td></tr>
+          <tr><td>Manus</td><td><span class="campo">[descrever finalidade]</span></td><td><span class="campo">[verificar]</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>4. Medidas de segurança em vigor</h3>
+    <p>Verificáveis no sistema, não declaratórias:</p>
+    <ul>
+      <li><strong>Isolamento por equipe</strong> — controle no próprio banco de dados: cada equipe só enxerga a própria carteira, inclusive em consultas feitas fora da aplicação.</li>
+      <li><strong>Credencial fora do navegador</strong> — o token da Meta vive em tabela sem concessão de leitura para usuários autenticados; toda chamada à Meta passa por função no servidor.</li>
+      <li><strong>Segredo de automação fora do código-fonte</strong> — as rotinas agendadas leem a credencial de uma tabela restrita.</li>
+      <li><strong>Registro de autoria</strong> — conclusão de tarefa, baixa de fatura e envio de cobrança gravam autor e data por gatilho no banco, não por confiança na interface.</li>
+      <li><strong>Tráfego cifrado</strong> em todas as conexões.</li>
+    </ul>
+
+    <h3>5. Direitos do titular</h3>
+    <div class="tabela">
+      <table>
+        <thead><tr><th>Direito</th><th>Como é atendido hoje</th></tr></thead>
+        <tbody>
+          <tr><td>Confirmação e acesso</td><td>mediante pedido ao canal do titular, resposta em até 15 dias</td></tr>
+          <tr><td>Correção</td><td>pela própria tela de cadastro, ou mediante pedido</td></tr>
+          <tr><td>Exclusão</td><td>mediante pedido; remoção em até 30 dias, ressalvada guarda legal</td></tr>
+          <tr><td>Portabilidade</td><td>exportação dos relatórios em PDF; demais dados sob pedido</td></tr>
+          <tr><td>Revogação do acesso à Meta</td><td>pelo próprio Facebook, em integrações comerciais — interrompe a sincronização na hora</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>6. Incidentes</h3>
+    <p>Em caso de incidente com risco relevante, comunicar a ANPD e os afetados em prazo razoável,
+    descrevendo os dados atingidos, os riscos e as medidas tomadas. Responsável: o encarregado
+    indicado no topo.</p>
+  </section>
+
+  <hr class="doc">
+
+  <!-- ─────────────────────────────────────────────────────────────── -->
+  <section id="adendo">
+    <h2>Adendo de Proteção de Dados</h2>
+    <p class="doc-meta">Para assinar com cada cliente ou agência</p>
+
+    <div class="nota">
+      <p>É este documento que dá base legal para você tocar na conta de anúncios de terceiros.
+      Sem ele, a operação inteira fica sem amparo do art. 39 da LGPD.</p>
+    </div>
+
+    <p>Anexo ao contrato de prestação de serviços celebrado entre:</p>
+    <p><strong>CONTROLADOR:</strong> <span class="campo">[RAZÃO SOCIAL DO CLIENTE]</span>, CNPJ
+    <span class="campo">[CNPJ]</span>, doravante CLIENTE.</p>
+    <p><strong>OPERADOR:</strong> <span class="campo">[SUA RAZÃO SOCIAL]</span>, CNPJ
+    <span class="campo">[SEU CNPJ]</span>, doravante SCALE ADS.</p>
+
+    <div class="clausula">
+      <p>1. Objeto</p>
+      <p>Este adendo rege o tratamento de dados pessoais realizado pela SCALE ADS por conta e ordem
+      do CLIENTE, no âmbito da gestão de campanhas publicitárias na plataforma Meta, nos termos da
+      Lei 13.709/2018.</p>
+    </div>
+
+    <div class="clausula">
+      <p>2. Papéis</p>
+      <p>O CLIENTE é o <strong>controlador</strong>: decide as finalidades e os meios do tratamento
+      dos dados de sua conta de anúncios. A SCALE ADS é a <strong>operadora</strong>: trata os dados
+      exclusivamente conforme as instruções do CLIENTE e este adendo.</p>
+    </div>
+
+    <div class="clausula">
+      <p>3. Objeto do tratamento</p>
+      <p><strong>Natureza e finalidade:</strong> coleta, armazenamento, organização e análise de
+      dados de desempenho publicitário, para produzir painéis, auditorias, alertas e relatórios ao
+      CLIENTE.</p>
+      <p><strong>Dados tratados:</strong> credencial de acesso fornecida pelo CLIENTE; dados de
+      campanhas, conjuntos, anúncios, criativos e métricas; dados públicos da Página e do perfil do
+      Instagram vinculados; dados cadastrais e de contato fornecidos pelo CLIENTE.</p>
+      <p><strong>Não são tratados:</strong> mensagens privadas, listas de contatos, nem dados
+      pessoais identificáveis de usuários que visualizaram ou interagiram com os anúncios.</p>
+      <p><strong>Duração:</strong> enquanto vigente o contrato principal.</p>
+    </div>
+
+    <div class="clausula">
+      <p>4. Obrigações da SCALE ADS</p>
+      <p>4.1 Tratar os dados apenas conforme as instruções documentadas do CLIENTE, comunicando-o
+      caso entenda que uma instrução viola a LGPD.</p>
+      <p>4.2 Manter as credenciais em ambiente segregado, sem exposição à aplicação executada no
+      navegador nem a outros clientes.</p>
+      <p>4.3 Garantir isolamento lógico entre clientes, de modo que nenhum tenha acesso aos dados de
+      outro.</p>
+      <p>4.4 Impor dever de confidencialidade a todos que tenham acesso aos dados.</p>
+      <p>4.5 Auxiliar o CLIENTE no atendimento a pedidos de titulares e a requisições da ANPD.</p>
+      <p>4.6 Comunicar ao CLIENTE, sem demora injustificada e em até
+      <span class="campo">[48 horas]</span> da ciência, qualquer incidente de segurança que possa
+      acarretar risco aos titulares.</p>
+      <p>4.7 Ao término do contrato, eliminar ou devolver os dados, à escolha do CLIENTE, em até
+      <span class="campo">[30 dias]</span>, ressalvada a guarda exigida por obrigação legal.</p>
+      <p>4.8 Manter registro das operações de tratamento e disponibilizá-lo mediante solicitação
+      motivada.</p>
+    </div>
+
+    <div class="clausula">
+      <p>5. Obrigações do CLIENTE</p>
+      <p>5.1 Declarar que possui base legal e autorização para conceder à SCALE ADS acesso à conta de
+      anúncios e aos dados dela decorrentes.</p>
+      <p>5.2 Fornecer instruções lícitas e responder pelas finalidades que determinar.</p>
+      <p>5.3 Manter política de privacidade própria compatível com o tratamento aqui descrito.</p>
+    </div>
+
+    <div class="clausula">
+      <p>6. Suboperadores</p>
+      <p>6.1 O CLIENTE autoriza a contratação dos suboperadores listados no Anexo I.</p>
+      <p>6.2 A SCALE ADS responde perante o CLIENTE pelos atos de seus suboperadores.</p>
+      <p>6.3 Alterações relevantes serão comunicadas com antecedência de
+      <span class="campo">[30 dias]</span>, cabendo oposição fundamentada.</p>
+    </div>
+
+    <div class="clausula">
+      <p>7. Transferência internacional</p>
+      <p>Parte dos suboperadores está sediada fora do Brasil, conforme o Anexo I. As transferências
+      ocorrem com base em <span class="campo">[cláusulas contratuais padrão / garantias
+      equivalentes]</span>, nos termos do art. 33.</p>
+    </div>
+
+    <div class="clausula">
+      <p>8. Segurança</p>
+      <p>A SCALE ADS adota, no mínimo: criptografia em trânsito, isolamento de dados por cliente com
+      controle no banco de dados, segregação de credenciais fora do alcance da aplicação cliente,
+      controle de acesso por perfil e registro de autoria das operações sensíveis.</p>
+    </div>
+
+    <div class="clausula">
+      <p>9. Auditoria</p>
+      <p>Mediante aviso prévio de <span class="campo">[15 dias]</span> e no máximo uma vez por ano, o
+      CLIENTE pode solicitar evidências documentais das medidas de segurança previstas.</p>
+    </div>
+
+    <div class="clausula">
+      <p>10. Vigência</p>
+      <p>Este adendo acompanha a vigência do contrato principal e prevalece sobre ele em caso de
+      conflito quanto a proteção de dados.</p>
+    </div>
+
+    <div class="assinaturas">
+      <div>CONTROLADOR (CLIENTE)</div>
+      <div>OPERADOR (SCALE ADS)</div>
+    </div>
+
+    <h3>Anexo I — Suboperadores</h3>
+    <div class="tabela">
+      <table>
+        <thead><tr><th>Suboperador</th><th>Finalidade</th><th>País</th></tr></thead>
+        <tbody>
+          <tr><td>Supabase</td><td>banco de dados, autenticação e execução de funções</td><td>EUA</td></tr>
+          <tr><td>Vercel</td><td>hospedagem da aplicação</td><td>EUA</td></tr>
+          <tr><td>Meta Platforms</td><td>origem dos dados de campanha (API Oficial)</td><td>EUA</td></tr>
+          <tr><td>Anthropic</td><td>análise assistida de criativos e auditoria</td><td>EUA</td></tr>
+          <tr><td>Groq</td><td>assistente de análise por linguagem natural</td><td>EUA</td></tr>
+          <tr><td>Resend</td><td>envio de e-mails de alerta</td><td>EUA</td></tr>
+          <tr><td><span class="campo">[provedor de WhatsApp]</span></td><td>envio de relatórios e cobranças</td><td><span class="campo">[país]</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Anexo II — Instruções documentadas do controlador</h3>
+    <p>O CLIENTE instrui a SCALE ADS a:</p>
+    <ol>
+      <li>conectar-se à sua conta de anúncios pela API Oficial da Meta e sincronizar dados de campanha na periodicidade configurada;</li>
+      <li>executar auditorias automatizadas de configuração da conta;</li>
+      <li>gerar e enviar relatórios de desempenho pelos canais que indicar;</li>
+      <li>emitir avisos de vencimento e cobrança, quando contratado;</li>
+      <li>submeter métricas agregadas a provedores de inteligência artificial para produzir análises de apoio, vedado o envio de credenciais e de dados pessoais de terceiros.</li>
+    </ol>
+    <p>Qualquer tratamento fora desta lista depende de instrução adicional por escrito.</p>
+  </section>
+
+  <footer>
+    Scale Ads · rascunho de 12 de agosto de 2026 · para revisão jurídica antes de qualquer uso externo
+  </footer>
+</main>
