@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Megaphone, Bell, Settings, Brain, LogOut, MessageSquare, Activity, ClipboardList, CircleDollarSign } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Bell, Settings, Brain, LogOut, MessageSquare, Activity, ClipboardList, CircleDollarSign, Clapperboard } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import {
   Sidebar,
@@ -18,11 +18,12 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { ScaleAdsLogo } from "./ScaleAdsLogo";
 
-const items = [
+const items: Array<{ title: string; url: string; icon: typeof LayoutDashboard; apenasGestao?: boolean }> = [
   { title: "Dashboard",      url: "/dashboard",  icon: LayoutDashboard },
   { title: "Clientes",       url: "/clients",    icon: Users },
   { title: "Planner",        url: "/planner",    icon: ClipboardList },
-  { title: "Financeiro",     url: "/financeiro", icon: CircleDollarSign },
+  { title: "Produção",       url: "/producao",   icon: Clapperboard },
+  { title: "Financeiro",     url: "/financeiro", icon: CircleDollarSign, apenasGestao: true },
   { title: "Campanhas",      url: "/campaigns",  icon: Megaphone },
   { title: "Alertas",        url: "/alerts",     icon: Bell },
   { title: "WhatsApp",       url: "/whatsapp-scheduled", icon: WhatsAppIcon },
@@ -100,7 +101,9 @@ export function AppSidebar() {
           )}
           <SidebarGroupContent>
             <SidebarMenu className="gap-2">
-              {items.map((item) => (
+              {items
+                .filter((item) => !item.apenasGestao || role === "owner" || role === "admin")
+                .map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
