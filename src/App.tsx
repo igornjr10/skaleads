@@ -23,7 +23,6 @@ const ClientHub = lazy(() => import("./pages/ClientHub"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const Settings = lazy(() => import("./pages/Settings"));
-const Andromeda = lazy(() => import("./pages/Andromeda"));
 const ClientAudit = lazy(() => import("./pages/ClientAudit"));
 const ClientReports = lazy(() => import("./pages/ClientReports"));
 const ReportShare = lazy(() => import("./pages/ReportShare"));
@@ -76,7 +75,6 @@ const App = () => (
                 <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/alerts" element={<Alerts />} />
-                <Route path="/andromeda" element={<Andromeda />} />
                 <Route path="/clients/:id/audit" element={<ClientAudit />} />
                 <Route path="/clients/:id/reports" element={<ClientReports />} />
                 <Route path="/clients/:id/creatives" element={<ClientCreatives />} />
