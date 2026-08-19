@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
   AlertTriangle,
@@ -6,7 +7,6 @@ import {
   Check,
   ClipboardList,
   FileText,
-  Image as ImageIcon,
   Link2,
   Lock,
   RefreshCw,
@@ -16,6 +16,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScaleAdsLogo } from "@/components/ScaleAdsLogo";
+import {
+  MockAlertas,
+  MockAuditoria,
+  MockClientes,
+  MockDashboard,
+  MockPlanner,
+} from "@/components/landing/TelasProduto";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -29,10 +36,34 @@ const PRECO_ENTRADA = "R$ 147/mês";
 const GARANTIA =
   "7 dias. Se não fizer sentido para a sua operação, você cancela e recebe de volta — sem burocracia.";
 
-// Imagens reais do produto (arquivos em /public). Vazio mostra um bloco dizendo
-// o que falta, em vez de um <img> quebrado.
+// As telas sao renderizadas por TelasProduto.tsx, nao capturadas: screenshot da
+// carteira real exporia nome, logo e verba de cliente de terceiros. Apontar um
+// arquivo em /public aqui substitui a reproducao pela captura — use so depois de
+// anonimizar. Arquivo inexistente cai de volta na reproducao.
+const IMAGEM_HERO = "";
 const IMAGEM_AUDITORIA = "";
-const IMAGEM_MOTOR = "";
+
+const TELAS = [
+  {
+    src: "",
+    mock: <MockClientes />,
+    titulo: "Carteira",
+    legenda:
+      "Cada cliente com saúde da integração, última sync, verba do mês e ritmo de investimento — sem abrir o Gerenciador.",
+  },
+  {
+    src: "",
+    mock: <MockAlertas />,
+    titulo: "Alertas",
+    legenda: "A condição escrita em português, o canal de cada alerta e o que está ligado ou pausado.",
+  },
+  {
+    src: "",
+    mock: <MockPlanner />,
+    titulo: "Planner",
+    legenda: "O onboarding do cliente novo com o que já foi feito e o que ainda está pendente.",
+  },
+];
 
 // Rodape institucional: em venda B2B a ausencia disso pesa na avaliacao do
 // comprador economico. Vazio simplesmente nao renderiza.
@@ -184,24 +215,23 @@ function Secao({ children, className = "" }: { children: React.ReactNode; classN
   return <section className={`mx-auto w-full max-w-6xl px-5 md:px-8 ${className}`}>{children}</section>;
 }
 
-function Midia({ src, titulo, nota }: { src: string; titulo: string; nota: string }) {
-  if (src) {
+// Captura real tem precedencia, mas so quando o arquivo existe de fato: o
+// onError volta para a reproducao em vez de deixar o icone de imagem quebrada.
+function Midia({ src, titulo, children }: { src: string; titulo: string; children: React.ReactNode }) {
+  const [falhou, setFalhou] = useState(false);
+
+  if (src && !falhou) {
     return (
       <img
         src={src}
         alt={titulo}
+        onError={() => setFalhou(true)}
         className="w-full rounded-2xl border border-white/[0.08] shadow-card"
         loading="lazy"
       />
     );
   }
-  return (
-    <div className="flex aspect-[16/10] w-full flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/[0.12] bg-card/40 p-6 text-center">
-      <ImageIcon className="h-8 w-8 text-emerald-400/50" />
-      <p className="text-sm font-semibold">{titulo}</p>
-      <p className="max-w-md text-xs leading-relaxed text-muted-foreground">{nota}</p>
-    </div>
-  );
+  return <>{children}</>;
 }
 
 export default function Landing() {
@@ -319,11 +349,14 @@ export default function Landing() {
             </p>
           </div>
 
-          <Midia
-            src={IMAGEM_AUDITORIA}
-            titulo="Print da tela de auditoria"
-            nota="Coloque aqui a captura da auditoria com a nota de 0 a 100 e os achados — é o elemento visual mais forte do produto hoje. Preencha IMAGEM_AUDITORIA no topo de Landing.tsx."
-          />
+          <div>
+            <Midia src={IMAGEM_HERO} titulo="Painel do cliente">
+              <MockDashboard />
+            </Midia>
+            <p className="mt-3 text-center text-[11px] text-muted-foreground/60">
+              Interface do Scale Ads · números ilustrativos
+            </p>
+          </div>
         </div>
       </Secao>
 
@@ -433,12 +466,18 @@ export default function Landing() {
             Em vez de você olhar as contas, o sistema olha — e só te chama quando precisa.
           </p>
 
-          <div className="mt-8">
-            <Midia
-              src={IMAGEM_MOTOR}
-              titulo="GIF do motor rodando"
-              nota="15 a 20 segundos mostrando as 4 etapas em sequência na interface real. Preencha IMAGEM_MOTOR no topo de Landing.tsx."
-            />
+          <div className="mt-12 grid gap-5 md:grid-cols-3">
+            {TELAS.map(({ src, mock, titulo, legenda }) => (
+              <figure key={titulo} className="flex flex-col gap-3">
+                <Midia src={src} titulo={titulo}>
+                  {mock}
+                </Midia>
+                <figcaption>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">{titulo}</span>
+                  <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{legenda}</p>
+                </figcaption>
+              </figure>
+            ))}
           </div>
         </div>
       </Secao>
@@ -460,6 +499,15 @@ export default function Landing() {
             <CtaAuditoria className="shadow-glow" />
             <p className="text-xs text-muted-foreground/70">
               Crie a conta, conecte uma conta de anúncios e a auditoria roda em minutos. Sem cartão.
+            </p>
+          </div>
+
+          <div className="mt-10">
+            <Midia src={IMAGEM_AUDITORIA} titulo="Resultado da auditoria">
+              <MockAuditoria />
+            </Midia>
+            <p className="mt-3 text-[11px] text-muted-foreground/60">
+              Interface do Scale Ads · achados e nota ilustrativos
             </p>
           </div>
         </div>
