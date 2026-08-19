@@ -17,6 +17,16 @@ const features = [
   { icon: Shield, text: "Auditoria avancada de conta Meta" },
 ];
 
+function traduzErroLogin(mensagem: string): string {
+  if (/email not confirmed/i.test(mensagem)) {
+    return "Este e-mail ainda nao foi confirmado. Abra o link que enviamos para a sua caixa de entrada.";
+  }
+  if (/invalid login credentials/i.test(mensagem)) {
+    return "E-mail ou senha incorretos. Se voce acabou de criar a conta, confirme o e-mail antes de entrar.";
+  }
+  return mensagem;
+}
+
 export default function Auth() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -34,7 +44,7 @@ export default function Auth() {
       password: String(fd.get("password")),
     });
     setSubmitting(false);
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(traduzErroLogin(error.message));
     toast.success("Bem-vindo de volta!");
     navigate("/dashboard");
   }
@@ -43,8 +53,9 @@ export default function Auth() {
     e.preventDefault();
     setSubmitting(true);
     const fd = new FormData(e.currentTarget);
-    const { error } = await supabase.auth.signUp({
-      email: String(fd.get("email")),
+    const email = String(fd.get("email"));
+    const { data, error } = await supabase.auth.signUp({
+      email,
       password: String(fd.get("password")),
       options: {
         emailRedirectTo: window.location.origin,
@@ -53,6 +64,14 @@ export default function Auth() {
     });
     setSubmitting(false);
     if (error) return toast.error(error.message);
+
+    // Sem sessao na resposta, o projeto exige confirmacao por e-mail: dizer que
+    // ja da para entrar manda a pessoa direto para um "credencial invalida".
+    if (!data.session) {
+      return toast.success(`Conta criada. Confirme pelo link enviado para ${email} antes de entrar.`, {
+        duration: 10000,
+      });
+    }
     toast.success("Conta criada! Voce ja pode entrar.");
   }
 
