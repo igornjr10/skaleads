@@ -10,12 +10,15 @@ import {
   ShieldCheck,
   Bell,
   ArrowRight,
+  IdCard,
 } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
+import { ClientAvatar } from "@/components/ClientAvatar";
+import { ClientFundingPanel } from "@/components/clients/ClientFundingPanel";
+import { ClientBriefingCard } from "@/components/clients/ClientBriefingCard";
 import { supabase } from "@/integrations/supabase/client";
 import { loadLatestAudit } from "@/lib/audit/runner";
 import type { AuditReport } from "@/lib/audit/types";
-import { ClientAvatar } from "@/components/ClientAvatar";
 
 interface ClientRow {
   id: string;
@@ -26,6 +29,15 @@ interface ClientRow {
   meta_ad_account_id: string | null;
   whatsapp_number: string | null;
   whatsapp_group_jid: string | null;
+  business_segment: string | null;
+  primary_goal: string | null;
+  meta_balance_cents: number | null;
+  meta_balance_label: string | null;
+  meta_funding_type: number | null;
+  meta_balance_at: string | null;
+  cnpj: string | null;
+  email: string | null;
+  responsavel_nome: string | null;
 }
 
 interface Performance {
@@ -169,10 +181,11 @@ export default function ClientHub() {
   const isConnected = !!client.meta_ad_account_id && client.meta_sync_status !== "pending";
   const hasWhatsapp = !!client.whatsapp_number || !!client.whatsapp_group_jid;
   const tone = audit ? scoreTone(audit.score) : null;
+  const cadastroCompleto = !!client.responsavel_nome && !!client.email && !!client.cnpj;
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Button variant="ghost" size="icon" onClick={() => navigate("/clients")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -187,9 +200,19 @@ export default function ClientHub() {
               <Badge variant="outline" className={isConnected ? "border-sky-200 bg-sky-50 text-sky-700" : "border-slate-200 bg-slate-50 text-slate-500"}>
                 {isConnected ? "Meta conectada" : "Sem Meta"}
               </Badge>
+              {!cadastroCompleto && (
+                <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                  Cadastro incompleto
+                </Badge>
+              )}
             </div>
           </div>
         </div>
+        <Button variant="outline" size="sm" className="ml-auto" asChild>
+          <Link to={`/clients/${clientId}/cadastro`}>
+            <IdCard className="mr-2 h-4 w-4" /> Cadastro e acessos
+          </Link>
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -300,6 +323,23 @@ export default function ClientHub() {
           </CardContent>
         </Card>
       </div>
+
+      <ClientBriefingCard
+        clientId={client.id}
+        clientName={client.name}
+        segment={client.business_segment}
+        primaryGoal={client.primary_goal}
+      />
+
+      {client.meta_ad_account_id && (
+        <ClientFundingPanel
+          clientId={client.id}
+          balanceCents={client.meta_balance_cents}
+          balanceLabel={client.meta_balance_label}
+          fundingType={client.meta_funding_type}
+          balanceAt={client.meta_balance_at}
+        />
+      )}
     </div>
   );
 }

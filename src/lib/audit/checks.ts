@@ -1,15 +1,16 @@
 import { AuditCheck, AuditContext, AuditResult } from './types';
 import { supabase } from '@/integrations/supabase/client';
 import { matchesClientArea } from '@/lib/local-business';
+import { metaGet, metaGetAll } from '@/lib/meta-fetch';
 
-import { metaGet, metaGetAll, type MetaSource } from '@/lib/meta-client';
+const BASE = 'https://graph.facebook.com/v21.0';
 
-function mGet<T>(path: string, source: MetaSource, params: Record<string, string> = {}): Promise<T> {
-  return metaGet<T>(source, path, params);
+function mGet<T>(path: string, token: string, params: Record<string, string> = {}): Promise<T> {
+  return metaGet<T>(BASE, path, { ...params, access_token: token });
 }
 
-function mAll<T>(path: string, source: MetaSource, params: Record<string, string> = {}): Promise<T[]> {
-  return metaGetAll<T>(source, path, { limit: '200', ...params });
+function mAll<T>(path: string, token: string, params: Record<string, string> = {}): Promise<T[]> {
+  return metaGetAll<T>(BASE, path, { ...params, access_token: token }, { limit: 200 });
 }
 
 const pass  = (message: string, details?: string): AuditResult => ({ status: 'pass',  message, details });
@@ -23,8 +24,8 @@ function daysAgo(n: number) { return Math.floor((Date.now() - n * 86400000) / 10
 
 const pixelInstalled: AuditCheck = {
   id: 'pixel_installed', name: 'Pixel instalado na conta', category: 'pixel', severity: 'critical',
-  async run({ adAccountId, source }: AuditContext) {
-    const pixels = await mAll<{ id: string; name: string }>(`act_${adAccountId}/adspixels`, source, { fields: 'id,name' });
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const pixels = await mAll<{ id: string; name: string }>(`act_${adAccountId}/adspixels`, accessToken, { fields: 'id,name' });
     if (!pixels.length) return fail('Nenhum Pixel Meta encontrado na conta', undefined, 'Instale o Meta Pixel no seu site via Gerenciador de Eventos. Sem pixel, conversões não são rastreadas e o algoritmo não aprende.');
     return pass(`${pixels.length} pixel(s) encontrado(s)`, pixels.map(p => `${p.name} (${p.id})`).join(', '));
   },
@@ -32,8 +33,8 @@ const pixelInstalled: AuditCheck = {
 
 const pixelActive: AuditCheck = {
   id: 'pixel_active', name: 'Pixel disparando nos últimos 7 dias', category: 'pixel', severity: 'critical',
-  async run({ adAccountId, source }: AuditContext) {
-    const pixels = await mAll<{ id: string; name: string; last_fired_time: number }>(`act_${adAccountId}/adspixels`, source, { fields: 'id,name,last_fired_time' });
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const pixels = await mAll<{ id: string; name: string; last_fired_time: number }>(`act_${adAccountId}/adspixels`, accessToken, { fields: 'id,name,last_fired_time' });
     if (!pixels.length) return skip('Nenhum pixel encontrado');
     const now = Date.now() / 1000;
     const inactive = pixels.filter(p => !p.last_fired_time || (now - p.last_fired_time) > 7 * 86400);
@@ -45,13 +46,13 @@ const pixelActive: AuditCheck = {
 
 const capiConfigured: AuditCheck = {
   id: 'capi_configured', name: 'Conversions API (CAPI) configurada', category: 'pixel', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
+  async run({ adAccountId, accessToken }: AuditContext) {
     // Proxy: verificar se há eventos server-side via datasources do pixel
-    const pixels = await mAll<{ id: string; name: string }>(`act_${adAccountId}/adspixels`, source, { fields: 'id,name' });
+    const pixels = await mAll<{ id: string; name: string }>(`act_${adAccountId}/adspixels`, accessToken, { fields: 'id,name' });
     if (!pixels.length) return skip('Nenhum pixel encontrado');
     try {
       const stats = await mGet<{ data?: Array<{ type: string }> }>(
-        `${pixels[0].id}/signal_sources`, source, { fields: 'type' }
+        `${pixels[0].id}/signal_sources`, accessToken, { fields: 'type' }
       );
       const hasCAPI = stats.data?.some(s => s.type === 'SERVER');
       if (hasCAPI) return pass('Conversions API detectada como fonte de dados');
@@ -64,11 +65,11 @@ const capiConfigured: AuditCheck = {
 
 const eventMatchQuality: AuditCheck = {
   id: 'event_match_quality', name: 'Event Match Quality (EMQ)', category: 'pixel', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
-    const pixels = await mAll<{ id: string; name: string }>(`act_${adAccountId}/adspixels`, source, { fields: 'id,name' });
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const pixels = await mAll<{ id: string; name: string }>(`act_${adAccountId}/adspixels`, accessToken, { fields: 'id,name' });
     if (!pixels.length) return skip('Nenhum pixel encontrado');
     try {
-      const data = await mGet<Record<string, unknown>>(`${pixels[0].id}`, source, {
+      const data = await mGet<Record<string, unknown>>(`${pixels[0].id}`, accessToken, {
         fields: 'match_quality_grade',
       });
       const grade = data.match_quality_grade as string | undefined;
@@ -84,9 +85,9 @@ const eventMatchQuality: AuditCheck = {
 
 const conversionEvents: AuditCheck = {
   id: 'conversion_events', name: 'Eventos de conversão configurados', category: 'pixel', severity: 'critical',
-  async run({ adAccountId, source }: AuditContext) {
-    const conversions = await mAll<{ id: string; name: string }>(`act_${adAccountId}/customconversions`, source, { fields: 'id,name' });
-    const pixels = await mAll<{ id: string; name: string; last_fired_time?: number }>(`act_${adAccountId}/adspixels`, source, { fields: 'id,name,last_fired_time' });
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const conversions = await mAll<{ id: string; name: string }>(`act_${adAccountId}/customconversions`, accessToken, { fields: 'id,name' });
+    const pixels = await mAll<{ id: string; name: string; last_fired_time?: number }>(`act_${adAccountId}/adspixels`, accessToken, { fields: 'id,name,last_fired_time' });
     const hasPixel = pixels.some(p => p.last_fired_time);
     if (!hasPixel && !conversions.length) return fail('Sem pixel ativo e sem conversões customizadas', undefined, 'Configure pelo menos um evento de conversão (Purchase, Lead) para que o algoritmo possa otimizar para resultados reais.');
     if (conversions.length > 0) return pass(`${conversions.length} conversão(ões) customizada(s) configurada(s)`, conversions.map(c => c.name).join(', '));
@@ -105,8 +106,8 @@ const domainVerified: AuditCheck = {
 
 const cboUsage: AuditCheck = {
   id: 'cbo_usage', name: 'Campanhas usando CBO', category: 'structure', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
-    const campaigns = await mAll<{ id: string; name: string; budget_rebalance_flag: boolean }>(`act_${adAccountId}/campaigns`, source, {
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const campaigns = await mAll<{ id: string; name: string; budget_rebalance_flag: boolean }>(`act_${adAccountId}/campaigns`, accessToken, {
       fields: 'id,name,budget_rebalance_flag',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -121,8 +122,8 @@ const cboUsage: AuditCheck = {
 
 const learningPhase: AuditCheck = {
   id: 'learning_phase', name: 'Adsets em fase de aprendizado', category: 'structure', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
-    const adsets = await mAll<{ id: string; name: string; learning_phase_status?: string }>(`act_${adAccountId}/adsets`, source, {
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const adsets = await mAll<{ id: string; name: string; learning_phase_status?: string }>(`act_${adAccountId}/adsets`, accessToken, {
       fields: 'id,name,learning_phase_status',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -137,8 +138,8 @@ const learningPhase: AuditCheck = {
 
 const learningStalledCheck: AuditCheck = {
   id: 'learning_stalled', name: 'Adsets em aprendizado limitado', category: 'structure', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
-    const adsets = await mAll<{ id: string; name: string; learning_phase_status?: string }>(`act_${adAccountId}/adsets`, source, {
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const adsets = await mAll<{ id: string; name: string; learning_phase_status?: string }>(`act_${adAccountId}/adsets`, accessToken, {
       fields: 'id,name,learning_phase_status',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -150,8 +151,8 @@ const learningStalledCheck: AuditCheck = {
 
 const disapprovedAds: AuditCheck = {
   id: 'disapproved_ads', name: 'Anúncios reprovados não tratados', category: 'structure', severity: 'critical',
-  async run({ adAccountId, source }: AuditContext) {
-    const ads = await mAll<{ id: string; name: string; effective_status: string; review_feedback?: { global?: Record<string, string> } }>(`act_${adAccountId}/ads`, source, {
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const ads = await mAll<{ id: string; name: string; effective_status: string; review_feedback?: { global?: Record<string, string> } }>(`act_${adAccountId}/ads`, accessToken, {
       fields: 'id,name,effective_status,review_feedback',
       effective_status: JSON.stringify(['DISAPPROVED', 'WITH_ISSUES']),
     });
@@ -166,8 +167,8 @@ const disapprovedAds: AuditCheck = {
 
 const duplicateObjectives: AuditCheck = {
   id: 'duplicate_objectives', name: 'Campanhas com mesmo objetivo duplicadas', category: 'structure', severity: 'info',
-  async run({ adAccountId, source }: AuditContext) {
-    const campaigns = await mAll<{ id: string; name: string; objective: string }>(`act_${adAccountId}/campaigns`, source, {
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const campaigns = await mAll<{ id: string; name: string; objective: string }>(`act_${adAccountId}/campaigns`, accessToken, {
       fields: 'id,name,objective',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -242,9 +243,9 @@ const lowCtrCampaigns: AuditCheck = {
 
 const adFrequencyCheck: AuditCheck = {
   id: 'ad_frequency', name: 'Frequência de anúncios elevada', category: 'creatives', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
+  async run({ adAccountId, accessToken }: AuditContext) {
     try {
-      const insights = await mAll<{ ad_id: string; ad_name: string; frequency: string }>(`act_${adAccountId}/insights`, source, {
+      const insights = await mAll<{ ad_id: string; ad_name: string; frequency: string }>(`act_${adAccountId}/insights`, accessToken, {
         fields: 'ad_id,ad_name,frequency',
         date_preset: 'last_7d',
         level: 'ad',
@@ -276,8 +277,8 @@ const minActiveAds: AuditCheck = {
 
 const lowBudgetAdsets: AuditCheck = {
   id: 'low_budget', name: 'Adsets com orçamento diário < $10', category: 'budget', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
-    const adsets = await mAll<{ id: string; name: string; daily_budget?: string; budget_remaining?: string }>(`act_${adAccountId}/adsets`, source, {
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const adsets = await mAll<{ id: string; name: string; daily_budget?: string; budget_remaining?: string }>(`act_${adAccountId}/adsets`, accessToken, {
       fields: 'id,name,daily_budget,budget_remaining',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -291,8 +292,8 @@ const lowBudgetAdsets: AuditCheck = {
 
 const spendCapNear: AuditCheck = {
   id: 'spend_cap_near', name: 'Limite de gasto da conta próximo', category: 'budget', severity: 'critical',
-  async run({ adAccountId, source }: AuditContext) {
-    const account = await mGet<{ spend_cap?: string; amount_spent?: string }>(`act_${adAccountId}`, source, { fields: 'spend_cap,amount_spent' });
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const account = await mGet<{ spend_cap?: string; amount_spent?: string }>(`act_${adAccountId}`, accessToken, { fields: 'spend_cap,amount_spent' });
     if (!account.spend_cap || account.spend_cap === '0') return pass('Sem limite de gasto configurado na conta');
     const cap = parseInt(account.spend_cap);
     const spent = parseInt(account.amount_spent ?? '0');
@@ -320,9 +321,9 @@ const budgetEfficiency: AuditCheck = {
 
 const budgetVariation: AuditCheck = {
   id: 'budget_variation', name: 'Sem variações bruscas de orçamento recentes', category: 'budget', severity: 'info',
-  async run({ adAccountId, source }: AuditContext) {
+  async run({ adAccountId, accessToken }: AuditContext) {
     // Heurística: verificar se há muitas campanhas com status recentemente alterado
-    const campaigns = await mAll<{ id: string; name: string; effective_status: string; updated_time: string }>(`act_${adAccountId}/campaigns`, source, {
+    const campaigns = await mAll<{ id: string; name: string; effective_status: string; updated_time: string }>(`act_${adAccountId}/campaigns`, accessToken, {
       fields: 'id,name,effective_status,updated_time',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -337,12 +338,12 @@ const budgetVariation: AuditCheck = {
 
 const accountStatusCheck: AuditCheck = {
   id: 'account_status', name: 'Status da conta de anúncios', category: 'account', severity: 'critical',
-  async run({ adAccountId, source }: AuditContext) {
+  async run({ adAccountId, accessToken }: AuditContext) {
     const STATUS: Record<number, string> = {
       1: 'Ativa', 2: 'Desativada', 3: 'Saldo pendente', 7: 'Em revisão',
       8: 'Em período de carência', 9: 'Pendente de encerramento', 100: 'Pendente',
     };
-    const account = await mGet<{ account_status: number; disable_reason?: number }>(`act_${adAccountId}`, source, {
+    const account = await mGet<{ account_status: number; disable_reason?: number }>(`act_${adAccountId}`, accessToken, {
       fields: 'account_status,disable_reason',
     });
     const statusNum = account.account_status;
@@ -356,9 +357,9 @@ const accountStatusCheck: AuditCheck = {
 
 const paymentMethod: AuditCheck = {
   id: 'payment_method', name: 'Método de pagamento válido', category: 'account', severity: 'critical',
-  async run({ adAccountId, source }: AuditContext) {
+  async run({ adAccountId, accessToken }: AuditContext) {
     try {
-      const account = await mGet<{ funding_source_details?: { display_string?: string; expiry_month?: number; expiry_year?: number } }>(`act_${adAccountId}`, source, {
+      const account = await mGet<{ funding_source_details?: { display_string?: string; expiry_month?: number; expiry_year?: number } }>(`act_${adAccountId}`, accessToken, {
         fields: 'funding_source_details',
       });
       const fs = account.funding_source_details;
@@ -378,10 +379,10 @@ const paymentMethod: AuditCheck = {
 
 const policyQuality: AuditCheck = {
   id: 'policy_quality', name: 'Taxa de reprovação de anúncios', category: 'account', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
+  async run({ adAccountId, accessToken }: AuditContext) {
     const [all, disapproved] = await Promise.all([
-      mAll<{ id: string }>(`act_${adAccountId}/ads`, source, { effective_status: JSON.stringify(['ACTIVE', 'PAUSED', 'DISAPPROVED', 'WITH_ISSUES']), fields: 'id' }),
-      mAll<{ id: string }>(`act_${adAccountId}/ads`, source, { effective_status: JSON.stringify(['DISAPPROVED', 'WITH_ISSUES']), fields: 'id' }),
+      mAll<{ id: string }>(`act_${adAccountId}/ads`, accessToken, { effective_status: JSON.stringify(['ACTIVE', 'PAUSED', 'DISAPPROVED', 'WITH_ISSUES']), fields: 'id' }),
+      mAll<{ id: string }>(`act_${adAccountId}/ads`, accessToken, { effective_status: JSON.stringify(['DISAPPROVED', 'WITH_ISSUES']), fields: 'id' }),
     ]);
     if (!all.length) return skip('Sem anúncios para análise');
     const ratio = (disapproved.length / all.length) * 100;
@@ -461,8 +462,8 @@ function isLocalTargeting(geo?: GeoLocations): boolean {
 
 const localGeoTargeting: AuditCheck = {
   id: 'local_geo_targeting', name: 'Segmentação geográfica local', category: 'local', severity: 'critical',
-  async run({ adAccountId, source }: AuditContext) {
-    const adsets = await mAll<{ id: string; name: string; targeting?: { geo_locations?: GeoLocations } }>(`act_${adAccountId}/adsets`, source, {
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const adsets = await mAll<{ id: string; name: string; targeting?: { geo_locations?: GeoLocations } }>(`act_${adAccountId}/adsets`, accessToken, {
       fields: 'id,name,targeting{geo_locations}',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -477,8 +478,8 @@ const localGeoTargeting: AuditCheck = {
 
 const localRadius: AuditCheck = {
   id: 'local_radius', name: 'Raio de segmentação compatível', category: 'local', severity: 'warning',
-  async run({ adAccountId, source }: AuditContext) {
-    const adsets = await mAll<{ id: string; name: string; targeting?: { geo_locations?: GeoLocations } }>(`act_${adAccountId}/adsets`, source, {
+  async run({ adAccountId, accessToken }: AuditContext) {
+    const adsets = await mAll<{ id: string; name: string; targeting?: { geo_locations?: GeoLocations } }>(`act_${adAccountId}/adsets`, accessToken, {
       fields: 'id,name,targeting{geo_locations}',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -495,11 +496,11 @@ const localRadius: AuditCheck = {
 
 const localObjective: AuditCheck = {
   id: 'local_objective', name: 'Objetivo alinhado à meta do negócio', category: 'local', severity: 'warning',
-  async run({ clientId, adAccountId, source }: AuditContext) {
+  async run({ clientId, adAccountId, accessToken }: AuditContext) {
     const profile = await loadClientLocal(clientId);
     if (!profile?.primary_goal) return skip('Defina o objetivo principal do cliente no cadastro para avaliar o alinhamento');
     const accepted = GOAL_OBJECTIVES[profile.primary_goal] ?? [];
-    const campaigns = await mAll<{ id: string; name: string; objective?: string }>(`act_${adAccountId}/campaigns`, source, {
+    const campaigns = await mAll<{ id: string; name: string; objective?: string }>(`act_${adAccountId}/campaigns`, accessToken, {
       fields: 'id,name,objective',
       effective_status: JSON.stringify(['ACTIVE']),
     });
@@ -515,10 +516,10 @@ const localObjective: AuditCheck = {
 
 const messagingDestination: AuditCheck = {
   id: 'messaging_destination', name: 'Destino de conversa configurado', category: 'local', severity: 'warning',
-  async run({ clientId, adAccountId, source }: AuditContext) {
+  async run({ clientId, adAccountId, accessToken }: AuditContext) {
     const profile = await loadClientLocal(clientId);
     if (profile?.primary_goal !== 'messages') return skip('Aplicável apenas quando o objetivo é gerar conversas');
-    const adsets = await mAll<{ id: string; name: string; destination_type?: string }>(`act_${adAccountId}/adsets`, source, {
+    const adsets = await mAll<{ id: string; name: string; destination_type?: string }>(`act_${adAccountId}/adsets`, accessToken, {
       fields: 'id,name,destination_type',
       effective_status: JSON.stringify(['ACTIVE']),
     });

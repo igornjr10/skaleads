@@ -1,18 +1,22 @@
+import { useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { NotificationsBell } from "./NotificationsBell";
-import { ScaleAdsLogo } from "./ScaleAdsLogo";
+import { MarketProLogo } from "./MarketProLogo";
 import { ClientSwitcher } from "./ClientSwitcher";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard":   { title: "Dashboard",        subtitle: "Visão geral das campanhas" },
   "/clients":     { title: "Clientes",         subtitle: "Gerencie as contas anunciantes" },
-  "/planner":     { title: "Planner",          subtitle: "Onboarding de clientes novos" },
-  "/producao":    { title: "Produção",         subtitle: "Fila de video e design" },
-  "/financeiro":  { title: "Financeiro",       subtitle: "Mensalidades e cobranca automatica" },
   "/campaigns":   { title: "Campanhas",        subtitle: "Performance de campanhas Meta Ads" },
   "/alerts":      { title: "Alertas",          subtitle: "Monitoramento em tempo real" },
+  "/andromeda":   { title: "Andromeda IA",     subtitle: "Motor de inteligência artificial" },
+  "/report-schedules": { title: "Relatórios",  subtitle: "Envio recorrente por cliente" },
+  "/financeiro":  { title: "Financeiro",       subtitle: "Cobranças e recebimentos" },
+  "/time":        { title: "Time",             subtitle: "Equipe e demandas" },
+  "/esteira":     { title: "Esteira criativa", subtitle: "Kanban de produção" },
+  "/cerebro":     { title: "Cérebro",          subtitle: "Memória da empresa" },
   "/settings":    { title: "Configurações",    subtitle: "Preferências da plataforma" },
 };
 
@@ -23,12 +27,21 @@ function getPageMeta(pathname: string) {
   return key ? PAGE_TITLES[key] : { title: "Scale Ads", subtitle: "" };
 }
 
+// O SidebarProvider grava o estado num cookie mas nunca le de volta — ele nasceu
+// para SSR, onde quem le e o servidor. Sem isto, recolher a barra no botao nao
+// sobrevive a um F5. Aberto e o padrao: a barra fica fixa, sem depender de hover.
+function estadoSalvoDaSidebar() {
+  const salvo = document.cookie.match(/(?:^|;\s*)sidebar:state=([^;]*)/)?.[1];
+  return salvo ? salvo === "true" : true;
+}
+
 export function AppLayout() {
   const location = useLocation();
   const meta = getPageMeta(location.pathname);
+  const [sidebarInicial] = useState(estadoSalvoDaSidebar);
 
   return (
-    <SidebarProvider defaultOpen={false}>
+    <SidebarProvider defaultOpen={sidebarInicial}>
       <div className="relative flex min-h-screen w-full bg-background">
         {/* Ambient glow */}
         <div className="pointer-events-none fixed inset-0 bg-gradient-glow" />
@@ -65,7 +78,7 @@ export function AppLayout() {
               <NotificationsBell />
               {/* Brand mark (shown when sidebar collapsed) */}
               <div className="hidden md:flex items-center gap-1.5 opacity-40 hover:opacity-70 transition-opacity">
-                <ScaleAdsLogo size={22} />
+                <MarketProLogo size={22} />
               </div>
             </div>
           </header>

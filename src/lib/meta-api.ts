@@ -1,6 +1,20 @@
 import { supabase } from "@/integrations/supabase/client";
-import { extractLocalActionTotals, type MetaAction } from "@/lib/local-business";
-import { metaGet, metaGetAll, type MetaSource } from "@/lib/meta-client";
+import { extractLocalActionTotals, extractMessages, type MetaAction } from "@/lib/local-business";
+import {
+  fetchAccountFunding,
+  fetchFundingEvents,
+  firstOfMonthIso,
+  persistFundingEvents,
+} from "@/lib/meta-funding";
+import {
+  metaGet,
+  metaGetAll,
+  presetToRange,
+  splitDateRange,
+  type MetaFetchOptions,
+} from "@/lib/meta-fetch";
+
+const META_BASE = "https://graph.facebook.com/v21.0";
 
 interface MetaInsight {
   spend?: string;
@@ -18,7 +32,6 @@ interface MetaCampaign {
   name: string;
   status: string;
   objective?: string;
-  insights?: { data: MetaInsight[] };
 }
 
 interface MetaAdSet {
@@ -26,7 +39,6 @@ interface MetaAdSet {
   name: string;
   status: string;
   campaign_id: string;
-  insights?: { data: MetaInsight[] };
 }
 
 interface MetaAd {
@@ -42,7 +54,6 @@ interface MetaAd {
     object_type?: string;
     video_id?: string;
   };
-  insights?: { data: MetaInsight[] };
 }
 
 interface MetaAdInsightRow {
@@ -79,6 +90,75 @@ function extractAction(actions?: Array<{ action_type: string; value: string }>, 
   return parseInt(actions?.find((action) => action.action_type === type)?.value ?? "0") || 0;
 }
 
+function metaFetchAll<T>(path: string, params: Record<string, string>, options?: MetaFetchOptions): Promise<T[]> {
+  return metaGetAll<T>(META_BASE, path, params, options);
+}
+
+interface MetaLevelInsight {
+  campaign_id?: string;
+  adset_id?: string;
+  ad_id?: string;
+  spend?: string;
+  impressions?: string;
+  clicks?: string;
+  ctr?: string;
+  cpc?: string;
+  cpm?: string;
+  conversions?: string;
+  actions?: MetaAction[];
+}
+
+// A migration das colunas `messages` roda a mao no SQL Editor, entao o front
+// pode subir antes dela. Sem essa checagem o upsert inteiro morre em 42703 e o
+// sync para de gravar qualquer coisa.
+let messagesColumnSupported: boolean | null = null;
+
+async function supportsMessagesColumn(): Promise<boolean> {
+  if (messagesColumnSupported !== null) return messagesColumnSupported;
+  const { error } = await supabase.from("campaigns").select("messages").limit(1);
+  messagesColumnSupported = !error;
+  return messagesColumnSupported;
+}
+
+// Campanha de mensagem nao produz `conversions`: a conversa iniciada chega
+// dentro de `actions`. Guardar por entidade e o que permite dizer qual anuncio
+// trouxe cada conversa.
+function messagesPayload(supported: boolean, actions?: MetaAction[]): { messages?: number } {
+  return supported ? { messages: extractMessages(actions) } : {};
+}
+
+// Pedir `insights` aninhado em /campaigns, /adsets ou /ads faz a Meta calcular
+// um relatorio por entidade e estoura o limite de volume da conta (erro 1).
+// Um unico relatorio da conta no nivel desejado devolve o mesmo dado por uma
+// fracao do custo.
+async function fetchInsightsByLevel(
+  accountId: string,
+  token: string,
+  level: "campaign" | "adset" | "ad",
+  datePreset: string
+): Promise<Map<string, MetaLevelInsight>> {
+  const idField = `${level}_id` as "campaign_id" | "adset_id" | "ad_id";
+
+  const rows = await metaFetchAll<MetaLevelInsight>(
+    `act_${accountId}/insights`,
+    {
+      fields: `${idField},spend,impressions,clicks,ctr,cpc,cpm,conversions,actions`,
+      level,
+      date_preset: datePreset,
+      access_token: token,
+    },
+    { limit: 200 }
+  );
+
+  const byId = new Map<string, MetaLevelInsight>();
+  for (const row of rows) {
+    const id = row[idField];
+    if (id) byId.set(id, row);
+  }
+
+  return byId;
+}
+
 function normalizeAccountId(id: string): string {
   return id.startsWith("act_") ? id.slice(4) : id.trim();
 }
@@ -104,7 +184,14 @@ function inferSyncStatusFromError(message: string): "expired" | "error" | "warni
     return "expired";
   }
 
-  if (text.includes("rate limit") || text.includes("temporar") || text.includes("try again")) {
+  if (
+    text.includes("rate limit") ||
+    text.includes("temporar") ||
+    text.includes("try again") ||
+    text.includes("volume de dados") ||
+    text.includes("limitando as requisicoes") ||
+    text.includes("reduce the amount of data")
+  ) {
     return "warning";
   }
 
@@ -149,16 +236,16 @@ export interface MetaConnectionStatus {
 
 export async function validateMetaConnection(
   adAccountId: string,
-  source: MetaSource
+  accessToken: string
 ): Promise<MetaConnectionStatus> {
   const accountId = normalizeAccountId(adAccountId);
+  const token = accessToken.trim();
   const checkedAt = new Date().toISOString();
 
-  const json = await metaGet<{ id?: string; name?: string; account_status?: number }>(
-    source,
-    `act_${accountId}`,
-    { fields: "id,name,account_status" }
-  );
+  const json = await metaGet<{ id?: string; name?: string; account_status?: number }>(META_BASE, `act_${accountId}`, {
+    fields: "id,name,account_status",
+    access_token: token,
+  });
 
   return {
     isValid: true,
@@ -172,10 +259,11 @@ export async function validateMetaConnection(
 export async function syncClientData(
   clientId: string,
   adAccountId: string,
+  accessToken: string,
   onProgress?: (msg: string) => void
 ): Promise<SyncResult> {
   const accountId = normalizeAccountId(adAccountId);
-  const source: MetaSource = { clientId };
+  const token = accessToken.trim();
 
   await updateClientIntegrationState(clientId, {
     meta_sync_status: "syncing",
@@ -183,13 +271,20 @@ export async function syncClientData(
   });
 
   try {
-    const connection = await validateMetaConnection(accountId, source);
+    const connection = await validateMetaConnection(accountId, token);
 
     onProgress?.("Buscando campanhas...");
-    const metaCampaigns = await metaGetAll<MetaCampaign>(source, `act_${accountId}/campaigns`, {
-      fields: "id,name,status,objective,insights.date_preset(last_30d){spend,impressions,clicks,ctr,cpc,cpm,conversions}",
-      limit: "100",
-    });
+    const metaCampaigns = await metaFetchAll<MetaCampaign>(
+      `act_${accountId}/campaigns`,
+      {
+        fields: "id,name,status,objective",
+        access_token: token,
+      },
+      { limit: 200 }
+    );
+
+    const campaignInsights = await fetchInsightsByLevel(accountId, token, "campaign", "last_30d");
+    const withMessages = await supportsMessagesColumn();
 
     const { data: existingCampaigns } = await supabase
       .from("campaigns")
@@ -202,7 +297,7 @@ export async function syncClientData(
     });
 
     for (const campaign of metaCampaigns) {
-      const insight = campaign.insights?.data?.[0];
+      const insight = campaignInsights.get(campaign.id);
       const payload = {
         client_id: clientId,
         meta_campaign_id: campaign.id,
@@ -216,6 +311,7 @@ export async function syncClientData(
         cpc: n(insight?.cpc),
         cpm: n(insight?.cpm),
         conversions: ni(insight?.conversions),
+        ...messagesPayload(withMessages, insight?.actions),
       };
 
       const existingId = campaignMap.get(campaign.id);
@@ -228,10 +324,16 @@ export async function syncClientData(
     }
 
     onProgress?.("Buscando conjuntos de anuncios...");
-    const metaAdSets = await metaGetAll<MetaAdSet>(source, `act_${accountId}/adsets`, {
-      fields: "id,name,status,campaign_id,insights.date_preset(last_30d){spend,impressions,clicks}",
-      limit: "200",
-    });
+    const metaAdSets = await metaFetchAll<MetaAdSet>(
+      `act_${accountId}/adsets`,
+      {
+        fields: "id,name,status,campaign_id",
+        access_token: token,
+      },
+      { limit: 200 }
+    );
+
+    const adSetInsights = await fetchInsightsByLevel(accountId, token, "adset", "last_30d");
 
     const campaignInternalIds = [...campaignMap.values()];
     const { data: existingAdSets } = campaignInternalIds.length
@@ -247,7 +349,7 @@ export async function syncClientData(
       const campaignInternalId = campaignMap.get(adSet.campaign_id);
       if (!campaignInternalId) continue;
 
-      const insight = adSet.insights?.data?.[0];
+      const insight = adSetInsights.get(adSet.id);
       const payload = {
         campaign_id: campaignInternalId,
         meta_adset_id: adSet.id,
@@ -256,6 +358,7 @@ export async function syncClientData(
         spend: n(insight?.spend),
         impressions: ni(insight?.impressions),
         clicks: ni(insight?.clicks),
+        ...messagesPayload(withMessages, insight?.actions),
       };
 
       const existingId = adSetMap.get(adSet.id);
@@ -268,10 +371,16 @@ export async function syncClientData(
     }
 
     onProgress?.("Buscando anuncios...");
-    const metaAds = await metaGetAll<MetaAd>(source, `act_${accountId}/ads`, {
-      fields: "id,name,status,adset_id,creative{thumbnail_url,image_url,body,title,object_type,video_id},insights.date_preset(last_30d){spend,impressions,clicks}",
-      limit: "500",
-    });
+    const metaAds = await metaFetchAll<MetaAd>(
+      `act_${accountId}/ads`,
+      {
+        fields: "id,name,status,adset_id,creative{thumbnail_url,image_url,body,title,object_type,video_id}",
+        access_token: token,
+      },
+      { limit: 100 }
+    );
+
+    const adInsights = await fetchInsightsByLevel(accountId, token, "ad", "last_30d");
 
     const adSetInternalIds = [...adSetMap.values()];
     const { data: existingAds } = adSetInternalIds.length
@@ -287,7 +396,7 @@ export async function syncClientData(
       const adSetInternalId = adSetMap.get(ad.adset_id);
       if (!adSetInternalId) continue;
 
-      const insight = ad.insights?.data?.[0];
+      const insight = adInsights.get(ad.id);
       const creative = ad.creative;
       const creativeType = creative?.object_type === "VIDEO" || creative?.video_id ? "video" : "image";
       const payload = {
@@ -298,6 +407,7 @@ export async function syncClientData(
         spend: n(insight?.spend),
         impressions: ni(insight?.impressions),
         clicks: ni(insight?.clicks),
+        ...messagesPayload(withMessages, insight?.actions),
         thumbnail_url: creative?.thumbnail_url ?? null,
         image_url: creative?.image_url ?? null,
         video_id: creative?.video_id ?? null,
@@ -318,15 +428,16 @@ export async function syncClientData(
     }
 
     onProgress?.("Buscando metricas diarias...");
-    const dailyData = await metaGetAll<MetaInsight & { date_start: string; actions?: MetaAction[] }>(
-      source,
+    const dailyData = await metaFetchAll<MetaInsight & { date_start: string; actions?: MetaAction[] }>(
       `act_${accountId}/insights`,
       {
         fields: "spend,impressions,clicks,actions,date_start",
         time_increment: "1",
         date_preset: "last_30d",
         level: "account",
-      }
+        access_token: token,
+      },
+      { limit: 100 }
     );
 
     for (const day of dailyData) {
@@ -348,10 +459,30 @@ export async function syncClientData(
       );
     }
 
+    onProgress?.("Lendo saldo e aportes da conta...");
+    // Saldo e aporte sao extras: saem de um texto formatado e de um log sem
+    // parametros documentados. Se qualquer um falhar, o sync ja entregou
+    // campanha e metrica, e o card cai na verba digitada a mao.
+    let fundingState: Record<string, unknown> = {};
+    try {
+      const funding = await fetchAccountFunding(accountId, token);
+      fundingState = {
+        meta_balance_cents: funding.balanceCents,
+        meta_balance_label: funding.balanceLabel,
+        meta_funding_type: funding.fundingType,
+        meta_balance_at: new Date().toISOString(),
+      };
+      const events = await fetchFundingEvents(accountId, token, firstOfMonthIso());
+      await persistFundingEvents(clientId, events);
+    } catch {
+      /* nao-bloqueante por design */
+    }
+
     const completedAt = new Date().toISOString();
     await updateClientIntegrationState(
       clientId,
       {
+        ...fundingState,
         meta_connected_at: completedAt,
         meta_last_sync_at: completedAt,
         meta_last_verified_at: connection.checkedAt,
@@ -380,21 +511,35 @@ export async function syncClientData(
 export async function syncAdDailyMetrics(
   clientId: string,
   adAccountId: string,
+  accessToken: string,
   datePreset = "last_30d",
   onProgress?: (msg: string) => void
 ): Promise<number> {
   const accountId = normalizeAccountId(adAccountId);
-  const source: MetaSource = { clientId };
+  const token = accessToken.trim();
 
-  onProgress?.("Buscando metricas diarias por anuncio...");
+  // `level=ad` com `time_increment=1` gera uma linha por anuncio por dia. No
+  // periodo inteiro de uma vez a Meta recusa a query por volume (erro 1), entao
+  // pedimos semana a semana: varias requisicoes baratas em vez de uma impossivel.
+  const { since, until } = presetToRange(datePreset);
+  const windows = splitDateRange(since, until, 7);
+  const insights: MetaAdInsightRow[] = [];
 
-  const insights = await metaGetAll<MetaAdInsightRow>(source, `act_${accountId}/insights`, {
-    fields: "ad_id,impressions,clicks,spend,reach,frequency,video_thruplay_watched_actions,video_p25_watched_actions,video_p75_watched_actions",
-    level: "ad",
-    time_increment: "1",
-    date_preset: datePreset,
-    limit: "500",
-  });
+  for (const [index, window] of windows.entries()) {
+    onProgress?.(`Metricas por anuncio (${index + 1}/${windows.length})...`);
+    const rows = await metaFetchAll<MetaAdInsightRow>(
+      `act_${accountId}/insights`,
+      {
+        fields: "ad_id,impressions,clicks,spend,reach,frequency,video_thruplay_watched_actions,video_p25_watched_actions,video_p75_watched_actions",
+        level: "ad",
+        time_increment: "1",
+        time_range: JSON.stringify(window),
+        access_token: token,
+      },
+      { limit: 100 }
+    );
+    insights.push(...rows);
+  }
 
   const metaAdIds = [...new Set(insights.map((row) => row.ad_id).filter(Boolean))];
   const { data: adsData } = metaAdIds.length
@@ -454,24 +599,29 @@ function resolveDatePresetRange(datePreset: string): { dateStart: string; dateSt
 export async function syncAudienceBreakdowns(
   clientId: string,
   adAccountId: string,
+  accessToken: string,
   datePreset = "last_30d",
   onProgress?: (msg: string) => void
 ): Promise<number> {
   const accountId = normalizeAccountId(adAccountId);
-  const source: MetaSource = { clientId };
+  const token = accessToken.trim();
   let total = 0;
   const { dateStart, dateStop } = resolveDatePresetRange(datePreset);
 
   for (const dimension of DIMENSIONS) {
     onProgress?.(`Buscando breakdown: ${dimension}...`);
     try {
-      const rows = await metaGetAll<MetaBreakdownRow>(source, `act_${accountId}/insights`, {
-        fields: "impressions,clicks,spend,reach",
-        breakdowns: dimension,
-        date_preset: datePreset,
-        level: "account",
-        limit: "500",
-      });
+      const rows = await metaFetchAll<MetaBreakdownRow>(
+        `act_${accountId}/insights`,
+        {
+          fields: "impressions,clicks,spend,reach",
+          breakdowns: dimension,
+          date_preset: datePreset,
+          level: "account",
+          access_token: token,
+        },
+        { limit: 100 }
+      );
 
       for (const row of rows) {
         const dimensionValue = (row as Record<string, string | undefined>)[dimension];

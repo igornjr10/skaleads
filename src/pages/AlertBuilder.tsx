@@ -11,7 +11,9 @@ import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -21,6 +23,8 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   testAlert,
   ruleToHuman,
+  FIXED_PERIOD_LABELS,
+  ALL_MANAGERS_TARGET,
   type AlertRule,
   type AlertCondition,
   type FiredEntity,
@@ -40,9 +44,12 @@ const METRICS: { value: MetricKey; label: string; unit?: string }[] = [
   { value: "cpm", label: "CPM (R$)", unit: "R$" },
   { value: "frequency", label: "Frequência", unit: "x" },
   { value: "roas", label: "ROAS", unit: "x" },
-  { value: "budget", label: "Verba mensal consumida (%)", unit: "%" },
+  { value: "balance", label: "Saldo na conta Meta (R$)", unit: "R$" },
   { value: "status", label: "Status da campanha" },
 ];
+
+// Saldo e da conta de anuncio: no recorte de campanha nao existe.
+const ACCOUNT_ONLY_METRICS: MetricKey[] = ["balance"];
 
 const COMPARATORS: { value: Comparator; label: string }[] = [
   { value: "gt", label: "maior que" },
@@ -126,8 +133,10 @@ export default function AlertBuilder() {
   const [channelWhatsapp, setChannelWhatsapp] = useState(false);
   const [whatsappTarget, setWhatsappTarget] = useState("");
   const [waGroups, setWaGroups] = useState<{ id: string; subject: string }[] | null>(null);
-  const [loadingWaGroups, setLoadingWaGroups] = useState(false);
+  const [waManagers, setWaManagers] = useState<{ id: string; name: string; number: string }[] | null>(null);
+  const [loadingWaDestinations, setLoadingWaDestinations] = useState(false);
   const [cooldown, setCooldown] = useState(60);
+  const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
     supabase.from("clients").select("id, name").order("name").then(({ data }) => setClients(data || []));
@@ -150,21 +159,31 @@ export default function AlertBuilder() {
     setChannelWhatsapp(!!ch.whatsapp);
     setWhatsappTarget(ch.whatsappTarget || "");
     setCooldown(data.cooldown_minutes || 60);
+    // Salvar nao pode ressuscitar alerta pausado: quem pausou decidiu isso, e o
+    // motivo costuma estar na descricao. O liga/desliga fica na lista.
+    setIsActive(data.is_active !== false);
     setShowTemplates(false);
-    if (ch.whatsapp) loadWaGroups();
+    if (ch.whatsapp) loadWaDestinations();
   }
 
-  async function loadWaGroups() {
-    if (waGroups || loadingWaGroups) return;
-    setLoadingWaGroups(true);
+  // Gestor e grupo cabem no mesmo campo porque a uazapi aceita o JID do grupo
+  // onde receberia o numero — o destino e sempre uma string so.
+  async function loadWaDestinations() {
+    if (loadingWaDestinations || (waGroups && waManagers)) return;
+    setLoadingWaDestinations(true);
     try {
-      const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
-      if (error) throw new Error(error.message);
-      setWaGroups(data?.groups ?? []);
-    } catch {
-      setWaGroups([]);
+      const [groups, managers] = await Promise.all([
+        supabase.functions.invoke("list-whatsapp-groups"),
+        supabase.from("managers").select("id, name, whatsapp_number").eq("is_active", true).order("name"),
+      ]);
+      setWaGroups(groups.error ? [] : groups.data?.groups ?? []);
+      setWaManagers(
+        (managers.data ?? [])
+          .filter(m => m.whatsapp_number)
+          .map(m => ({ id: m.id, name: m.name, number: m.whatsapp_number as string }))
+      );
     } finally {
-      setLoadingWaGroups(false);
+      setLoadingWaDestinations(false);
     }
   }
 
@@ -179,7 +198,7 @@ export default function AlertBuilder() {
     if (t.enableWhatsapp) {
       setChannelWhatsapp(true);
       setWhatsappTarget("");
-      loadWaGroups();
+      loadWaDestinations();
     }
     setShowTemplates(false);
   }
@@ -272,7 +291,7 @@ export default function AlertBuilder() {
         whatsappTarget: whatsappTarget || undefined,
       } as any,
       cooldown_minutes: cooldown,
-      is_active: true,
+      is_active: isActive,
       tenant_id: userId,
       created_by: userId,
       // Clear old-schema required cols
@@ -296,6 +315,13 @@ export default function AlertBuilder() {
 
   const rule: AlertRule = { conditions, logic };
   const ruleDescription = ruleToHuman(rule);
+  const whatsappTargetLabel = !whatsappTarget
+    ? "Gestor (número padrão)"
+    : whatsappTarget === ALL_MANAGERS_TARGET
+      ? `Todos os gestores${waManagers ? ` (${waManagers.length})` : ""}`
+      : waManagers?.find(m => m.number === whatsappTarget)?.name
+      ?? waGroups?.find(g => g.id === whatsappTarget)?.subject
+      ?? whatsappTarget;
 
   // ── Template picker ────────────────────────────────────────────────────────
   if (showTemplates) {
@@ -414,17 +440,29 @@ export default function AlertBuilder() {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Métrica</Label>
-                    <Select value={cond.metric} onValueChange={v => updateCondition(i, { metric: v as MetricKey })}>
+                    <Select
+                      value={cond.metric}
+                      onValueChange={v => updateCondition(i, {
+                        metric: v as MetricKey,
+                        ...(ACCOUNT_ONLY_METRICS.includes(v as MetricKey) ? { entityType: "CLIENT" as EntityType } : {}),
+                      })}
+                    >
                       <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
                       <SelectContent>{METRICS.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Entidade</Label>
-                    <Select value={cond.entityType} onValueChange={v => updateCondition(i, { entityType: v as EntityType })}>
-                      <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-                      <SelectContent>{ENTITY_TYPES.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
-                    </Select>
+                    {ACCOUNT_ONLY_METRICS.includes(cond.metric) ? (
+                      <div className="h-8 flex items-center rounded-md border border-input bg-muted/50 px-3 text-xs text-muted-foreground">
+                        Cliente (conta)
+                      </div>
+                    ) : (
+                      <Select value={cond.entityType} onValueChange={v => updateCondition(i, { entityType: v as EntityType })}>
+                        <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
+                        <SelectContent>{ENTITY_TYPES.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    )}
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Comparador</Label>
@@ -435,9 +473,9 @@ export default function AlertBuilder() {
                   </div>
                   <div className="space-y-1">
                     <Label className="text-[10px] text-muted-foreground">Período</Label>
-                    {cond.metric === "budget" ? (
+                    {FIXED_PERIOD_LABELS[cond.metric] ? (
                       <div className="h-8 flex items-center rounded-md border border-input bg-muted/50 px-3 text-xs text-muted-foreground">
-                        Mês atual
+                        {FIXED_PERIOD_LABELS[cond.metric]}
                       </div>
                     ) : (
                       <Select value={cond.period} onValueChange={v => updateCondition(i, { period: v as Period })}>
@@ -449,7 +487,11 @@ export default function AlertBuilder() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">
-                    {cond.metric === "status" ? "Valor (ex: PAUSED, ACTIVE)" : cond.metric === "budget" ? "% da verba consumida" : "Valor"}
+                    {cond.metric === "status"
+                      ? "Valor (ex: PAUSED, ACTIVE)"
+                      : cond.metric === "balance"
+                        ? "Saldo em reais"
+                        : "Valor"}
                   </Label>
                   <Input
                     type={cond.metric === "status" ? "text" : "number"}
@@ -457,7 +499,13 @@ export default function AlertBuilder() {
                     value={String(cond.value)}
                     onChange={e => updateCondition(i, { value: cond.metric === "status" ? e.target.value : parseFloat(e.target.value) || 0 })}
                     className="h-8 text-sm"
-                    placeholder={cond.comparator === "change_pct" ? "Ex: -25 (queda de 25%)" : cond.metric === "budget" ? "Ex: 80 (80% da verba)" : "Ex: 50"}
+                    placeholder={
+                      cond.comparator === "change_pct"
+                        ? "Ex: -25 (queda de 25%)"
+                        : cond.metric === "balance"
+                          ? "Ex: 50 (avisa abaixo de R$ 50)"
+                          : "Ex: 50"
+                    }
                   />
                 </div>
               </div>
@@ -508,11 +556,11 @@ export default function AlertBuilder() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">WhatsApp</p>
-                <p className="text-xs text-muted-foreground">Mensagem via WhatsApp (Evolution API)</p>
+                <p className="text-xs text-muted-foreground">Mensagem via WhatsApp (uazapi)</p>
               </div>
               <Switch
                 checked={channelWhatsapp}
-                onCheckedChange={(v) => { setChannelWhatsapp(v); if (v) loadWaGroups(); }}
+                onCheckedChange={(v) => { setChannelWhatsapp(v); if (v) loadWaDestinations(); }}
               />
             </div>
             {channelWhatsapp && (
@@ -520,13 +568,31 @@ export default function AlertBuilder() {
                 <Label className="text-xs">Destino</Label>
                 <Select value={whatsappTarget || "manager"} onValueChange={v => setWhatsappTarget(v === "manager" ? "" : v)}>
                   <SelectTrigger className="text-sm">
-                    {loadingWaGroups ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SelectValue />}
+                    {loadingWaDestinations ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <SelectValue />}
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="manager">Gestor (número padrão)</SelectItem>
-                    {(waGroups ?? []).map(g => (
-                      <SelectItem key={g.id} value={g.id}>{g.subject}</SelectItem>
-                    ))}
+                    {!!waManagers?.length && (
+                      <SelectItem value={ALL_MANAGERS_TARGET}>
+                        Todos os gestores ({waManagers.length})
+                      </SelectItem>
+                    )}
+                    {!!waManagers?.length && (
+                      <SelectGroup>
+                        <SelectLabel>Gestores</SelectLabel>
+                        {waManagers.map(m => (
+                          <SelectItem key={m.id} value={m.number}>{m.name}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
+                    {!!waGroups?.length && (
+                      <SelectGroup>
+                        <SelectLabel>Grupos</SelectLabel>
+                        {waGroups.map(g => (
+                          <SelectItem key={g.id} value={g.id}>{g.subject}</SelectItem>
+                        ))}
+                      </SelectGroup>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -571,6 +637,12 @@ export default function AlertBuilder() {
                   {channelWhatsapp && <Badge variant="secondary" className="text-[10px] border-green-500/40 text-green-600">WhatsApp</Badge>}
                 </span>
               </div>
+              {channelWhatsapp && (
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground shrink-0">Destino WhatsApp</span>
+                  <span className="text-right">{whatsappTargetLabel}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Cooldown</span>
                 <span>{COOLDOWN_OPTIONS.find(o => o.value === cooldown)?.label || `${cooldown}min`}</span>

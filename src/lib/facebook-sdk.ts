@@ -26,7 +26,15 @@ export interface FacebookLoginResult {
 export interface MetaAdAccount {
   id: string;
   name: string;
-  account_status: number;
+  account_status?: number;
+  business?: { id: string; name?: string };
+}
+
+export interface MetaInstagramAccount {
+  id: string;
+  username?: string;
+  profile_picture_url?: string;
+  origin?: string;
 }
 
 export interface MetaPage {
@@ -35,11 +43,10 @@ export interface MetaPage {
   access_token?: string;
   fan_count?: number;
   followers_count?: number;
-  instagram_business_account?: {
-    id: string;
-    username?: string;
-    profile_picture_url?: string;
-  };
+  instagram_business_account?: MetaInstagramAccount;
+  // Vinculo feito pelas configuracoes da Pagina (conta Creator, por exemplo) - nao
+  // aparece em instagram_business_account.
+  connected_instagram_account?: MetaInstagramAccount;
   picture?: {
     data?: {
       url?: string;
@@ -81,7 +88,9 @@ export function facebookLogin(): Promise<FacebookLoginResult> {
         }
       },
       {
-        scope: "ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,instagram_basic,instagram_manage_insights",
+        // `read_insights` e a permissao das metricas de Pagina. Faltava na lista, e
+        // sem ela nenhum token nosso conseguia ler alcance ou engajamento.
+        scope: "ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,read_insights,instagram_basic,instagram_manage_insights",
         auth_type: "rerequest",
         return_scopes: true,
       }

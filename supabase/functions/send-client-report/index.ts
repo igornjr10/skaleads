@@ -1,16 +1,28 @@
+// TESTE DE ENTREGA — nao e o relatorio do cliente.
+//
+// Desde 21/09/2026 o relatorio que vai para o cliente e montado no navegador
+// pelo `ReportPdfTemplate` (logo, fonte do design system, criativos com
+// miniatura) e enviado por `send-report-whatsapp`. Esta function continua viva
+// so para o botao de teste da aba Automacoes, que precisa mandar para um
+// destino escolhido a mao — coisa que o envio normal nao faz, porque ele
+// sempre entrega no numero ou grupo do proprio cliente.
+//
+// O PDF daqui e simples de proposito: ele existe para provar que o cano de
+// WhatsApp esta aberto, nao para ser lido por cliente. Se um dia precisar ser
+// bonito, o caminho e o navegador gerar e esta function sumir — nao
+// reimplementar o layout rico aqui e ficar com dois relatorios divergindo.
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getUser, ownsClient, isServiceRole, jsonResponse } from "../_shared/auth.ts";
-import { loadWhatsappConfig, sendDocument, sendText } from "../_shared/whatsapp.ts";
+import { corsHeaders, sendDocument, sendText } from "../_shared/whatsapp.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
 type Period = "1d" | "7d" | "14d" | "30d";
-type MetricKey = "spend" | "impressions" | "clicks" | "ctr" | "cpc" | "cpm" | "cpa" | "roas" | "conversions";
+type MetricKey =
+  | "spend" | "impressions" | "clicks" | "ctr" | "cpc" | "cpm" | "cpa" | "roas" | "conversions"
+  // Acoes de negocio local: e o que o cliente entende por resultado. Ja vinham
+  // da Meta em campaign_daily_metrics e nao apareciam em relatorio nenhum.
+  | "messages" | "calls" | "directions" | "leads";
 
 interface ReportTemplate {
   period: Period;
@@ -45,6 +57,10 @@ const METRIC_LABEL: Record<MetricKey, string> = {
   cpa: "🎯 CPA",
   roas: "📉 ROAS",
   conversions: "✅ Conversões",
+  messages: "💬 Conversas iniciadas",
+  calls: "📞 Ligações",
+  directions: "📍 Rotas traçadas",
+  leads: "📝 Cadastros",
 };
 
 const METRIC_LABEL_PLAIN: Record<MetricKey, string> = {
@@ -57,6 +73,10 @@ const METRIC_LABEL_PLAIN: Record<MetricKey, string> = {
   cpa: "CPA",
   roas: "ROAS",
   conversions: "Conversões",
+  messages: "Conversas iniciadas",
+  calls: "Ligações",
+  directions: "Rotas traçadas",
+  leads: "Cadastros",
 };
 
 function fmtBRL(v: number) {
@@ -105,7 +125,7 @@ async function buildReportPdf(params: {
 
   const margin = 50;
   let y = 780;
-  const brand = rgb(0.07, 0.80, 0.57);
+  const orange = rgb(0.98, 0.45, 0.09);
   const dark = rgb(0.15, 0.15, 0.15);
   const gray = rgb(0.45, 0.45, 0.45);
 
@@ -116,7 +136,7 @@ async function buildReportPdf(params: {
     y -= size + 8;
   };
 
-  draw("Relatório de Performance", { size: 20, bold: true, color: brand });
+  draw("Relatório de Performance", { size: 20, bold: true, color: orange });
   draw(params.clientName, { size: 14, bold: true });
   draw(params.periodLabel, { size: 10, color: gray });
   y -= 10;
@@ -137,7 +157,7 @@ async function buildReportPdf(params: {
 
   y -= 20;
   draw(`Gerado em ${params.generatedAt}`, { size: 9, color: gray });
-  draw("Enviado por Scale Ads", { size: 9, color: gray });
+  draw("Enviado por MarketProAds", { size: 9, color: gray });
 
   return doc.save();
 }
@@ -148,23 +168,12 @@ serve(async (req) => {
   try {
     const { client_id, template: templateOverride, save_template, targets: targetsOverride }: RequestPayload = await req.json();
 
-    // service_role ignora RLS: a carteira do usuario e checada aqui.
-    if (!isServiceRole(req)) {
-      const user = await getUser(req);
-      if (!user) return jsonResponse(corsHeaders, { error: "Não autenticado" }, 401);
-      if (!(await ownsClient(user.id, client_id))) {
-        return jsonResponse(corsHeaders, { error: "Cliente não encontrado na sua carteira" }, 404);
-      }
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
 
     if (!supabaseUrl || !svcKey) {
       throw new Error("Variáveis de ambiente não configuradas");
     }
-
-    const cfg = await loadWhatsappConfig();
 
     // ── 1. Buscar cliente ─────────────────────────────────────────────────────
     const [client] = await dbGet(
@@ -195,18 +204,39 @@ serve(async (req) => {
     const toStr = now.toISOString().split("T")[0];
 
     // ── 3. Buscar métricas diárias do período ─────────────────────────────────
-    const dailyMetrics: { spend: number; impressions: number; clicks: number }[] = await dbGet(
+    const dailyMetrics: {
+      spend: number; impressions: number; clicks: number;
+      messages: number; calls: number; directions: number; leads: number;
+    }[] = await dbGet(
       supabaseUrl, svcKey,
-      `campaign_daily_metrics?client_id=eq.${client_id}&date=gte.${fromStr}&date=lte.${toStr}&select=spend,impressions,clicks`
+      `campaign_daily_metrics?client_id=eq.${client_id}&date=gte.${fromStr}&date=lte.${toStr}&select=spend,impressions,clicks,messages,calls,directions,leads`
     );
+
+    // Dia sem linha nenhuma nao e dia com zero: e dia sem dado. Mandar "R$ 0,00"
+    // para o grupo do cliente afirma que nao houve investimento, quando a
+    // verdade e que o sync parou. Aconteceu com a DA CLOSET em 21/09/2026: a
+    // ultima metrica era de 01/09 e o relatorio saiu zerado.
+    if (dailyMetrics.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Sem metrica sincronizada para ${client.name} no periodo (${PERIOD_LABEL[tpl.period]}). Sincronize a conta antes de enviar: um relatorio zerado diz ao cliente que nao houve investimento.`,
+        }),
+        { status: 409, headers: { ...cors, "Content-Type": "application/json" } }
+      );
+    }
 
     const totals = dailyMetrics.reduce(
       (acc, row) => ({
         spend: acc.spend + (row.spend ?? 0),
         impressions: acc.impressions + (row.impressions ?? 0),
         clicks: acc.clicks + (row.clicks ?? 0),
+        messages: acc.messages + (row.messages ?? 0),
+        calls: acc.calls + (row.calls ?? 0),
+        directions: acc.directions + (row.directions ?? 0),
+        leads: acc.leads + (row.leads ?? 0),
       }),
-      { spend: 0, impressions: 0, clicks: 0 }
+      { spend: 0, impressions: 0, clicks: 0, messages: 0, calls: 0, directions: 0, leads: 0 }
     );
 
     const ctr = totals.impressions > 0 ? (totals.clicks / totals.impressions) * 100 : 0;
@@ -247,6 +277,10 @@ serve(async (req) => {
       cpa: cpa > 0 ? fmtBRL(cpa) : "—",
       roas: roas > 0 ? `${roas.toFixed(2)}x` : "—",
       conversions: fmtNum(totalConversions),
+      messages: fmtNum(totals.messages),
+      calls: fmtNum(totals.calls),
+      directions: fmtNum(totals.directions),
+      leads: fmtNum(totals.leads),
     };
 
     // ── 7. Montar mensagem ────────────────────────────────────────────────────
@@ -284,17 +318,17 @@ serve(async (req) => {
     }
 
     lines.push("");
-    lines.push("_Enviado por Scale Ads_");
+    lines.push("_Enviado por MarketProAds_");
 
     const message = lines.join("\n");
 
-    // ── 8. Enviar mensagem de texto pelo provedor ativo (para cada destino) ───
+    // ── 8. Enviar mensagem de texto (para cada destino) ─────
     let lastMessageId: string | null = null;
     const textErrors: string[] = [];
     for (const target of targets) {
       try {
-        const { messageId } = await sendText(cfg, target, message);
-        lastMessageId = messageId ?? lastMessageId;
+        const result = await sendText(target, message);
+        lastMessageId = result?.messageid ?? result?.id ?? lastMessageId;
       } catch (err) {
         textErrors.push(`${target}: ${(err as Error).message}`);
       }
@@ -327,7 +361,7 @@ serve(async (req) => {
       const mediaBase64 = base64Encode(new Uint8Array(pdfBytes).buffer);
 
       for (const target of targets) {
-        await sendDocument(cfg, { to: target, base64: mediaBase64, fileName });
+        await sendDocument(target, { base64: mediaBase64, fileName, caption: "" });
         pdfSent = true;
       }
     } catch (err) {

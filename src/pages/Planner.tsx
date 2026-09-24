@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   ChevronDown,
@@ -6,6 +6,7 @@ import {
   Database,
   KeyRound,
   ListChecks,
+  Lock,
   Plus,
   Rocket,
   Search,
@@ -22,6 +23,8 @@ import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientAvatar } from "@/components/ClientAvatar";
+import { useAuth } from "@/hooks/useAuth";
+import { errorMessage } from "@/lib/utils";
 
 interface Cliente {
   id: string;
@@ -49,11 +52,10 @@ const FASES = [
   { id: "geral", label: "Geral", icon: ClipboardList },
 ] as const;
 
-function faseMeta(id: string) {
-  return FASES.find((f) => f.id === id) ?? FASES[FASES.length - 1];
-}
-
 export default function Planner() {
+  const { role } = useAuth();
+  const podeEditar = role === "owner" || role === "admin";
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +74,11 @@ export default function Planner() {
     setLoading(true);
 
     const [clientesRes, tarefasRes] = await Promise.all([
-      supabase.from("clients").select("id, name, logo_url, status, created_at").order("created_at", { ascending: false }),
+      supabase
+        .from("clients")
+        .select("id, name, logo_url, status, created_at")
+        .neq("status", "archived")
+        .order("created_at", { ascending: false }),
       supabase.from("client_tasks").select("id, client_id, fase, titulo, done, done_at, posicao").order("posicao"),
     ]);
 
@@ -98,23 +104,30 @@ export default function Planner() {
     return mapa;
   }, [tarefas]);
 
+  const porClienteRef = useRef(porCliente);
+  porClienteRef.current = porCliente;
+
+  // Marcar um item muda a contagem de pendencias, e refazer ordem/filtro na hora faria o
+  // card pular de lugar (ou sumir do filtro "com pendencias") com o usuario no meio do
+  // checklist. A lista so e remontada quando muda a busca, o filtro ou a carteira.
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
+    const mapa = porClienteRef.current;
     return clientes
       .filter((c) => (termo ? c.name.toLowerCase().includes(termo) : true))
       .filter((c) => {
-        const lista = porCliente.get(c.id) ?? [];
+        const lista = mapa.get(c.id) ?? [];
         const pendentes = lista.filter((t) => !t.done).length;
         if (filtro === "onboarding") return lista.length === 0 || pendentes > 0;
         if (filtro === "prontos") return lista.length > 0 && pendentes === 0;
         return true;
       })
       .sort((a, b) => {
-        const pa = (porCliente.get(a.id) ?? []).filter((t) => !t.done).length;
-        const pb = (porCliente.get(b.id) ?? []).filter((t) => !t.done).length;
+        const pa = (mapa.get(a.id) ?? []).filter((t) => !t.done).length;
+        const pb = (mapa.get(b.id) ?? []).filter((t) => !t.done).length;
         return pb - pa;
       });
-  }, [clientes, porCliente, busca, filtro]);
+  }, [clientes, busca, filtro]);
 
   const resumo = useMemo(() => {
     const emOnboarding = clientes.filter((c) => {
@@ -135,13 +148,13 @@ export default function Planner() {
     const { error } = await supabase.from("client_tasks").update({ done: novo }).eq("id", tarefa.id);
     if (error) {
       setTarefas((atual) => atual.map((t) => (t.id === tarefa.id ? { ...t, done: tarefa.done } : t)));
-      toast.error(error.message);
+      toast.error(errorMessage(error, "Nao foi possivel atualizar o item"));
     }
   }
 
   async function gerarChecklist(clienteId: string) {
     const { error } = await supabase.rpc("seed_client_tasks", { _client_id: clienteId });
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(errorMessage(error, "Nao foi possivel gerar o checklist"));
     toast.success("Checklist padrão aplicado");
     carregar();
   }
@@ -159,7 +172,7 @@ export default function Planner() {
       .select("id, client_id, fase, titulo, done, done_at, posicao")
       .single();
 
-    if (error) return toast.error(error.message);
+    if (error) return toast.error(errorMessage(error, "Nao foi possivel adicionar o item"));
     setTarefas((atual) => [...atual, data as Tarefa]);
     setNovoTitulo((atual) => ({ ...atual, [clienteId]: "" }));
   }
@@ -170,7 +183,7 @@ export default function Planner() {
     const { error } = await supabase.from("client_tasks").delete().eq("id", tarefa.id);
     if (error) {
       setTarefas(backup);
-      toast.error(error.message);
+      toast.error(errorMessage(error, "Nao foi possivel remover o item"));
     }
   }
 
@@ -227,6 +240,13 @@ export default function Planner() {
           ))}
         </div>
       </div>
+
+      {!podeEditar && (
+        <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-card/40 px-4 py-3 text-xs text-muted-foreground">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          Seu perfil ({role ?? "sem role"}) vê o andamento, mas só owner e admin marcam itens.
+        </div>
+      )}
 
       {/* ── Filtros ─────────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -305,17 +325,19 @@ export default function Planner() {
                   </div>
 
                   {lista.length === 0 ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        gerarChecklist(cliente.id);
-                      }}
-                    >
-                      Gerar checklist
-                    </Button>
+                    podeEditar && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          gerarChecklist(cliente.id);
+                        }}
+                      >
+                        Gerar checklist
+                      </Button>
+                    )
                   ) : (
                     <ChevronDown
                       className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expandido ? "rotate-180" : ""}`}
@@ -349,6 +371,7 @@ export default function Planner() {
                                 >
                                   <Checkbox
                                     checked={tarefa.done}
+                                    disabled={!podeEditar}
                                     onCheckedChange={() => alternar(tarefa)}
                                     className="shrink-0"
                                   />
@@ -359,14 +382,16 @@ export default function Planner() {
                                   >
                                     {tarefa.titulo}
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => remover(tarefa)}
-                                    className="shrink-0 text-muted-foreground/0 transition-colors hover:text-destructive group-hover:text-muted-foreground/60"
-                                    title="Remover item"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
+                                  {podeEditar && (
+                                    <button
+                                      type="button"
+                                      onClick={() => remover(tarefa)}
+                                      className="shrink-0 text-muted-foreground/0 transition-colors hover:text-destructive group-hover:text-muted-foreground/60"
+                                      title="Remover item"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -376,34 +401,36 @@ export default function Planner() {
                     </div>
 
                     {/* Item avulso: cada cliente tem uma exigencia que o padrao nao cobre */}
-                    <div className="mt-5 flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row">
-                      <Input
-                        value={novoTitulo[cliente.id] ?? ""}
-                        onChange={(e) => setNovoTitulo((a) => ({ ...a, [cliente.id]: e.target.value }))}
-                        onKeyDown={(e) => e.key === "Enter" && adicionar(cliente.id)}
-                        placeholder="Adicionar item para este cliente..."
-                        className="flex-1"
-                      />
-                      <Select
-                        value={novaFase[cliente.id] ?? "geral"}
-                        onValueChange={(v) => setNovaFase((a) => ({ ...a, [cliente.id]: v }))}
-                      >
-                        <SelectTrigger className="sm:w-44">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {FASES.map((f) => (
-                            <SelectItem key={f.id} value={f.id}>
-                              {f.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Button onClick={() => adicionar(cliente.id)} className="shrink-0">
-                        <Plus className="mr-1.5 h-4 w-4" />
-                        Adicionar
-                      </Button>
-                    </div>
+                    {podeEditar && (
+                      <div className="mt-5 flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row">
+                        <Input
+                          value={novoTitulo[cliente.id] ?? ""}
+                          onChange={(e) => setNovoTitulo((a) => ({ ...a, [cliente.id]: e.target.value }))}
+                          onKeyDown={(e) => e.key === "Enter" && adicionar(cliente.id)}
+                          placeholder="Adicionar item para este cliente..."
+                          className="flex-1"
+                        />
+                        <Select
+                          value={novaFase[cliente.id] ?? "geral"}
+                          onValueChange={(v) => setNovaFase((a) => ({ ...a, [cliente.id]: v }))}
+                        >
+                          <SelectTrigger className="sm:w-44">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FASES.map((f) => (
+                              <SelectItem key={f.id} value={f.id}>
+                                {f.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button onClick={() => adicionar(cliente.id)} className="shrink-0">
+                          <Plus className="mr-1.5 h-4 w-4" />
+                          Adicionar
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </Card>

@@ -1,17 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getUser, ownsClient, isServiceRole, jsonResponse } from "../_shared/auth.ts";
-import { loadWhatsappConfig, sendDocument } from "../_shared/whatsapp.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, sendDocument, sendText } from "../_shared/whatsapp.ts";
 
 interface RequestPayload {
   client_id: string;
   file_name: string;
   media_base64: string;
   caption?: string;
+  /** Resumo enviado como mensagem propria, ANTES do PDF. */
+  text?: string;
 }
 
 function dbGet(supabaseUrl: string, svcKey: string, path: string) {
@@ -28,21 +24,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { client_id, file_name, media_base64, caption }: RequestPayload = await req.json();
+    const { client_id, file_name, media_base64, caption, text }: RequestPayload = await req.json();
 
     if (!client_id || !file_name || !media_base64) {
       throw new Error("client_id, file_name e media_base64 são obrigatórios");
-    }
-
-    // service_role ignora RLS: a carteira do usuario e checada aqui. O
-    // run-report-schedules chama esta function com a propria service key —
-    // nesse caminho nao ha usuario e o agendamento ja definiu o cliente.
-    if (!isServiceRole(req)) {
-      const user = await getUser(req);
-      if (!user) return jsonResponse(corsHeaders, { error: "Não autenticado" }, 401);
-      if (!(await ownsClient(user.id, client_id))) {
-        return jsonResponse(corsHeaders, { error: "Cliente não encontrado na sua carteira" }, 404);
-      }
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -51,8 +36,6 @@ serve(async (req) => {
     if (!supabaseUrl || !svcKey) {
       throw new Error("Variáveis de ambiente não configuradas");
     }
-
-    const cfg = await loadWhatsappConfig();
 
     const [client] = await dbGet(
       supabaseUrl, svcKey,
@@ -63,15 +46,27 @@ serve(async (req) => {
     const target = client.whatsapp_group_jid || client.whatsapp_number;
     if (!target) throw new Error("Cliente sem número ou grupo de WhatsApp cadastrado");
 
-    const { messageId } = await sendDocument(cfg, {
-      to: target,
+    // O resumo vai como mensagem separada e ANTES do anexo, nao como legenda:
+    // no WhatsApp a legenda de documento fica escondida atras do nome do
+    // arquivo, e o cliente teria que abrir o PDF para ver qualquer numero.
+    let textoEnviado = false;
+    if (text?.trim()) {
+      await sendText(target, text.trim());
+      textoEnviado = true;
+    }
+
+    const result = await sendDocument(target, {
       base64: media_base64,
       fileName: file_name,
       caption: caption ?? "",
     });
 
     return new Response(
-      JSON.stringify({ success: true, message_id: messageId }),
+      JSON.stringify({
+        success: true,
+        text_sent: textoEnviado,
+        message_id: result?.messageid ?? result?.id ?? null,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

@@ -6,20 +6,22 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+// A Groq desliga modelo com data marcada (o llama-3.3-70b-versatile morreu em
+// 16/08/2026). Como secret, trocar o modelo nao exige redeploy da function.
+const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
 
-async function dbGet(baseUrl: string, anonKey: string, authHeader: string, table: string, qs: Record<string, string>): Promise<any[]> {
+async function dbGet(baseUrl: string, serviceKey: string, dbAuthHeader: string, table: string, qs: Record<string, string>): Promise<any[]> {
   const url = new URL(`${baseUrl}/rest/v1/${table}`);
   Object.entries(qs).forEach(([k, v]) => url.searchParams.set(k, v));
   const res = await fetch(url.toString(), {
     headers: {
-      "apikey": anonKey,
-      "Authorization": authHeader,
+      "apikey": serviceKey,
+      "Authorization": dbAuthHeader,
       "Accept": "application/json",
     },
   });
@@ -30,30 +32,30 @@ async function dbGet(baseUrl: string, anonKey: string, authHeader: string, table
   return res.json();
 }
 
-async function fetchContext(baseUrl: string, anonKey: string, authHeader: string, clientId?: string): Promise<string> {
+async function fetchContext(baseUrl: string, serviceKey: string, dbAuthHeader: string, clientId?: string): Promise<string> {
   const since30d = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
 
   if (clientId) {
     const [clientRows, campaigns, metrics, auditRows] = await Promise.all([
-      dbGet(baseUrl, anonKey, authHeader, "clients", {
+      dbGet(baseUrl, serviceKey, dbAuthHeader, "clients", {
         select: "name,status,meta_sync_status,city,state",
         id: `eq.${clientId}`,
         limit: "1",
       }),
-      dbGet(baseUrl, anonKey, authHeader, "campaigns", {
+      dbGet(baseUrl, serviceKey, dbAuthHeader, "campaigns", {
         select: "name,status,objective,spend,impressions,clicks,ctr,cpc,conversions",
         "client_id": `eq.${clientId}`,
         order: "spend.desc",
         limit: "15",
       }),
-      dbGet(baseUrl, anonKey, authHeader, "campaign_daily_metrics", {
+      dbGet(baseUrl, serviceKey, dbAuthHeader, "campaign_daily_metrics", {
         select: "date,spend,impressions,clicks",
         "client_id": `eq.${clientId}`,
         date: `gte.${since30d}`,
         order: "date.desc",
         limit: "30",
       }),
-      dbGet(baseUrl, anonKey, authHeader, "audit_runs", {
+      dbGet(baseUrl, serviceKey, dbAuthHeader, "audit_runs", {
         select: "score,category_scores,results,created_at",
         "client_id": `eq.${clientId}`,
         order: "created_at.desc",

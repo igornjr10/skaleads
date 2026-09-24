@@ -12,14 +12,23 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert, QrCode, RotateCw, Power, PlugZap } from "lucide-react";
+import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert, QrCode, RotateCw, Power, Trash2 } from "lucide-react";
 
 interface Member {
   user_id: string;
   email: string | null;
   full_name: string | null;
   role: string;
+  company_id: string | null;
 }
+
+interface Company {
+  id: string;
+  name: string;
+}
+
+// Radix nao aceita "" como value de SelectItem.
+const NO_COMPANY = "none";
 
 interface WhatsAppGroup {
   id: string;
@@ -27,8 +36,6 @@ interface WhatsAppGroup {
   size: number;
   pictureUrl: string | null;
 }
-
-type Provider = "evolution" | "uazapi";
 
 interface InstanceStatus {
   state: "open" | "connecting" | "close" | "unknown";
@@ -39,30 +46,32 @@ interface InstanceStatus {
   instance: string;
   ownerJid: string | null;
   profileName: string | null;
-  provider?: Provider;
-}
-
-interface ProviderConfig {
-  provider: Provider;
-  evolution: { configured: boolean; instance: string | null };
-  uazapi: {
-    baseUrl: string;
-    tokenMask: string | null;
-    adminTokenMask: string | null;
-    configured: boolean;
-  };
 }
 
 const ROLES = ["owner", "admin", "analyst", "viewer"] as const;
 
-const PROVIDER_LABEL: Record<Provider, string> = {
-  evolution: "Evolution API",
-  uazapi: "Uazapi",
+const IMPACT_LABELS: Record<string, string> = {
+  reports: "relatórios",
+  report_templates: "templates de relatório",
+  report_schedules: "agendamentos de relatório",
+  alerts: "alertas",
+  notifications: "notificações",
 };
 
 type AdminAction = "restart" | "logout" | "connect";
 
-// O erro real da Evolution vem embrulhado em duas camadas de `response`
+// O QR vem normalizado pela Edge Function como `qrcode.base64`, e o base64
+// às vezes já vem com o prefixo data: e às vezes não.
+function extractQr(response: unknown): { image: string | null; pairingCode: string | null } {
+  const payload = (response as any)?.qrcode ?? response;
+  const raw = payload?.base64 ?? null;
+  return {
+    image: raw ? (String(raw).startsWith("data:") ? raw : `data:image/png;base64,${raw}`) : null,
+    pairingCode: payload?.pairingCode ?? null,
+  };
+}
+
+// O erro real vem embrulhado em duas camadas de `response`
 function adminErrorMessage(detail: any, fallback: string): string {
   const nested = detail?.response?.response?.message ?? detail?.response?.message;
   if (Array.isArray(nested)) return nested.join(" · ");
@@ -70,17 +79,11 @@ function adminErrorMessage(detail: any, fallback: string): string {
   return detail?.error ?? fallback;
 }
 
-// FunctionsHttpError esconde o corpo — sem ele a tela mostra "non-2xx status"
-// em vez do erro que o provedor realmente devolveu.
-async function invokeError(error: unknown, fallback: string): Promise<string> {
-  const detail = await (error as any)?.context?.json?.().catch(() => null);
-  return detail?.error || (error as any)?.message || fallback;
-}
-
 export default function Settings() {
   const { user, role } = useAuth();
   const isOwner = role === "owner";
   const [members, setMembers] = useState<Member[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [fullName, setFullName] = useState("");
   const [whatsappGroups, setWhatsappGroups] = useState<WhatsAppGroup[] | null>(null);
   const [loadingGroups, setLoadingGroups] = useState(false);
@@ -90,22 +93,25 @@ export default function Settings() {
   const [adminBusy, setAdminBusy] = useState<AdminAction | null>(null);
   const [qrImage, setQrImage] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
-  const [providerConfig, setProviderConfig] = useState<ProviderConfig | null>(null);
-  const [provider, setProvider] = useState<Provider>("evolution");
-  const [uazapiUrl, setUazapiUrl] = useState("");
-  const [uazapiToken, setUazapiToken] = useState("");
-  const [uazapiAdminToken, setUazapiAdminToken] = useState("");
-  const [savingProvider, setSavingProvider] = useState(false);
-  const [testingProvider, setTestingProvider] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Member | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<Record<string, number> | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deletingUser, setDeletingUser] = useState(false);
 
   async function load() {
     const { data: profiles } = await supabase.from("profiles").select("id, email, full_name");
     const { data: roles } = await supabase.from("user_roles").select("user_id, role");
+    const { data: companiesData } = await supabase.from("companies").select("id, name").order("name");
+    const { data: links } = await supabase.from("user_companies").select("user_id, company_id");
+
+    setCompanies((companiesData as Company[]) ?? []);
+
     const merged: Member[] = (profiles ?? []).map((p) => ({
       user_id: p.id,
       email: p.email,
       full_name: p.full_name,
       role: roles?.find((r) => r.user_id === p.id)?.role ?? "viewer",
+      company_id: links?.find((l) => l.user_id === p.id)?.company_id ?? null,
     }));
     setMembers(merged);
 
@@ -113,13 +119,7 @@ export default function Settings() {
     setFullName(me?.full_name ?? "");
   }
 
-  useEffect(() => {
-    if (!user) return;
-    load();
-    checkInstanceStatus();
-    if (isOwner) loadProviderConfig();
-    /* eslint-disable-next-line */
-  }, [user?.id, isOwner]);
+  useEffect(() => { if (user) { load(); checkInstanceStatus(); } /* eslint-disable-next-line */ }, [user?.id]);
 
   // Enquanto o QR estiver na tela, detectar o pareamento sozinho — o usuário
   // está com o celular na mão, não vai clicar em "atualizar"
@@ -150,7 +150,11 @@ export default function Settings() {
     setStatusError(null);
     try {
       const { data, error } = await supabase.functions.invoke("whatsapp-instance-status");
-      if (error) throw new Error(await invokeError(error, "Erro ao consultar a instância"));
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da uazapi
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
       if (data?.error) throw new Error(data.error);
       setInstanceStatus(data as InstanceStatus);
     } catch (err) {
@@ -158,74 +162,6 @@ export default function Settings() {
       setStatusError(err instanceof Error ? err.message : "Erro ao consultar a instância");
     } finally {
       setLoadingStatus(false);
-    }
-  }
-
-  async function loadProviderConfig() {
-    const { data, error } = await supabase.functions.invoke("whatsapp-provider-config", {
-      body: { action: "get" },
-    });
-    if (error || data?.error) return;
-
-    const cfg = data as ProviderConfig;
-    setProviderConfig(cfg);
-    setProvider(cfg.provider);
-    setUazapiUrl(cfg.uazapi.baseUrl);
-  }
-
-  async function saveProviderConfig() {
-    setSavingProvider(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("whatsapp-provider-config", {
-        body: {
-          action: "save",
-          provider,
-          baseUrl: uazapiUrl,
-          token: uazapiToken,
-          adminToken: uazapiAdminToken,
-        },
-      });
-      if (error) throw new Error(await invokeError(error, "Falha ao salvar"));
-      if (data?.error) throw new Error(data.error);
-
-      // Os campos de segredo saem da tela depois de gravados: o que fica e a
-      // mascara devolvida pelo backend.
-      setUazapiToken("");
-      setUazapiAdminToken("");
-      toast.success(`Provedor ativo: ${PROVIDER_LABEL[provider]}`);
-
-      await loadProviderConfig();
-      setQrImage(null);
-      setPairingCode(null);
-      await checkInstanceStatus();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao salvar", { duration: 15000 });
-    } finally {
-      setSavingProvider(false);
-    }
-  }
-
-  async function testProviderConfig() {
-    setTestingProvider(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("whatsapp-provider-config", {
-        body: { action: "test" },
-      });
-      if (error) throw new Error(await invokeError(error, "Falha no teste"));
-      if (data?.error) throw new Error(data.error);
-
-      const status = data.status as InstanceStatus;
-      setInstanceStatus(status);
-      setStatusError(null);
-      if (status.connected) {
-        toast.success(`${PROVIDER_LABEL[data.provider as Provider]} respondeu: ${status.message}`);
-      } else {
-        toast.warning(`${PROVIDER_LABEL[data.provider as Provider]} respondeu: ${status.message}`, { duration: 12000 });
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha no teste", { duration: 15000 });
-    } finally {
-      setTestingProvider(false);
     }
   }
 
@@ -240,22 +176,22 @@ export default function Settings() {
       if (data?.error) throw new Error(data.error);
 
       if (action === "connect") {
-        if (!data?.qrcode) {
+        const { image, pairingCode: code } = extractQr(data?.response);
+        if (!image) {
           setQrImage(null);
           setPairingCode(null);
-          // Os dois provedores só oferecem QR quando consideram a sessão
-          // encerrada. Se acham que estão conectados — mesmo com o socket
-          // morto — devolvem só o estado.
+          // Instância já conectada não precisa de QR — a uazapi devolve só o
+          // estado. Para trocar o número é preciso Desconectar antes.
           toast.info(
-            `A ${PROVIDER_LABEL[provider]} considera esta instância conectada e por isso não gerou QR. ` +
-            "Se os envios estão falhando, use Reiniciar instância; se não resolver, Desconectar e então gerar o QR.",
+            "A instância já está conectada, por isso não veio QR. " +
+            "Para parear outro número, use Desconectar e gere o QR de novo.",
             { duration: 15000 }
           );
           await checkInstanceStatus();
           return;
         }
-        setQrImage(data.qrcode);
-        setPairingCode(data.paircode ?? null);
+        setQrImage(image);
+        setPairingCode(code);
         toast.success("QR Code gerado — leia com o WhatsApp do número da instância");
         return;
       }
@@ -284,7 +220,11 @@ export default function Settings() {
     setLoadingGroups(true);
     try {
       const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
-      if (error) throw new Error(await invokeError(error, "Erro ao carregar grupos"));
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da uazapi
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
       if (data?.error) throw new Error(data.error);
       setWhatsappGroups(data.groups ?? []);
     } catch (err) {
@@ -306,6 +246,57 @@ export default function Settings() {
     if (error) return toast.error(error.message);
     toast.success("Papel atualizado");
     load();
+  }
+
+  // Um usuario por empresa na tela — a tabela suporta mais de uma, mas hoje nao
+  // ha caso de alguem atender duas.
+  async function changeCompany(userId: string, companyId: string | null) {
+    await supabase.from("user_companies").delete().eq("user_id", userId);
+    if (companyId) {
+      const { error } = await supabase.from("user_companies").insert({ user_id: userId, company_id: companyId });
+      if (error) return toast.error(error.message);
+    }
+    toast.success(companyId ? "Empresa atualizada" : "Usuario ficou sem empresa");
+    load();
+  }
+
+  async function invokeDeleteUser(body: Record<string, unknown>) {
+    const { data, error } = await supabase.functions.invoke("delete-user", { body });
+    if (error) {
+      // FunctionsHttpError esconde o corpo — precisamos dele para ver o motivo real
+      const detail = await (error as any)?.context?.json?.().catch(() => null);
+      throw new Error(detail?.error || error.message);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data as { user: Member; impact: Record<string, number> };
+  }
+
+  async function openDeleteDialog(member: Member) {
+    setDeleteTarget(member);
+    setDeleteImpact(null);
+    setDeleteConfirm("");
+    try {
+      const preview = await invokeDeleteUser({ user_id: member.user_id, dry_run: true });
+      setDeleteImpact(preview.impact ?? {});
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao consultar o impacto");
+      setDeleteTarget(null);
+    }
+  }
+
+  async function confirmDeleteUser() {
+    if (!deleteTarget) return;
+    setDeletingUser(true);
+    try {
+      await invokeDeleteUser({ user_id: deleteTarget.user_id });
+      toast.success(`${deleteTarget.email ?? "Usuario"} excluido`);
+      setDeleteTarget(null);
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao excluir usuario");
+    } finally {
+      setDeletingUser(false);
+    }
   }
 
   return (
@@ -347,6 +338,8 @@ export default function Settings() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Papel</TableHead>
+                <TableHead>Empresa</TableHead>
+                {isOwner && <TableHead className="w-12" />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -366,12 +359,100 @@ export default function Settings() {
                       <span className="text-xs uppercase text-muted-foreground">{m.role}</span>
                     )}
                   </TableCell>
+                  <TableCell>
+                    {m.role === "owner" ? (
+                      <span className="text-xs text-muted-foreground">Todas</span>
+                    ) : isOwner ? (
+                      <Select
+                        value={m.company_id ?? NO_COMPANY}
+                        onValueChange={(v) => changeCompany(m.user_id, v === NO_COMPANY ? null : v)}
+                      >
+                        <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NO_COMPANY}>Nenhuma (sem acesso)</SelectItem>
+                          {companies.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {companies.find((c) => c.id === m.company_id)?.name ?? "—"}
+                      </span>
+                    )}
+                  </TableCell>
+                  {isOwner && (
+                    <TableCell>
+                      {m.user_id !== user?.id && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground hover:text-destructive"
+                          onClick={() => openDeleteDialog(m)}
+                          title="Excluir usuario"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {deleteTarget?.email ?? "usuário"}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>
+                  A conta é removida em definitivo e a pessoa perde o acesso na hora. Não dá para desfazer.
+                </p>
+                {deleteImpact === null ? (
+                  <p className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Verificando o que será apagado junto...
+                  </p>
+                ) : Object.values(deleteImpact).some((n) => n > 0) ? (
+                  <div className="space-y-1">
+                    <p className="font-medium text-destructive">Estes dados serão apagados junto:</p>
+                    <ul className="list-disc pl-5">
+                      {Object.entries(deleteImpact)
+                        .filter(([, total]) => total > 0)
+                        .map(([table, total]) => (
+                          <li key={table}>{total} {IMPACT_LABELS[table] ?? table}</li>
+                        ))}
+                    </ul>
+                  </div>
+                ) : (
+                  <p>Nenhum relatório, alerta ou agendamento está vinculado a esta conta.</p>
+                )}
+                <p>
+                  Digite <span className="font-mono font-medium text-foreground">{deleteTarget?.email ?? "EXCLUIR"}</span> para confirmar.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            value={deleteConfirm}
+            onChange={(e) => setDeleteConfirm(e.target.value)}
+            placeholder={deleteTarget?.email ?? "EXCLUIR"}
+            autoComplete="off"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingUser}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deletingUser || deleteImpact === null || deleteConfirm !== (deleteTarget?.email ?? "EXCLUIR")}
+              onClick={(e) => { e.preventDefault(); confirmDeleteUser(); }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingUser ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Excluir definitivamente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card className="shadow-card">
         <CardHeader>
@@ -390,7 +471,7 @@ export default function Settings() {
                 </a>
               </li>
               <li>Em <strong className="text-foreground">Configurações → Básico</strong>, adicione em <em>Domínios do App</em> o domínio onde o app estará hospedado (ex: <code className="rounded bg-muted px-1 font-mono text-xs">localhost</code> para dev)</li>
-              <li>Em <strong className="text-foreground">Facebook Login → Configurações</strong>, adicione nas <em>URIs de redirecionamento OAuth válidas</em>: <code className="rounded bg-muted px-1 font-mono text-xs">https://ad-campaign-hub-one.vercel.app/</code> e <code className="rounded bg-muted px-1 font-mono text-xs">http://localhost:5173</code></li>
+              <li>Em <strong className="text-foreground">Facebook Login → Configurações</strong>, adicione nas <em>URIs de redirecionamento OAuth válidas</em>: <code className="rounded bg-muted px-1 font-mono text-xs">https://manager.marketprosystem.com/</code> e <code className="rounded bg-muted px-1 font-mono text-xs">http://localhost:8080</code></li>
               <li>Certifique-se de que o produto <strong className="text-foreground">Marketing API</strong> está adicionado ao App</li>
             </ol>
           </div>
@@ -433,109 +514,9 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {isOwner && (
-        <Card className="shadow-card">
-          <CardHeader>
-            <CardTitle>WhatsApp — Provedor da API</CardTitle>
-            <CardDescription>
-              Escolha por qual API as automações enviam mensagens. A troca vale na hora para alertas, relatórios
-              e mensagens agendadas — nenhum agendamento precisa ser refeito.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Provedor ativo</Label>
-              <Select value={provider} onValueChange={(v) => setProvider(v as Provider)}>
-                <SelectTrigger className="max-w-sm">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="evolution">
-                    Evolution API {providerConfig?.evolution.configured ? "" : "(sem credenciais)"}
-                  </SelectItem>
-                  <SelectItem value="uazapi">
-                    Uazapi {providerConfig?.uazapi.configured ? "" : "(sem credenciais)"}
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {provider === "evolution"
-                  ? `Credenciais da Evolution vêm dos secrets do Supabase${
-                      providerConfig?.evolution.instance ? ` · instância ${providerConfig.evolution.instance}` : ""
-                    }.`
-                  : "Credenciais da Uazapi ficam guardadas no banco, fora do alcance do navegador."}
-              </p>
-            </div>
-
-            <div className="space-y-4 rounded-lg border border-border p-4">
-              <div className="space-y-2">
-                <Label htmlFor="uazapi-url">URL do servidor Uazapi</Label>
-                <Input
-                  id="uazapi-url"
-                  value={uazapiUrl}
-                  onChange={(e) => setUazapiUrl(e.target.value)}
-                  placeholder="https://seuservidor.uazapi.com"
-                />
-                <p className="text-xs text-muted-foreground">
-                  O host que a Uazapi te entregou — normalmente <code className="font-mono">https://free.uazapi.com</code>{" "}
-                  ou o subdomínio do seu servidor dedicado.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="uazapi-token">Token da instância</Label>
-                <Input
-                  id="uazapi-token"
-                  type="password"
-                  value={uazapiToken}
-                  onChange={(e) => setUazapiToken(e.target.value)}
-                  placeholder={providerConfig?.uazapi.tokenMask ?? "cole o token da instância"}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {providerConfig?.uazapi.tokenMask
-                    ? `Token gravado: ${providerConfig.uazapi.tokenMask}. Deixe em branco para manter o atual.`
-                    : "É o token que identifica a instância na Uazapi. Só sai daqui para o banco."}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="uazapi-admin-token">Admin token (opcional)</Label>
-                <Input
-                  id="uazapi-admin-token"
-                  type="password"
-                  value={uazapiAdminToken}
-                  onChange={(e) => setUazapiAdminToken(e.target.value)}
-                  placeholder={providerConfig?.uazapi.adminTokenMask ?? "só para criar instâncias"}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {providerConfig?.uazapi.adminTokenMask
-                    ? `Admin token gravado: ${providerConfig.uazapi.adminTokenMask}. Deixe em branco para manter o atual.`
-                    : "Necessário apenas para operações administrativas do servidor. Os envios não usam."}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button onClick={saveProviderConfig} disabled={savingProvider}>
-                {savingProvider && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Salvar provedor
-              </Button>
-              <Button onClick={testProviderConfig} disabled={testingProvider} variant="outline">
-                {testingProvider
-                  ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  : <PlugZap className="mr-2 h-4 w-4" />}
-                Testar conexão
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle>
-            WhatsApp — Conexão e grupos ({PROVIDER_LABEL[instanceStatus?.provider ?? providerConfig?.provider ?? "evolution"]})
-          </CardTitle>
+          <CardTitle>WhatsApp — Conexão e grupos (uazapi)</CardTitle>
           <CardDescription>
             Reinicie, reconecte ou pareie a instância sem sair do sistema. Abaixo, os grupos ativos no número conectado —
             copie o JID para usar como destino de alertas/relatórios.
@@ -571,12 +552,10 @@ export default function Settings() {
                     ? "Não foi possível consultar a instância"
                     : instanceStatus?.connected
                       ? "WhatsApp conectado"
-                      : instanceStatus?.staleState
-                        ? "WhatsApp fora do ar (o painel da Evolution mostra conectado)"
-                        : "WhatsApp desconectado"}
+                      : "WhatsApp desconectado"}
               </p>
               <p className="text-xs text-muted-foreground break-words">
-                {statusError ?? instanceStatus?.message ?? "Consultando o provedor de WhatsApp"}
+                {statusError ?? instanceStatus?.message ?? "Consultando a uazapi"}
               </p>
               {instanceStatus?.connected && (instanceStatus.profileName || instanceStatus.ownerJid) && (
                 <p className="text-xs text-muted-foreground">
@@ -635,12 +614,10 @@ export default function Settings() {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      Desconectar a instância {instanceStatus?.instance ?? PROVIDER_LABEL[provider]}?
-                    </AlertDialogTitle>
+                    <AlertDialogTitle>Desconectar a instância {instanceStatus?.instance ?? "WhatsApp"}?</AlertDialogTitle>
                     <AlertDialogDescription>
                       Isso encerra a sessão do WhatsApp e exige ler o QR Code de novo, com o celular em mãos.
-                      A instância pode ser compartilhada com outro sistema — ele também para de enviar mensagens até o novo pareamento.
+                      A instância é compartilhada com outro sistema — ele também para de enviar mensagens até o novo pareamento.
                       Se o objetivo é só destravar um socket caído, prefira <strong>Reiniciar instância</strong>.
                     </AlertDialogDescription>
                   </AlertDialogHeader>

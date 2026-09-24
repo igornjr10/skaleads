@@ -1,106 +1,131 @@
-import { Bloco, LegalShell } from "@/components/LegalShell";
-
-// ATENCAO: revise com quem cuida do juridico antes de divulgar. Os campos entre
-// colchetes precisam dos dados reais da empresa — a Meta rejeita politica
-// generica ou de terceiros na revisao do app.
-const EMPRESA = "[RAZÃO SOCIAL]";
-const CNPJ = "[CNPJ]";
-const EMAIL = "[email de contato]";
+import { LegalPage, Section } from "@/components/legal/LegalPage";
 
 export default function Privacidade() {
   return (
-    <LegalShell titulo="Política de Privacidade" atualizadoEm="12 de agosto de 2026">
-      <Bloco titulo="Quem somos">
-        <p>
-          O Scale Ads é uma plataforma de gestão de campanhas de anúncios da Meta (Facebook e Instagram), operada por{" "}
-          {EMPRESA}, inscrita no CNPJ {CNPJ}. Esta política explica quais dados tratamos, para quê, e o que você pode
-          exigir de nós.
-        </p>
-      </Bloco>
+    <LegalPage title="Política de Privacidade" updatedAt="16 de setembro de 2026">
+      <p className="text-[15px] leading-relaxed text-muted-foreground">
+        Esta política descreve como a Scale Ads trata os dados usados no Ad Campaign Hub,
+        a plataforma interna de gestão de tráfego pago disponível em manager.marketprosystem.com.
+        O responsável pelo tratamento é a Scale Ads (CNPJ [PREENCHER]), que pode ser
+        contatada em contato@marketproads.com.
+      </p>
 
-      <Bloco titulo="Dados que coletamos">
-        <p>
-          <strong className="text-foreground">Da sua conta:</strong> nome, e-mail e senha (armazenada com hash pelo
-          nosso provedor de autenticação, nunca em texto puro).
-        </p>
-        <p>
-          <strong className="text-foreground">Dos clientes que você cadastra:</strong> nome, segmento, cidade, verba
-          mensal, telefone de contato e identificadores das contas de anúncios.
-        </p>
-        <p>
-          <strong className="text-foreground">Da Meta, via API Oficial:</strong> quando você conecta uma conta de
-          anúncios, buscamos campanhas, conjuntos, anúncios, criativos e métricas de desempenho (gasto, impressões,
-          cliques, alcance, conversões), além de dados públicos da Página e do perfil do Instagram vinculados. Não
-          acessamos mensagens privadas, lista de contatos nem dados pessoais dos usuários que viram seus anúncios.
-        </p>
-        <p>
-          <strong className="text-foreground">Credenciais de acesso à Meta:</strong> o token de acesso fornecido por
-          você é armazenado de forma isolada no servidor, sem qualquer permissão de leitura pela aplicação no navegador.
-        </p>
-      </Bloco>
+      <Section title="1. Quem usa a plataforma">
+        O Ad Campaign Hub é usado pela equipe da Scale Ads e pelos clientes da agência que
+        autorizam o acompanhamento das próprias contas de anúncio. Não há cadastro aberto ao
+        público: todo acesso é criado e controlado pela agência.
+      </Section>
 
-      <Bloco titulo="Para que usamos">
+      <Section title="2. Dados que coletamos">
+        <p><strong className="text-foreground">Dados de conta:</strong> nome, e-mail e perfil de acesso de cada usuário da plataforma.</p>
         <p>
-          Exclusivamente para operar o serviço: exibir painéis, sincronizar dados da Meta, auditar contas de anúncios,
-          disparar alertas configurados por você e gerar relatórios. Não vendemos, alugamos nem cedemos dados a
-          terceiros para publicidade.
+          <strong className="text-foreground">Dados da Meta:</strong> quando você conecta uma conta do Facebook,
+          armazenamos o token de acesso gerado pela Meta e os dados que ele autoriza — identificador e nome
+          da conta de anúncios, da Página do Facebook e do perfil do Instagram vinculado, além de campanhas,
+          conjuntos de anúncios, anúncios, criativos, públicos e métricas diárias de desempenho
+          (impressões, cliques, investimento, conversões e resultados equivalentes).
         </p>
-      </Bloco>
+        <p>
+          <strong className="text-foreground">Dados operacionais:</strong> informações cadastrais dos clientes
+          da agência, verbas, tarefas, anotações e o número de WhatsApp usado para receber relatórios e alertas.
+        </p>
+        <p>
+          Não coletamos dados de pessoas que visualizaram ou interagiram com os anúncios. Nenhuma informação
+          pessoal do público das campanhas é lida, armazenada ou processada pela plataforma.
+        </p>
+      </Section>
 
-      <Bloco titulo="Inteligência artificial">
+      <Section title="3. Para que usamos">
+        <p>Os dados obtidos da Meta são usados exclusivamente para:</p>
         <p>
-          Algumas funções (assistente, resumo de período, sugestão de criativos) enviam trechos das métricas da conta
-          para um provedor de modelo de linguagem, com a finalidade única de gerar aquela resposta. Não enviamos suas
-          credenciais nem dados pessoais dos clientes finais nesse processo.
+          • exibir o desempenho das campanhas em painéis e relatórios para o cliente dono da conta;<br />
+          • gerar auditorias e recomendações de otimização sobre a própria conta;<br />
+          • disparar alertas de desempenho para o gestor responsável pela conta;<br />
+          • enviar o relatório periódico ao cliente por WhatsApp ou link de dashboard.
         </p>
-      </Bloco>
+        <p>
+          Não vendemos, alugamos nem cedemos dados da Meta a terceiros, e não os usamos para
+          publicidade própria, enriquecimento de base, criação de públicos fora da conta de origem
+          ou qualquer finalidade alheia à gestão contratada.
+        </p>
+      </Section>
 
-      <Bloco titulo="Com quem compartilhamos">
+      <Section title="4. Permissões da Meta que solicitamos">
         <p>
-          Apenas com os provedores necessários para a operação: infraestrutura e banco de dados, envio de e-mails,
-          envio de mensagens por WhatsApp e o provedor de IA citado acima. Cada um recebe somente o dado indispensável à
-          sua função.
+          <strong className="text-foreground">ads_read</strong> — ler campanhas, anúncios e métricas da conta
+          para montar relatórios, painéis e auditorias.
         </p>
-      </Bloco>
+        <p>
+          <strong className="text-foreground">ads_management</strong> — ler a estrutura completa da conta e aplicar,
+          quando o cliente autoriza, as otimizações acordadas.
+        </p>
+        <p>
+          <strong className="text-foreground">business_management</strong> — localizar as contas de anúncio e ativos
+          aos quais o usuário tem acesso no Gerenciador de Negócios.
+        </p>
+        <p>
+          <strong className="text-foreground">pages_show_list</strong> e <strong className="text-foreground">pages_read_engagement</strong> —
+          identificar a Página vinculada à conta e ler suas métricas de alcance e engajamento.
+        </p>
+        <p>
+          <strong className="text-foreground">instagram_basic</strong> e <strong className="text-foreground">instagram_manage_insights</strong> —
+          identificar o perfil do Instagram vinculado e ler seus insights para o relatório.
+        </p>
+      </Section>
 
-      <Bloco titulo="Por quanto tempo guardamos">
+      <Section title="5. Onde os dados ficam e como são protegidos">
         <p>
-          Enquanto a sua conta existir. Ao desconectar uma conta de anúncios, a credencial correspondente é apagada
-          imediatamente. Ao encerrar a conta, os dados são removidos em até 30 dias, salvo obrigação legal de retenção.
+          Os dados ficam em um banco PostgreSQL gerenciado pelo Supabase, com criptografia em trânsito (HTTPS)
+          e em repouso. O acesso é restrito por autenticação e por políticas de segurança em nível de linha
+          (RLS), de modo que cada usuário só enxerga os clientes da própria empresa.
         </p>
-      </Bloco>
+        <p>
+          O token da Meta é guardado apenas para manter a sincronização automática funcionando e nunca é
+          exibido, compartilhado ou exportado.
+        </p>
+      </Section>
 
-      <Bloco titulo="Exclusão de dados">
+      <Section title="6. Compartilhamento com terceiros">
+        <p>Usamos os seguintes operadores, todos limitados ao necessário para a plataforma funcionar:</p>
         <p>
-          Você pode pedir a exclusão total dos seus dados a qualquer momento, escrevendo para {EMAIL} com o assunto
-          "Exclusão de dados" e o e-mail cadastrado. Confirmamos o atendimento em até 30 dias.
+          • <strong className="text-foreground">Supabase</strong> — banco de dados, autenticação e funções de servidor;<br />
+          • <strong className="text-foreground">Vercel</strong> — hospedagem da aplicação;<br />
+          • <strong className="text-foreground">Anthropic (Claude)</strong> — geração de análises em texto a partir de métricas agregadas;<br />
+          • <strong className="text-foreground">uazapi</strong> — envio dos relatórios e alertas por WhatsApp.
         </p>
         <p>
-          Para revogar o acesso do Scale Ads à sua conta da Meta sem apagar o histórico, use as Configurações de
-          integrações comerciais do Facebook. A revogação interrompe novas sincronizações na hora.
+          Nenhum desses operadores recebe o token de acesso da Meta, e nenhum é autorizado a usar os dados
+          para finalidade própria.
         </p>
-      </Bloco>
+      </Section>
 
-      <Bloco titulo="Seus direitos (LGPD)">
+      <Section title="7. Por quanto tempo guardamos">
         <p>
-          Você pode solicitar confirmação de tratamento, acesso, correção, anonimização, portabilidade e exclusão dos
-          seus dados, além de revogar consentimento. O canal para todos esses pedidos é {EMAIL}.
+          Métricas e histórico de campanhas ficam guardados enquanto durar a relação comercial, porque o
+          valor do relatório está justamente na comparação com períodos anteriores. Encerrado o contrato,
+          os dados da conta são apagados em até 30 dias, salvo o que a lei exigir manter.
         </p>
-      </Bloco>
+        <p>
+          A desconexão da conta Meta apaga o token imediatamente e interrompe qualquer nova coleta.
+        </p>
+      </Section>
 
-      <Bloco titulo="Segurança">
+      <Section title="8. Seus direitos">
         <p>
-          Tráfego cifrado em trânsito, isolamento por equipe no banco de dados (cada carteira só é visível para quem
-          pertence a ela) e credenciais da Meta fora do alcance do navegador. Nenhum sistema é infalível: se
-          identificarmos incidente com risco relevante, comunicaremos os afetados e a ANPD.
+          Conforme a LGPD (Lei 13.709/2018), você pode pedir confirmação de tratamento, acesso, correção,
+          portabilidade, anonimização ou exclusão dos seus dados, além de revogar o consentimento a
+          qualquer momento. Basta escrever para contato@marketproads.com — respondemos em até 15 dias.
         </p>
-      </Bloco>
+        <p>
+          Para apagar especificamente os dados vindos do Facebook e do Instagram, veja as instruções em{" "}
+          <a href="/exclusao-de-dados" className="text-primary underline underline-offset-4">Exclusão de dados</a>.
+        </p>
+      </Section>
 
-      <Bloco titulo="Contato">
-        <p>
-          Dúvidas sobre esta política ou sobre o tratamento dos seus dados: {EMAIL}.
-        </p>
-      </Bloco>
-    </LegalShell>
+      <Section title="9. Mudanças nesta política">
+        Se esta política mudar, a data de atualização no topo da página muda junto, e avisamos os usuários
+        ativos por e-mail antes de a alteração passar a valer.
+      </Section>
+    </LegalPage>
   );
 }

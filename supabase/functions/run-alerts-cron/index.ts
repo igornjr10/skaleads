@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { loadWhatsappConfig, sendText } from "../_shared/whatsapp.ts";
+import { resolveTargets, sendText } from "../_shared/whatsapp.ts";
 
-type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "budget";
+type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "balance";
 type Comparator = "gt" | "gte" | "lt" | "lte" | "eq" | "change_pct";
 type Period = "1d" | "3d" | "7d" | "14d" | "30d";
 type EntityType = "CLIENT" | "CAMPAIGN";
@@ -117,26 +117,18 @@ async function getClientDailyTotals(url: string, key: string, clientId: string, 
   );
 }
 
-async function getClientMonthToDateSpend(url: string, key: string, clientId: string): Promise<number> {
-  const now = new Date();
-  const first = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-  const rows = await dbGet(url, key, `campaign_daily_metrics?client_id=eq.${clientId}&date=gte.${first}&select=spend`);
-  return (rows || []).reduce((s: number, r: any) => s + (r.spend ?? 0), 0);
-}
-
 async function computeClientMetric(
-  url: string, key: string, clientId: string, metric: MetricKey, days: number, budgetDebug?: unknown[]
+  url: string, key: string, clientId: string, metric: MetricKey, days: number
 ): Promise<number> {
   if (metric === "status") return 0;
 
-  if (metric === "budget") {
-    const [client] = await dbGet(url, key, `clients?id=eq.${clientId}&select=monthly_budget&limit=1`);
-    const budget = client?.monthly_budget || 0;
-    if (!budget) return 0;
-    const spent = await getClientMonthToDateSpend(url, key, clientId);
-    const pct = (spent / budget) * 100;
-    budgetDebug?.push({ clientId, budget, spent, pct: Number(pct.toFixed(2)) });
-    return pct;
+  // Saldo em reais da conta Meta, lido no ultimo sync. Conta sem saldo lido
+  // (pos-paga, ou sync que ainda nao rodou) devolve NaN de proposito: o
+  // applyComparator recusa NaN, entao ela nao dispara alerta de saldo baixo.
+  if (metric === "balance") {
+    const [client] = await dbGet(url, key, `clients?id=eq.${clientId}&select=meta_balance_cents&limit=1`);
+    const cents = client?.meta_balance_cents;
+    return cents === null || cents === undefined ? Number.NaN : cents / 100;
   }
 
   const totals = await getClientDailyTotals(url, key, clientId, days);
@@ -177,19 +169,22 @@ function applyComparator(actual: number | string, comparator: Comparator, thresh
 }
 
 async function evaluateConditionForClient(
-  url: string, key: string, clientId: string, condition: AlertCondition, budgetDebug?: unknown[]
+  url: string, key: string, clientId: string, condition: AlertCondition
 ): Promise<{ passes: boolean; value: number }> {
   const days = periodDays(condition.period);
 
   if (condition.comparator === "change_pct") {
     const current = await computeClientMetric(url, key, clientId, condition.metric, days);
     const previous = await computeClientMetric(url, key, clientId, condition.metric, days * 2);
+    // Metrica sem base (NaN) nao tem variacao: virar 0 aqui faria a conta sem
+    // dado passar em qualquer limite negativo, que e alarme falso garantido.
+    if (isNaN(current) || isNaN(previous)) return { passes: false, value: Number.NaN };
     const delta = previous > 0 ? ((current - previous) / previous) * 100 : 0;
     const threshold = typeof condition.value === "string" ? parseFloat(condition.value) : condition.value;
     return { passes: delta < threshold, value: delta };
   }
 
-  const value = await computeClientMetric(url, key, clientId, condition.metric, days, budgetDebug);
+  const value = await computeClientMetric(url, key, clientId, condition.metric, days);
   return { passes: applyComparator(value, condition.comparator, condition.value), value };
 }
 
@@ -197,7 +192,10 @@ async function evaluateConditionForCampaign(
   campaign: any, condition: AlertCondition
 ): Promise<{ passes: boolean; value: number | string }> {
   let value: number | string = 0;
-  if (condition.metric === "status") value = campaign.status ?? "";
+  // Saldo e da conta de anuncio, nao da campanha: NaN, que o applyComparator
+  // recusa, em vez de 0, que passaria em qualquer "menor que".
+  if (condition.metric === "balance") value = Number.NaN;
+  else if (condition.metric === "status") value = campaign.status ?? "";
   else if (condition.metric === "spend") value = campaign.spend ?? 0;
   else if (condition.metric === "ctr") value = campaign.ctr ?? 0;
   else if (condition.metric === "cpm") value = campaign.cpm ?? 0;
@@ -207,7 +205,7 @@ async function evaluateConditionForCampaign(
   return { passes: applyComparator(value, condition.comparator, condition.value), value };
 }
 
-async function evaluateAlert(url: string, key: string, alert: StoredAlert, budgetDebug?: unknown[]): Promise<FiredEntity[]> {
+async function evaluateAlert(url: string, key: string, alert: StoredAlert): Promise<FiredEntity[]> {
   const { conditions, logic } = alert.rule_json;
   if (!conditions || conditions.length === 0) return [];
 
@@ -230,7 +228,7 @@ async function evaluateAlert(url: string, key: string, alert: StoredAlert, budge
   if (entityType === "CLIENT") {
     for (const clientId of clientIds) {
       const results = await Promise.all(
-        conditions.map(c => evaluateConditionForClient(url, key, clientId, c, budgetDebug))
+        conditions.map(c => evaluateConditionForClient(url, key, clientId, c))
       );
       const passes = logic === "AND" ? results.every(r => r.passes) : results.some(r => r.passes);
 
@@ -273,15 +271,17 @@ async function evaluateAlert(url: string, key: string, alert: StoredAlert, budge
 
 function buildWhatsAppMessage(alert: StoredAlert, entities: FiredEntity[]): string {
   const now = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  const siteUrl = Deno.env.get("PUBLIC_SITE_URL") || "https://ad-campaign-hub-one.vercel.app";
+  const siteUrl = Deno.env.get("PUBLIC_SITE_URL") || "https://manager.marketprosystem.com";
 
   const primaryMetric = alert.rule_json.conditions[0]?.metric;
-  const valueSuffix = primaryMetric === "budget" ? "% da verba consumida" : "";
 
   const entityLines = entities
     .map(e => {
       const tipo = e.entityType === "CAMPAIGN" ? "📊 Campanha" : "👤 Cliente";
-      return `${tipo}: *${e.entityName}* — ${e.metricValue.toFixed(2)}${valueSuffix ? " " + valueSuffix : ""}`;
+      const valor = primaryMetric === "balance"
+        ? `R$ ${e.metricValue.toFixed(2).replace(".", ",")} de saldo`
+        : e.metricValue.toFixed(2);
+      return `${tipo}: *${e.entityName}* — ${valor}`;
     })
     .join("\n");
 
@@ -336,13 +336,10 @@ serve(async (req) => {
   let runError: string | null = null;
 
   try {
+    const whatsappConfigured = !!(Deno.env.get("UAZAPI_URL") && Deno.env.get("UAZAPI_TOKEN"));
     const managerNumber = Deno.env.get("MANAGER_WHATSAPP_NUMBER") ?? "";
 
     if (!supabaseUrl || !svcKey) throw new Error("SUPABASE_URL / SVC_ROLE_KEY não configurados");
-
-    // WhatsApp aqui e um canal opcional do alerta: sem provedor configurado o
-    // cron precisa seguir gravando os eventos em vez de abortar a rodada.
-    const whatsappCfg = await loadWhatsappConfig().catch(() => null);
 
     const alerts: StoredAlert[] = await dbGet(
       supabaseUrl, svcKey,
@@ -353,11 +350,10 @@ serve(async (req) => {
     const totalChecked = (alerts || []).length;
     const fired: { alertName: string; count: number }[] = [];
     const alertErrors: string[] = [];
-    const budgetDebug: unknown[] = [];
 
     for (const alert of (alerts || [])) {
       try {
-        const firedEntities = await evaluateAlert(supabaseUrl, svcKey, alert, budgetDebug);
+        const firedEntities = await evaluateAlert(supabaseUrl, svcKey, alert);
 
         if (firedEntities.length === 0) continue;
 
@@ -381,12 +377,21 @@ serve(async (req) => {
 
         const channels: AlertChannels = alert.channels;
 
-        const whatsappTarget = channels.whatsappTarget || managerNumber;
-        if (channels.whatsapp && whatsappCfg && whatsappTarget) {
+        if (channels.whatsapp && whatsappConfigured) {
           try {
-            await sendText(whatsappCfg, whatsappTarget, buildWhatsAppMessage(alert, firedEntities));
-          } catch {
-            // non-blocking
+            const targets = await resolveTargets(channels.whatsappTarget || managerNumber);
+            const message = buildWhatsAppMessage(alert, firedEntities);
+            // Um numero invalido nao pode calar os outros: cada envio tem o
+            // proprio catch, e o que falhou vai para o log da execucao.
+            for (const target of targets) {
+              try {
+                await sendText(target, message);
+              } catch (err) {
+                alertErrors.push(`${alert.name}: WhatsApp para ${target} falhou — ${(err as Error).message}`);
+              }
+            }
+          } catch (err) {
+            alertErrors.push(`${alert.name}: nao consegui resolver o destino — ${(err as Error).message}`);
           }
         }
 
@@ -397,7 +402,7 @@ serve(async (req) => {
       }
     }
 
-    runSummary = { checked: totalChecked, fired: totalFired, errors: alertErrors, budgetDebug };
+    runSummary = { checked: totalChecked, fired: totalFired, errors: alertErrors };
     return new Response(
       JSON.stringify({ success: true, checked: totalChecked, fired: totalFired, results: fired, errors: alertErrors }),
       { headers: { "Content-Type": "application/json" } }

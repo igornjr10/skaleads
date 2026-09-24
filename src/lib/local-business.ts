@@ -12,6 +12,9 @@ export const BUSINESS_SEGMENTS: OptionItem[] = [
   { value: "servicos", label: "Serviços" },
   { value: "educacao", label: "Educação" },
   { value: "imobiliario", label: "Imobiliário" },
+  // Feira, show e festa se comportam diferente de comercio: a campanha tem data
+  // de validade e o resultado e ingresso ou credencial, nao visita recorrente.
+  { value: "eventos", label: "Eventos" },
   { value: "outro", label: "Outro" },
 ];
 

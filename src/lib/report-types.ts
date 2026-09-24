@@ -33,7 +33,7 @@ export interface ReportData {
     logoUrl?: string | null;
     sourceLabels: string[];
     metrics: Array<{
-      key: "followers" | "profileViews" | "reach" | "engagement";
+      key: "followers" | "followersGained" | "followersNet" | "profileViews" | "reach" | "engagement" | "contentViews";
       label: string;
       value: number | null;
       source: string;

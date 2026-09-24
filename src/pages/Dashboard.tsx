@@ -195,11 +195,11 @@ export default function Dashboard() {
     (async () => {
       const { data: c } = await supabase
         .from("clients")
-        .select("meta_ad_account_id, meta_token_configured, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username, logo_url")
+        .select("meta_ad_account_id, meta_access_token, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username, logo_url")
         .eq("id", clientId)
         .maybeSingle();
 
-      if (!c?.meta_ad_account_id || !c?.meta_token_configured) {
+      if (!c?.meta_ad_account_id || !c?.meta_access_token) {
         if (active) {
           setReachFreq(null);
           setSocial(null);
@@ -212,13 +212,13 @@ export default function Dashboard() {
       const since = format(subDays(new Date(), periodDays), "yyyy-MM-dd");
       try {
         const [rf, sp] = await Promise.all([
-          fetchAccountReachFrequency(c.meta_ad_account_id, { clientId }, since, until).catch(() => null),
+          fetchAccountReachFrequency(c.meta_ad_account_id, c.meta_access_token, since, until).catch(() => null),
           fetchSocialPresence({
             pageId: c.meta_page_id,
             pageName: c.meta_page_name,
             instagramAccountId: c.meta_instagram_account_id,
             instagramUsername: c.meta_instagram_username,
-            clientId,
+            accessToken: c.meta_access_token,
             logoUrl: c.logo_url,
             since,
             until,
@@ -540,8 +540,8 @@ export default function Dashboard() {
                     <AreaChart data={chartSeries} margin={{ left: 10, right: 10, top: 10 }}>
                       <defs>
                         <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(160 84% 44%)" stopOpacity={0.5} />
-                          <stop offset="100%" stopColor="hsl(160 84% 44%)" stopOpacity={0} />
+                          <stop offset="0%" stopColor="hsl(24 95% 55%)" stopOpacity={0.5} />
+                          <stop offset="100%" stopColor="hsl(24 95% 55%)" stopOpacity={0} />
                         </linearGradient>
                         <linearGradient id="clicksFill" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="hsl(28 100% 65%)" stopOpacity={0.4} />
@@ -565,7 +565,7 @@ export default function Dashboard() {
                       />
                       <Legend wrapperStyle={{ fontSize: 12 }} />
                       <Area yAxisId="left" type="monotone" dataKey="spend" name="Gasto"
-                        stroke="hsl(160 84% 44%)" strokeWidth={2} fill="url(#spendFill)" />
+                        stroke="hsl(24 95% 55%)" strokeWidth={2} fill="url(#spendFill)" />
                       <Area yAxisId="right" type="monotone" dataKey="clicks" name="Cliques"
                         stroke="hsl(28 100% 65%)" strokeWidth={2} fill="url(#clicksFill)" />
                     </AreaChart>

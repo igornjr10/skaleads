@@ -7,13 +7,14 @@ import { AlertCircle, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
-import { ClientAvatar } from "@/components/ClientAvatar";
 
 interface SharedReport {
   id: string;
   name: string;
   data: ReportData;
   period: { start: string; end: string; label: string };
+  share_token: string;
+  view_count: number;
 }
 
 function KpiCard({ label, value }: { label: string; value: string }) {
@@ -42,7 +43,6 @@ function getPreferredMetrics(data: ReportData) {
   const visiblePreferences = preferences.includes("instagramProfileVisits")
     ? preferences
     : [...preferences, "instagramProfileVisits"];
-  const socialProfileViews = data.socialPresence?.metrics.find((metric) => metric.key === "profileViews")?.value ?? 0;
 
   const registry: Record<string, { label: string; value: string }> = {
     spend: {
@@ -62,8 +62,8 @@ function getPreferredMetrics(data: ReportData) {
       value: fmtNum(data.summary.messagesStarted || 0),
     },
     instagramProfileVisits: {
-      label: "Visitas no perfil",
-      value: fmtNum(data.summary.instagramProfileVisits || socialProfileViews || 0),
+      label: "Visitas pelo anuncio",
+      value: fmtNum(data.summary.instagramProfileVisits || 0),
     },
     phoneCalls: {
       label: "Ligacoes",
@@ -133,14 +133,14 @@ export default function ReportShare() {
     if (token) fetchReport();
   }, [token]);
 
-  // A tabela reports nao e legivel por anon: quem serve o link publico e a
-  // Edge Function, que valida o token com service role e conta a visita.
   async function fetchReport() {
-    const { data, error } = await supabase.functions.invoke("get-shared-report", {
-      body: { token },
-    });
+    const { data, error } = await supabase
+      .from("reports")
+      .select("id, name, data, period, share_token, view_count")
+      .eq("share_token", token!)
+      .single();
 
-    if (error || !data || data.error) {
+    if (error || !data) {
       setNotFound(true);
       setLoading(false);
       return;
@@ -148,6 +148,8 @@ export default function ReportShare() {
 
     setReport(data as SharedReport);
     setLoading(false);
+
+    supabase.rpc("increment_report_views", { p_share_token: token! }).then(() => {});
   }
 
   async function handleDownload() {
@@ -203,7 +205,9 @@ export default function ReportShare() {
       <div style={{ backgroundColor: primaryColor }} className="px-8 py-6 text-white">
         <p className="mb-1 text-sm opacity-75">{agencyName}</p>
         <div className="flex items-center gap-4">
-          <ClientAvatar name={data?.client?.name ?? "Cliente"} logoUrl={data?.client?.logoUrl} className="h-14 w-14" />
+          {data?.client?.logoUrl && (
+            <img src={data.client.logoUrl} alt={data.client.name} className="h-14 w-14 rounded-full border border-white/20 object-cover" />
+          )}
           <div>
             <h1 className="text-2xl font-bold">{data?.client?.name}</h1>
             <p className="mt-1 text-sm opacity-85">Relatorio de Performance - Meta Ads</p>

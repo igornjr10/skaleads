@@ -208,7 +208,7 @@ export default function Producao() {
     const [clientesRes, pessoasRes, demandasRes] = await Promise.all([
       supabase.from("clients").select("id, name, logo_url").eq("status", "active").order("name"),
       supabase.from("profiles").select("id, full_name, email"),
-      supabase.from("creative_tasks").select("*").order("posicao"),
+      supabase.from("producao_tarefas").select("*").order("posicao"),
     ]);
 
     if (demandasRes.error?.code === "42P01") {
@@ -254,7 +254,7 @@ export default function Producao() {
   async function moverPara(id: string, status: Demanda["status"]) {
     const anterior = demandas;
     setDemandas((atual) => atual.map((d) => (d.id === id ? { ...d, status } : d)));
-    const { error } = await supabase.from("creative_tasks").update({ status }).eq("id", id);
+    const { error } = await supabase.from("producao_tarefas").update({ status }).eq("id", id);
     if (error) {
       setDemandas(anterior);
       toast.error(error.message);
@@ -296,8 +296,8 @@ export default function Producao() {
     };
 
     const { error } = aberta.id
-      ? await supabase.from("creative_tasks").update(payload).eq("id", aberta.id)
-      : await supabase.from("creative_tasks").insert(payload);
+      ? await supabase.from("producao_tarefas").update(payload).eq("id", aberta.id)
+      : await supabase.from("producao_tarefas").insert(payload);
 
     setSalvando(false);
     if (error) return toast.error(error.message);
@@ -307,7 +307,7 @@ export default function Producao() {
 
   async function excluir() {
     if (!aberta?.id) return;
-    const { error } = await supabase.from("creative_tasks").delete().eq("id", aberta.id);
+    const { error } = await supabase.from("producao_tarefas").delete().eq("id", aberta.id);
     if (error) return toast.error(error.message);
     setAberta(null);
     carregar();

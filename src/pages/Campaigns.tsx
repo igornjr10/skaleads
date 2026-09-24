@@ -25,6 +25,7 @@ import {
   FolderKanban,
   Heart,
   Lightbulb,
+  MessageCircle,
   MousePointerClick,
   PanelsTopLeft,
   RefreshCw,
@@ -42,6 +43,7 @@ interface Ad {
   spend: number;
   impressions: number;
   clicks: number;
+  messages: number;
 }
 
 interface AdSet {
@@ -51,6 +53,7 @@ interface AdSet {
   spend: number;
   impressions: number;
   clicks: number;
+  messages: number;
   ads: Ad[];
 }
 
@@ -67,6 +70,7 @@ interface Campaign {
   cpc: number;
   cpm: number;
   conversions: number;
+  messages: number;
   ad_sets: AdSet[];
   client?: {
     name: string;
@@ -77,7 +81,7 @@ interface Client {
   id: string;
   name: string;
   meta_ad_account_id: string | null;
-  meta_token_configured: boolean | null;
+  meta_access_token: string | null;
 }
 
 type PerformanceFilter = "all" | "healthy" | "monitor" | "warning" | "critical" | "no-conversions";
@@ -90,8 +94,28 @@ type CampaignAlert = {
   suggestion: string;
 };
 
+// Campanha de mensagem nunca preenche `conversions` na Meta: o resultado dela e
+// a conversa iniciada. Ler as duas coisas pelo mesmo lugar evita a leitura falsa
+// de "gastou e nao converteu" numa campanha que so trouxe conversa no WhatsApp.
+function getResults(campaign: Campaign) {
+  const objective = (campaign.objective ?? "").toUpperCase();
+  const messages = campaign.messages ?? 0;
+  const messaging = messages > 0 || objective.includes("MESSAGES");
+
+  return {
+    messaging,
+    value: messaging ? messages : campaign.conversions,
+    label: messaging ? "conversas" : "conversoes",
+  };
+}
+
+function conversationLabel(count: number) {
+  return count === 1 ? "1 conversa" : `${formatNumber(count)} conversas`;
+}
+
 function getCpa(campaign: Campaign) {
-  return campaign.conversions > 0 ? campaign.spend / campaign.conversions : 0;
+  const { value } = getResults(campaign);
+  return value > 0 ? campaign.spend / value : 0;
 }
 
 function getHealth(campaign: Campaign) {
@@ -103,11 +127,15 @@ function getHealth(campaign: Campaign) {
     };
   }
 
-  if (campaign.spend > 300 && campaign.conversions === 0 && campaign.clicks >= 60) {
+  const results = getResults(campaign);
+
+  if (campaign.spend > 300 && results.value === 0 && campaign.clicks >= 60) {
     return {
       tone: "critical",
       label: "Sem retorno",
-      detail: "Gastou bem, recebeu cliques, mas ainda nao converteu.",
+      detail: results.messaging
+        ? "Gastou bem, recebeu cliques, mas nenhuma conversa comecou."
+        : "Gastou bem, recebeu cliques, mas ainda nao converteu.",
     };
   }
 
@@ -119,7 +147,7 @@ function getHealth(campaign: Campaign) {
     };
   }
 
-  if (campaign.ctr >= 2 && campaign.cpc <= 2.5 && campaign.conversions > 0) {
+  if (campaign.ctr >= 2 && campaign.cpc <= 2.5 && results.value > 0) {
     return {
       tone: "healthy",
       label: "Saudavel",
@@ -145,7 +173,8 @@ function getHealthBadgeClass(tone: string) {
 function matchesPerformanceFilter(campaign: Campaign, filter: PerformanceFilter) {
   if (filter === "all") return true;
   const health = getHealth(campaign);
-  if (filter === "no-conversions") return campaign.status === "ACTIVE" && campaign.spend > 0 && campaign.conversions === 0;
+  if (filter === "no-conversions")
+    return campaign.status === "ACTIVE" && campaign.spend > 0 && getResults(campaign).value === 0;
   return health.tone === filter;
 }
 
@@ -154,7 +183,7 @@ function sortCampaigns(campaigns: Campaign[], sortBy: SortOption) {
     if (sortBy === "name") return a.name.localeCompare(b.name);
     if (sortBy === "ctr") return b.ctr - a.ctr;
     if (sortBy === "clicks") return b.clicks - a.clicks;
-    if (sortBy === "conversions") return b.conversions - a.conversions;
+    if (sortBy === "conversions") return getResults(b).value - getResults(a).value;
     if (sortBy === "cpc") return a.cpc - b.cpc;
     return b.spend - a.spend;
   });
@@ -163,6 +192,7 @@ function sortCampaigns(campaigns: Campaign[], sortBy: SortOption) {
 function getCampaignAlerts(campaign: Campaign): CampaignAlert[] {
   const alerts: CampaignAlert[] = [];
   const cpa = getCpa(campaign);
+  const results = getResults(campaign);
 
   if (campaign.status === "ACTIVE" && campaign.ctr < 1) {
     alerts.push({
@@ -177,30 +207,38 @@ function getCampaignAlerts(campaign: Campaign): CampaignAlert[] {
   if (campaign.status === "ACTIVE" && cpa > 80) {
     alerts.push({
       key: "high-cpa",
-      label: "CPA alto",
-      message: `CPA em ${formatCurrency(cpa)} acima do ponto confortavel.`,
+      label: results.messaging ? "Conversa cara" : "CPA alto",
+      message: results.messaging
+        ? `Cada conversa esta custando ${formatCurrency(cpa)}.`
+        : `CPA em ${formatCurrency(cpa)} acima do ponto confortavel.`,
       severity: "critical",
-      suggestion: "Rever publico, evento de conversao e pagina antes de escalar.",
+      suggestion: results.messaging
+        ? "Rever publico e criativo, e cortar o anuncio que gasta sem trazer conversa."
+        : "Rever publico, evento de conversao e pagina antes de escalar.",
     });
   }
 
-  if (campaign.status === "ACTIVE" && campaign.spend > 300 && campaign.conversions === 0) {
+  if (campaign.status === "ACTIVE" && campaign.spend > 300 && results.value === 0) {
     alerts.push({
       key: "spend-no-result",
       label: "Gasto sem resultado",
-      message: `Ja investiu ${formatCurrency(campaign.spend)} sem conversoes.`,
+      message: `Ja investiu ${formatCurrency(campaign.spend)} sem ${results.label}.`,
       severity: "critical",
       suggestion: "Pausar ou reduzir verba ate validar oferta e segmentacao.",
     });
   }
 
-  if (campaign.status === "ACTIVE" && campaign.clicks > 100 && campaign.conversions <= 1) {
+  if (campaign.status === "ACTIVE" && campaign.clicks > 100 && results.value <= 1) {
     alerts.push({
       key: "weak-funnel",
       label: "Funil fraco",
-      message: "Recebe clique, mas quase nao transforma em conversao.",
+      message: results.messaging
+        ? "Recebe clique, mas quase ninguem chega a mandar mensagem."
+        : "Recebe clique, mas quase nao transforma em conversao.",
       severity: "warning",
-      suggestion: "Revisar pagina, checkout ou formulario.",
+      suggestion: results.messaging
+        ? "Revisar a mensagem de saudacao, a oferta e o tempo de resposta no WhatsApp."
+        : "Revisar pagina, checkout ou formulario.",
     });
   }
 
@@ -215,6 +253,18 @@ function getCampaignAlerts(campaign: Campaign): CampaignAlert[] {
   }
 
   return alerts;
+}
+
+// Em campanha de mensagem a pergunta e sempre "qual anuncio trouxe conversa",
+// entao o ranking manda; nos demais objetivos o gasto continua guiando a leitura.
+function sortAds(ads: Ad[], messaging: boolean) {
+  return [...ads].sort((a, b) => {
+    if (messaging) {
+      const diff = (b.messages ?? 0) - (a.messages ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return b.spend - a.spend;
+  });
 }
 
 function getSeverityClass(severity: CampaignAlert["severity"]) {
@@ -261,7 +311,7 @@ export default function Campaigns() {
   useEffect(() => {
     supabase
       .from("clients")
-      .select("id, name, meta_ad_account_id, meta_token_configured")
+      .select("id, name, meta_ad_account_id, meta_access_token")
       .eq("status", "active")
       .order("name")
       .then(({ data }) => setClients((data as Client[]) ?? []));
@@ -293,7 +343,7 @@ export default function Campaigns() {
 
   async function handleSync() {
     if (selectedClient === "all") {
-      const connected = clients.filter((client) => client.meta_ad_account_id && client.meta_token_configured);
+      const connected = clients.filter((client) => client.meta_ad_account_id && client.meta_access_token);
       if (!connected.length) {
         toast.error("Nenhum cliente conectado ao Meta Ads. Configure em Clientes.");
         return;
@@ -305,7 +355,7 @@ export default function Campaigns() {
       for (const client of connected) {
         setSyncProgress(`Sincronizando ${client.name}...`);
         try {
-          await syncClientData(client.id, client.meta_ad_account_id!, setSyncProgress);
+          await syncClientData(client.id, client.meta_ad_account_id!, client.meta_access_token!, setSyncProgress);
         } catch {
           errors++;
         }
@@ -322,7 +372,7 @@ export default function Campaigns() {
     }
 
     const client = clients.find((item) => item.id === selectedClient);
-    if (!client?.meta_ad_account_id || !client?.meta_token_configured) {
+    if (!client?.meta_ad_account_id || !client?.meta_access_token) {
       toast.error("Este cliente nao esta conectado ao Meta Ads. Configure em Clientes.");
       return;
     }
@@ -332,6 +382,7 @@ export default function Campaigns() {
       const result = await syncClientData(
         client.id,
         client.meta_ad_account_id,
+        client.meta_access_token,
         setSyncProgress
       );
 
@@ -377,15 +428,17 @@ export default function Campaigns() {
     return filteredCampaigns.reduce(
       (acc, campaign) => {
         const health = getHealth(campaign);
+        const results = getResults(campaign);
         acc.spend += campaign.spend;
         acc.clicks += campaign.clicks;
-        acc.conversions += campaign.conversions;
+        acc.results += results.value;
+        acc.messages += campaign.messages ?? 0;
         if (campaign.status === "ACTIVE") acc.active += 1;
         if (health.tone === "warning" || health.tone === "critical") acc.alerts += 1;
-        if (campaign.status === "ACTIVE" && campaign.spend > 0 && campaign.conversions === 0) acc.noConversions += 1;
+        if (campaign.status === "ACTIVE" && campaign.spend > 0 && results.value === 0) acc.noConversions += 1;
         return acc;
       },
-      { spend: 0, clicks: 0, conversions: 0, active: 0, alerts: 0, noConversions: 0 }
+      { spend: 0, clicks: 0, results: 0, messages: 0, active: 0, alerts: 0, noConversions: 0 }
     );
   }, [filteredCampaigns]);
 
@@ -470,10 +523,10 @@ export default function Campaigns() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/60 shadow-card">
+        <Card className="border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-amber-50/60 shadow-card">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
-              <div className="rounded-2xl bg-emerald-600 p-3 text-white shadow-sm">
+              <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-600">
                 <Sparkles className="h-5 w-5" />
               </div>
               <Badge variant="outline" className="border-emerald-200 bg-white/80 text-emerald-700">
@@ -510,7 +563,7 @@ export default function Campaigns() {
             </div>
             <div className="mt-4 text-sm text-muted-foreground">Campanhas com alerta</div>
             <div className="mt-1 text-3xl font-semibold tracking-tight">{summary.alerts}</div>
-            <div className="mt-2 text-xs text-muted-foreground">CTR baixo, CPC alto ou gasto sem conversao.</div>
+            <div className="mt-2 text-xs text-muted-foreground">CTR baixo, CPC alto ou gasto sem resultado.</div>
           </CardContent>
         </Card>
 
@@ -522,10 +575,11 @@ export default function Campaigns() {
               </div>
               <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Conversao</span>
             </div>
-            <div className="mt-4 text-sm text-muted-foreground">Sem conversao</div>
+            <div className="mt-4 text-sm text-muted-foreground">Sem resultado</div>
             <div className="mt-1 text-3xl font-semibold tracking-tight">{summary.noConversions}</div>
             <div className="mt-2 text-xs text-muted-foreground">
-              {formatNumber(summary.conversions)} conversoes somadas · {favoriteIds.length} favoritas
+              {formatNumber(summary.results)} resultados somados
+              {summary.messages > 0 && `, sendo ${conversationLabel(summary.messages)}`} · {favoriteIds.length} favoritas
             </div>
           </CardContent>
         </Card>
@@ -593,7 +647,7 @@ export default function Campaigns() {
                 <SelectItem value="monitor">Monitorar</SelectItem>
                 <SelectItem value="warning">Em atencao</SelectItem>
                 <SelectItem value="critical">Criticas</SelectItem>
-                <SelectItem value="no-conversions">Sem conversao</SelectItem>
+                <SelectItem value="no-conversions">Sem resultado</SelectItem>
               </SelectContent>
             </Select>
 
@@ -603,7 +657,7 @@ export default function Campaigns() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="spend">Maior gasto</SelectItem>
-                <SelectItem value="conversions">Mais conversoes</SelectItem>
+                <SelectItem value="conversions">Mais resultados</SelectItem>
                 <SelectItem value="clicks">Mais cliques</SelectItem>
                 <SelectItem value="ctr">Maior CTR</SelectItem>
                 <SelectItem value="cpc">Menor CPC</SelectItem>
@@ -645,8 +699,8 @@ export default function Campaigns() {
                   <TableHead className="text-right">Cliques</TableHead>
                   <TableHead className="text-right">CTR</TableHead>
                   <TableHead className="text-right">CPC</TableHead>
-                  <TableHead className="text-right">Conv.</TableHead>
-                  <TableHead className="text-right">CPA</TableHead>
+                  <TableHead className="text-right">Resultados</TableHead>
+                  <TableHead className="text-right">Custo/result.</TableHead>
                   <TableHead>Acoes</TableHead>
                 </TableRow>
               </TableHeader>
@@ -655,7 +709,8 @@ export default function Campaigns() {
                   const isOpen = openId === campaign.id;
                   const health = getHealth(campaign);
                   const alerts = getCampaignAlerts(campaign);
-                  const conversionShare = campaign.clicks > 0 ? Math.min((campaign.conversions / campaign.clicks) * 100, 100) : 0;
+                  const results = getResults(campaign);
+                  const conversionShare = campaign.clicks > 0 ? Math.min((results.value / campaign.clicks) * 100, 100) : 0;
                   const isFavorite = favoriteIds.includes(campaign.id);
                   const inReview = reviewIds.includes(campaign.id);
 
@@ -677,6 +732,7 @@ export default function Campaigns() {
                               <div className="text-xs text-muted-foreground">
                                 {campaign.ad_sets?.length ?? 0} conjunto(s) ·{" "}
                                 {campaign.ad_sets?.reduce((total, adSet) => total + (adSet.ads?.length ?? 0), 0) ?? 0} anuncio(s)
+                                {results.messaging && ` · ${conversationLabel(results.value)}`}
                               </div>
                             </div>
                           </TableCell>
@@ -698,9 +754,12 @@ export default function Campaigns() {
                           <TableCell className="text-right tabular-nums">{formatNumber(campaign.clicks)}</TableCell>
                           <TableCell className="text-right tabular-nums">{formatPercent(campaign.ctr)}</TableCell>
                           <TableCell className="text-right tabular-nums">{formatCurrency(campaign.cpc)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{formatNumber(campaign.conversions)}</TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {campaign.conversions > 0 ? formatCurrency(getCpa(campaign)) : "-"}
+                            <div>{formatNumber(results.value)}</div>
+                            <div className="text-[11px] font-normal text-muted-foreground">{results.label}</div>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {results.value > 0 ? formatCurrency(getCpa(campaign)) : "-"}
                           </TableCell>
                           <TableCell onClick={(event) => event.stopPropagation()}>
                             <div className="flex flex-wrap gap-1">
@@ -781,9 +840,14 @@ export default function Campaigns() {
                                     <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
                                       <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
                                         <Eye className="h-3.5 w-3.5" />
-                                        Conversao por clique
+                                        {results.messaging ? "Conversa por clique" : "Conversao por clique"}
                                       </div>
                                       <div className="mt-2 text-lg font-semibold">{conversionShare.toFixed(1)}%</div>
+                                      <div className="text-xs text-muted-foreground">
+                                        {results.messaging
+                                          ? `${conversationLabel(results.value)} em ${formatNumber(campaign.clicks)} cliques.`
+                                          : `${formatNumber(results.value)} conversoes em ${formatNumber(campaign.clicks)} cliques.`}
+                                      </div>
                                       <Progress value={conversionShare} className="mt-3 h-2" />
                                     </div>
 
@@ -852,6 +916,7 @@ export default function Campaigns() {
                                               <div className="text-xs text-muted-foreground">
                                                 {formatCurrency(adSet.spend)} · {formatNumber(adSet.impressions)} impressoes ·{" "}
                                                 {formatNumber(adSet.clicks)} cliques
+                                                {results.messaging && ` · ${conversationLabel(adSet.messages ?? 0)}`}
                                               </div>
                                             </div>
 
@@ -861,7 +926,7 @@ export default function Campaigns() {
                                           </div>
 
                                           <div className="mt-3 grid gap-2">
-                                            {(adSet.ads ?? []).map((ad) => (
+                                            {sortAds(adSet.ads ?? [], results.messaging).map((ad, index) => (
                                               <div
                                                 key={ad.id}
                                                 className="flex flex-col gap-2 rounded-lg border border-border/60 bg-background/80 p-3 sm:flex-row sm:items-center sm:justify-between"
@@ -870,12 +935,30 @@ export default function Campaigns() {
                                                   <div className="flex flex-wrap items-center gap-2">
                                                     <span className="text-sm font-medium">{ad.name}</span>
                                                     <StatusBadge status={ad.status} />
+                                                    {results.messaging && index === 0 && (ad.messages ?? 0) > 0 && (
+                                                      <Badge
+                                                        variant="outline"
+                                                        className="border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                      >
+                                                        <MessageCircle className="mr-1 h-3 w-3" />
+                                                        Mais conversas
+                                                      </Badge>
+                                                    )}
                                                   </div>
                                                   <div className="text-xs text-muted-foreground">
                                                     {formatNumber(ad.clicks)} cliques · {formatNumber(ad.impressions)} impressoes
                                                   </div>
                                                 </div>
-                                                <div className="text-sm font-medium tabular-nums">{formatCurrency(ad.spend)}</div>
+                                                <div className="text-right">
+                                                  <div className="text-sm font-medium tabular-nums">{formatCurrency(ad.spend)}</div>
+                                                  {results.messaging && (
+                                                    <div className="text-xs tabular-nums text-muted-foreground">
+                                                      {(ad.messages ?? 0) > 0
+                                                        ? `${conversationLabel(ad.messages)} · ${formatCurrency(ad.spend / ad.messages)} cada`
+                                                        : "nenhuma conversa"}
+                                                    </div>
+                                                  )}
+                                                </div>
                                               </div>
                                             ))}
                                           </div>
@@ -908,7 +991,7 @@ export default function Campaigns() {
                   Diagnostico IA - {diagnosticCampaign.name}
                 </DialogTitle>
                 <DialogDescription>
-                  Leitura automatica baseada em CTR, CPC, gasto, cliques e conversoes da campanha.
+                  Leitura automatica baseada em CTR, CPC, gasto, cliques e resultados da campanha.
                 </DialogDescription>
               </DialogHeader>
 
@@ -921,12 +1004,18 @@ export default function Campaigns() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-border bg-muted/20 p-4">
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground">CPA</div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                    {getResults(diagnosticCampaign).messaging ? "Custo por conversa" : "CPA"}
+                  </div>
                   <div className="mt-2 text-2xl font-semibold">
-                    {diagnosticCampaign.conversions > 0 ? formatCurrency(getCpa(diagnosticCampaign)) : "-"}
+                    {getResults(diagnosticCampaign).value > 0 ? formatCurrency(getCpa(diagnosticCampaign)) : "-"}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    {diagnosticCampaign.conversions > 0 ? "Quanto custa cada conversao." : "Sem base de conversao suficiente."}
+                    {getResults(diagnosticCampaign).value > 0
+                      ? getResults(diagnosticCampaign).messaging
+                        ? `${conversationLabel(getResults(diagnosticCampaign).value)} iniciadas no periodo.`
+                        : "Quanto custa cada conversao."
+                      : "Sem base de resultado suficiente."}
                   </div>
                 </div>
                 <div className="rounded-2xl border border-border bg-muted/20 p-4">

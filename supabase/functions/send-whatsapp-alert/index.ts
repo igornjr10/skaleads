@@ -1,10 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { loadWhatsappConfig, sendText } from "../_shared/whatsapp.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, resolveTargets, sendText } from "../_shared/whatsapp.ts";
 
 interface FiredEntity {
   entityType: string;
@@ -48,7 +43,7 @@ function buildMessage(payload: WhatsAppAlertPayload): string {
     `*Regra (${ruleSnapshot.logic}):*`,
     conditionLines,
     "",
-    `🔗 ${Deno.env.get("PUBLIC_SITE_URL") || "https://ad-campaign-hub-one.vercel.app"}/alert-events`,
+    `🔗 ${Deno.env.get("PUBLIC_SITE_URL") || "https://manager.marketprosystem.com"}/alert-events`,
   ]
     .filter(line => line !== null)
     .join("\n");
@@ -62,24 +57,37 @@ serve(async (req) => {
   try {
     const payload: WhatsAppAlertPayload = await req.json();
 
-    const cfg = await loadWhatsappConfig();
     const managerNumber = Deno.env.get("MANAGER_WHATSAPP_NUMBER");
 
-    const target = payload.target || managerNumber;
+    const targets = await resolveTargets(payload.target || managerNumber);
 
-    if (!target) {
+    if (targets.length === 0) {
       return new Response(
-        JSON.stringify({ error: "MANAGER_WHATSAPP_NUMBER não configurado e nenhum destino informado" }),
+        JSON.stringify({ error: "Nenhum destino: informe um alvo ou cadastre gestor ativo com WhatsApp" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     const message = buildMessage(payload);
 
-    const { messageId } = await sendText(cfg, target, message);
+    // Envia para todos e so falha se ninguem recebeu — um numero quebrado nao
+    // pode fazer o teste parecer que nada foi enviado.
+    const results = await Promise.allSettled(targets.map(t => sendText(t, message)));
+    const enviados = results.filter(r => r.status === "fulfilled").length;
+
+    if (enviados === 0) {
+      const motivo = results
+        .map(r => r.status === "rejected" ? (r.reason as Error).message : "")
+        .filter(Boolean)
+        .join("; ");
+      return new Response(
+        JSON.stringify({ error: `Nenhuma mensagem saiu: ${motivo}` }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     return new Response(
-      JSON.stringify({ success: true, message_id: messageId }),
+      JSON.stringify({ success: true, enviados, destinos: targets.length }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

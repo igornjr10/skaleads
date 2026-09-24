@@ -76,7 +76,7 @@ export default function WhatsappScheduled() {
     try {
       const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
       if (error) {
-        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da Evolution
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da uazapi
         const detail = await (error as any)?.context?.json?.().catch(() => null);
         throw new Error(detail?.error || error.message);
       }
@@ -166,7 +166,7 @@ export default function WhatsappScheduled() {
         body: { test_id: item.id },
       });
       if (error) {
-        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da Evolution
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da uazapi
         const detail = await (error as any)?.context?.json?.().catch(() => null);
         throw new Error(detail?.error || error.message);
       }
