@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getUser, jsonResponse } from "../_shared/auth.ts";
 import { generateCopy, logTokenUsage } from "../_shared/claude-service.ts";
 
 const cors = {
@@ -11,16 +10,10 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   try {
-    const { clientInfo, objective, tone, briefing } = await req.json();
-
-    const user = await getUser(req);
-    if (!user) return jsonResponse(cors, { error: "Não autenticado" }, 401);
-    // tenantId sai do JWT: no corpo, qualquer um se passava por outro
-    // tenant e furava o rate limit do Claude.
-    const tenantId = user.id;
+    const { clientInfo, objective, tone, briefing, tenantId } = await req.json();
     
-    if (!clientInfo || !objective || !tone || !briefing) {
-      throw new Error("clientInfo, objective, tone e briefing são obrigatórios");
+    if (!clientInfo || !objective || !tone || !briefing || !tenantId) {
+      throw new Error("clientInfo, objective, tone, briefing e tenantId são obrigatórios");
     }
 
     const validTones = ["professional", "casual", "urgent", "inspirational"];

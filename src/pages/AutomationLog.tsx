@@ -49,7 +49,7 @@ interface RunRow {
 interface Manager {
   id: string;
   name: string;
-  whatsapp_number: string;
+  whatsapp_number: string | null;
   is_active: boolean;
 }
 
@@ -61,6 +61,7 @@ interface WaGroup {
 interface ClientOption {
   id: string;
   name: string;
+  manager_id: string | null;
 }
 
 const JOBS = [
@@ -135,7 +136,11 @@ export default function AutomationLog() {
     setLoadingGroups(true);
     try {
       const { data, error } = await supabase.functions.invoke("list-whatsapp-groups");
-      if (error) throw new Error(error.message);
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da uazapi
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
       setWaGroups(data?.groups ?? []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao carregar grupos");
@@ -146,7 +151,7 @@ export default function AutomationLog() {
   }
 
   async function loadClients() {
-    const { data } = await supabase.from("clients").select("id, name").order("name");
+    const { data } = await supabase.from("clients").select("id, name, manager_id").order("name");
     setClients((data as ClientOption[]) ?? []);
   }
 
@@ -160,34 +165,42 @@ export default function AutomationLog() {
   function openEditManager(m: Manager) {
     setEditingManager(m);
     setManagerName(m.name);
-    setManagerNumber(m.whatsapp_number);
+    setManagerNumber(m.whatsapp_number ?? "");
     setShowManagerDialog(true);
   }
 
   async function saveManager() {
     if (!managerName.trim()) return toast.error("Nome obrigatório");
     const number = managerNumber.trim().replace(/\D/g, "");
-    if (!number) return toast.error("Número obrigatório");
 
     setSavingManager(true);
-    const payload = { name: managerName.trim(), whatsapp_number: number };
-    const { error } = editingManager
-      ? await supabase.from("managers").update(payload).eq("id", editingManager.id)
-      : await supabase.from("managers").insert(payload);
+    const payload = { name: managerName.trim(), whatsapp_number: number || null };
+    // A RLS de escrita em managers e so admin/owner. Sem o .select(), a linha
+    // barrada pela policy volta como sucesso sem gravar nada e o usuario ve
+    // "Gestor atualizado" com o campo ainda vazio.
+    const { data, error } = editingManager
+      ? await supabase.from("managers").update(payload).eq("id", editingManager.id).select()
+      : await supabase.from("managers").insert(payload).select();
     setSavingManager(false);
 
     if (error) return toast.error(error.message);
+    if (!data?.length) return toast.error("Sem permissao para alterar gestores — precisa ser admin ou owner");
     toast.success(editingManager ? "Gestor atualizado" : "Gestor adicionado");
     setShowManagerDialog(false);
     loadManagers();
   }
 
   async function deleteManager(id: string) {
-    const { error } = await supabase.from("managers").delete().eq("id", id);
+    const { data, error } = await supabase.from("managers").delete().eq("id", id).select();
     if (error) return toast.error(error.message);
+    if (!data?.length) return toast.error("Sem permissao para remover gestores — precisa ser admin ou owner");
     toast.success("Gestor removido");
     setManagers(prev => prev.filter(m => m.id !== id));
     setSelectedManagerIds(prev => prev.filter(id2 => id2 !== id));
+  }
+
+  function clientCountFor(managerId: string) {
+    return clients.filter(c => c.manager_id === managerId).length;
   }
 
   function toggleManagerSelected(id: string) {
@@ -201,7 +214,8 @@ export default function AutomationLog() {
   function currentTargets(): string[] {
     const managerNumbers = managers
       .filter(m => selectedManagerIds.includes(m.id))
-      .map(m => m.whatsapp_number);
+      .map(m => m.whatsapp_number)
+      .filter((number): number is string => !!number);
     return [...managerNumbers, ...selectedGroupIds];
   }
 
@@ -215,7 +229,11 @@ export default function AutomationLog() {
       const { data, error } = await supabase.functions.invoke("send-manager-message", {
         body: { targets, text: messageText.trim() },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da uazapi
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
       if (data?.error) throw new Error(data.error);
       toast.success(`Mensagem enviada para ${data.sent}/${data.total} destino(s)`);
       setMessageText("");
@@ -236,7 +254,11 @@ export default function AutomationLog() {
       const { data, error } = await supabase.functions.invoke("send-client-report", {
         body: { client_id: selectedClientId, targets },
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        // FunctionsHttpError esconde o corpo — precisamos dele para ver o erro da uazapi
+        const detail = await (error as any)?.context?.json?.().catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
       if (data?.error) throw new Error(data.error);
       toast.success("Relatório enviado!");
     } catch (err) {
@@ -316,10 +338,13 @@ export default function AutomationLog() {
                   <Checkbox
                     checked={selectedManagerIds.includes(m.id)}
                     onCheckedChange={() => toggleManagerSelected(m.id)}
+                    disabled={!m.whatsapp_number}
                   />
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{m.name}</p>
-                    <p className="text-xs text-muted-foreground">{m.whatsapp_number}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {m.whatsapp_number ?? "sem WhatsApp"} · {clientCountFor(m.id)} conta(s)
+                    </p>
                   </div>
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditManager(m)}>
                     <Pencil className="h-3.5 w-3.5" />
@@ -450,13 +475,16 @@ export default function AutomationLog() {
               <Input value={managerName} onChange={e => setManagerName(e.target.value)} />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">WhatsApp</Label>
+              <Label className="text-xs">WhatsApp (opcional)</Label>
               <Input
                 value={managerNumber}
                 onChange={e => setManagerNumber(e.target.value)}
                 placeholder="5511999999999"
                 inputMode="numeric"
               />
+              <p className="text-[11px] text-muted-foreground">
+                Sem número o gestor continua respondendo pelas contas, mas não entra nos envios de WhatsApp.
+              </p>
             </div>
           </div>
           <DialogFooter>

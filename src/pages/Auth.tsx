@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { BarChart3, Bell, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,20 +17,18 @@ const features = [
   { icon: Shield, text: "Auditoria avancada de conta Meta" },
 ];
 
-function traduzErroLogin(mensagem: string): string {
-  if (/email not confirmed/i.test(mensagem)) {
-    return "Este e-mail ainda nao foi confirmado. Abra o link que enviamos para a sua caixa de entrada.";
-  }
-  if (/invalid login credentials/i.test(mensagem)) {
-    return "E-mail ou senha incorretos. Se voce acabou de criar a conta, confirme o e-mail antes de entrar.";
-  }
-  return mensagem;
-}
+// Destino do link de confirmacao. Sem a variavel, quem cria conta rodando o
+// app local manda para o proprio localhost — e o e-mail chega no usuario com um
+// link que so abre na maquina de quem cadastrou.
+const SITE_URL = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined) || window.location.origin;
+const EMAIL_REDIRECT_TO = `${SITE_URL.replace(/\/$/, "")}/auth`;
 
 export default function Auth() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
 
   if (loading) return null;
   if (user) return <Navigate to="/dashboard" replace />;
@@ -39,40 +37,61 @@ export default function Auth() {
     e.preventDefault();
     setSubmitting(true);
     const fd = new FormData(e.currentTarget);
+    const email = String(fd.get("email"));
     const { error } = await supabase.auth.signInWithPassword({
-      email: String(fd.get("email")),
+      email,
       password: String(fd.get("password")),
     });
     setSubmitting(false);
-    if (error) return toast.error(traduzErroLogin(error.message));
+    if (error) {
+      // O Supabase devolve "Email not confirmed" em ingles e sem saida — sem
+      // tratar isso o usuario fica travado sem saber que falta confirmar.
+      if (error.message.toLowerCase().includes("email not confirmed")) {
+        setUnconfirmedEmail(email);
+        return toast.error("Confirme seu e-mail antes de entrar. Reenvie o link abaixo se precisar.");
+      }
+      return toast.error(error.message);
+    }
+    setUnconfirmedEmail(null);
     toast.success("Bem-vindo de volta!");
     navigate("/dashboard");
+  }
+
+  async function resendConfirmation() {
+    if (!unconfirmedEmail) return;
+    setResending(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: unconfirmedEmail,
+      options: { emailRedirectTo: EMAIL_REDIRECT_TO },
+    });
+    setResending(false);
+    if (error) return toast.error(error.message);
+    toast.success(`Link de confirmacao reenviado para ${unconfirmedEmail}`);
   }
 
   async function handleSignup(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSubmitting(true);
     const fd = new FormData(e.currentTarget);
-    const email = String(fd.get("email"));
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: String(fd.get("email")),
       password: String(fd.get("password")),
       options: {
-        emailRedirectTo: window.location.origin,
+        emailRedirectTo: EMAIL_REDIRECT_TO,
         data: { full_name: String(fd.get("name")) },
       },
     });
     setSubmitting(false);
     if (error) return toast.error(error.message);
-
-    // Sem sessao na resposta, o projeto exige confirmacao por e-mail: dizer que
-    // ja da para entrar manda a pessoa direto para um "credencial invalida".
-    if (!data.session) {
-      return toast.success(`Conta criada. Confirme pelo link enviado para ${email} antes de entrar.`, {
-        duration: 10000,
-      });
+    // Com a confirmacao de e-mail desligada no projeto, o signUp ja devolve
+    // sessao e o usuario entra direto — prometer um link que nunca chega deixa
+    // ele esperando. So a ausencia de sessao significa que falta confirmar.
+    if (data.session) {
+      toast.success("Conta criada! Voce ja esta dentro.");
+      return navigate("/dashboard");
     }
-    toast.success("Conta criada! Voce ja pode entrar.");
+    toast.success("Conta criada! Confirme o link enviado para o seu e-mail antes de entrar.");
   }
 
   const inputCls =
@@ -101,11 +120,11 @@ export default function Auth() {
         <div className="relative flex items-center gap-3">
           <div className="relative">
             <div className="absolute inset-0 rounded-2xl bg-emerald-500/30 blur-md scale-110" />
-            <ScaleAdsLogo size={46} className="relative rounded-2xl ring-1 ring-emerald-500/30" />
+            <ScaleAdsLogo size={46} className="relative rounded-2xl" />
           </div>
           <div className="flex flex-col leading-none gap-0.5">
             <span className="text-white font-extrabold text-[17px] tracking-tight">
-              Scale <span className="text-emerald-400">Ads</span>
+              Scale<span className="text-emerald-400">Ads</span>
             </span>
             <span className="text-[10px] tracking-[0.22em] uppercase font-semibold text-emerald-500/60">
               Manager
@@ -141,7 +160,7 @@ export default function Auth() {
           </div>
         </div>
 
-        <p className="relative text-[11px] text-white/25">© {new Date().getFullYear()} Scale Ads</p>
+        <p className="relative text-[11px] text-white/25">© 2026 Scale Ads</p>
       </div>
 
       <div className="relative flex flex-1 flex-col justify-center items-center p-10 bg-[#0c0c0c]">
@@ -201,6 +220,22 @@ export default function Auth() {
                   {submitting ? "Entrando..." : "Entrar"}
                 </Button>
               </form>
+              {unconfirmedEmail && (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+                  <p className="text-[13px] text-white/70">
+                    O e-mail <strong className="text-white">{unconfirmedEmail}</strong> ainda nao foi confirmado.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={resending}
+                    onClick={resendConfirmation}
+                    className="h-9 w-full rounded-lg border-emerald-500/40 bg-transparent text-[13px] text-emerald-200 hover:bg-emerald-500/15 hover:text-white"
+                  >
+                    {resending ? "Reenviando..." : "Reenviar link de confirmacao"}
+                  </Button>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="signup" className="mt-0 space-y-5">
@@ -252,6 +287,13 @@ export default function Auth() {
               </form>
             </TabsContent>
           </Tabs>
+
+          <p className="mt-6 text-center text-xs text-white/40">
+            Ao continuar voce concorda com os{" "}
+            <Link to="/termos" className="underline underline-offset-4 transition-colors hover:text-white/70">Termos de Uso</Link>{" "}
+            e a{" "}
+            <Link to="/privacidade" className="underline underline-offset-4 transition-colors hover:text-white/70">Politica de Privacidade</Link>.
+          </p>
         </div>
       </div>
     </div>

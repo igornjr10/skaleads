@@ -1,53 +1,49 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getUser, hasAnyRole, isServiceRole, jsonResponse } from "../_shared/auth.ts";
-import { adminAction, loadWhatsappConfig, type AdminAction } from "../_shared/whatsapp.ts";
+import { corsHeaders, instanceConnect, instanceDisconnect } from "../_shared/whatsapp.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+// A uazapi nao tem restart: connect e a unica primitiva de religar, e devolve o
+// QR quando a sessao precisa ser pareada de novo. "restart" continua aqui como
+// apelido para nao quebrar a tela de Configuracoes.
+const ACTIONS = {
+  restart: instanceConnect,
+  connect: instanceConnect,
+  logout: instanceDisconnect,
+  disconnect: instanceDisconnect,
+} as const;
 
-const ACTIONS: AdminAction[] = ["restart", "logout", "connect"];
+type Action = keyof typeof ACTIONS;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  // restart/logout derrubam a sessao da instancia inteira: so o dono da plataforma.
-  if (!isServiceRole(req)) {
-    const user = await getUser(req);
-    if (!user) return jsonResponse(corsHeaders, { error: "Não autenticado" }, 401);
-    if (!(await hasAnyRole(user.id, ["owner"]))) {
-      return jsonResponse(corsHeaders, { error: "Sem permissão para esta operação" }, 403);
-    }
-  }
-
   try {
     const body = await req.json().catch(() => ({}));
-    const action = body?.action as AdminAction | undefined;
+    const action = body?.action as Action | undefined;
 
-    // Sem default proposital — logout derruba a sessão da instância inteira
-    if (!action || !ACTIONS.includes(action)) {
-      throw new Error(`Informe "action" com um destes valores: ${ACTIONS.join(", ")}`);
+    // Sem default proposital — disconnect derruba a sessao da instancia inteira
+    if (!action || !(action in ACTIONS)) {
+      throw new Error(`Informe "action" com um destes valores: ${Object.keys(ACTIONS).join(", ")}`);
     }
 
-    const cfg = await loadWhatsappConfig();
-    const result = await adminAction(cfg, action);
+    const result = await ACTIONS[action]();
 
-    return jsonResponse(
-      corsHeaders,
-      {
-        success: result.ok,
-        provider: cfg.provider,
-        action: result.action,
-        instance: result.instance,
-        httpStatus: result.httpStatus,
-        qrcode: result.qrcode,
-        paircode: result.paircode,
-        response: result.response,
-      },
-      result.ok ? 200 : 502
+    // A tela le `response.qrcode.base64` / `.pairingCode`, formato herdado da
+    // Evolution. A uazapi devolve as duas coisas soltas dentro de `instance`,
+    // entao a normalizacao fica aqui e o frontend nao precisa saber do provedor.
+    const inst = result?.instance ?? result;
+    const response = {
+      ...result,
+      qrcode: { base64: inst?.qrcode || null, pairingCode: inst?.paircode || null },
+    };
+
+    return new Response(
+      JSON.stringify({ success: true, action, response }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
-    return jsonResponse(corsHeaders, { error: (err as Error).message }, 500);
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 });

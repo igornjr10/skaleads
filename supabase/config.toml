@@ -1,1 +1,7 @@
-project_id = "npfcxgijwrxrssinpkdw"
+project_id = "ntlcyabztsdddsuobhhi"
+
+# A function valida a sessao e o papel owner por conta propria; com verify_jwt
+# ligado a plataforma barra o JWT antes do codigo rodar quando o projeto nao
+# usa mais o secret legado.
+[functions.delete-user]
+verify_jwt = false

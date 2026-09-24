@@ -1,11 +1,4 @@
-import {
-  Document,
-  Image,
-  Page,
-  Text,
-  View,
-  StyleSheet,
-} from "@react-pdf/renderer";
+import { Document, Image, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
 import type { ReportData } from "@/lib/report-types";
 
 function sanitizePdfText(value?: string | null) {
@@ -19,7 +12,7 @@ function sanitizePdfText(value?: string | null) {
     .replace(/[‘’]/g, "'")
     .replace(/[✅✔]/g, "OK ")
     .replace(/[❌✖]/g, "X ")
-    .replace(/[🔥🚀⭐✨💥🎯📈📊💬📣]/g, " ")
+    .replace(/[🔥🚀⭐✨💥🎯📈📊💬📣]/gu, " ")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\x20-\x7E]/g, "")
     .replace(/\s+/g, " ")
@@ -60,7 +53,6 @@ function getPreferredMetrics(data: ReportData) {
   const visiblePreferences = preferences.includes("instagramProfileVisits")
     ? preferences
     : [...preferences, "instagramProfileVisits"];
-  const socialProfileViews = data.socialPresence?.metrics.find((metric) => metric.key === "profileViews")?.value ?? 0;
 
   const registry: Record<string, { label: string; value: string; note: string }> = {
     spend: {
@@ -84,9 +76,9 @@ function getPreferredMetrics(data: ReportData) {
       note: "Conversas abertas no periodo",
     },
     instagramProfileVisits: {
-      label: "Visitas no perfil",
-      value: fmtNum(data.summary.instagramProfileVisits || socialProfileViews || 0),
-      note: "Visitas ao perfil do Instagram",
+      label: "Visitas pelo anuncio",
+      value: fmtNum(data.summary.instagramProfileVisits || 0),
+      note: "Visitas ao perfil vindas das campanhas",
     },
     phoneCalls: {
       label: "Ligacoes",
@@ -158,9 +150,29 @@ function getPreferredMetrics(data: ReportData) {
   return visiblePreferences.map((key) => registry[key]).filter(Boolean);
 }
 
+
+// A fonte do design system (`Plus Jakarta Sans`) chega ao PDF so por registro
+// explicito: o react-pdf nao enxerga o CSS da pagina e cai em Helvetica.
+//
+// Servida pelo proprio app, nao pelo Google Fonts. A primeira versao apontava
+// para o gstatic e quebrou com 404 — a URL do CDN carrega o numero da versao
+// da familia (v8, v12...) e muda quando a fonte e atualizada. Fora isso, o PDF
+// passaria a depender de rede no momento de gerar, e falharia offline.
+Font.register({
+  family: "Plus Jakarta Sans",
+  fonts: [
+    { src: "/fonts/PlusJakartaSans-Regular.ttf", fontWeight: 400 },
+    { src: "/fonts/PlusJakartaSans-Bold.ttf", fontWeight: 700 },
+  ],
+});
+
+// Sem isto o react-pdf hifeniza palavra longa no meio, e nome de campanha sai
+// picotado no relatorio do cliente.
+Font.registerHyphenationCallback((palavra) => [palavra]);
+
 const styles = StyleSheet.create({
   page: {
-    fontFamily: "Helvetica",
+    fontFamily: "Plus Jakarta Sans",
     fontSize: 9,
     color: "#0f172a",
     backgroundColor: "#eef4f8",
@@ -208,7 +220,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 13,
     color: "#8b6a3d",
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   coverRule: {
     width: 54,
@@ -219,7 +231,7 @@ const styles = StyleSheet.create({
   },
   coverTitle: {
     fontSize: 24,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
     textAlign: "center",
     marginBottom: 10,
   },
@@ -277,13 +289,13 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     textAlign: "center",
     fontSize: 11,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
     paddingTop: 5,
     marginRight: 10,
   },
   sectionTitle: {
     fontSize: 14.5,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   sectionSub: {
     fontSize: 8,
@@ -318,7 +330,7 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     fontSize: 18,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
     textAlign: "center",
   },
   metricNote: {
@@ -328,7 +340,7 @@ const styles = StyleSheet.create({
   },
   blockTitle: {
     fontSize: 11.5,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
     textAlign: "center",
     marginBottom: 12,
   },
@@ -349,7 +361,7 @@ const styles = StyleSheet.create({
   tableHeaderCell: {
     fontSize: 7,
     color: "#64748b",
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   tableRow: {
     flexDirection: "row",
@@ -386,7 +398,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     fontSize: 8,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   adNameWrap: {
     flex: 1,
@@ -446,11 +458,11 @@ const styles = StyleSheet.create({
   socialLogoFallbackText: {
     fontSize: 11,
     color: "#475569",
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   socialProfileName: {
     fontSize: 11,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   socialProfileMeta: {
     fontSize: 8,
@@ -473,7 +485,7 @@ const styles = StyleSheet.create({
   },
   socialMetricValue: {
     fontSize: 15,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   socialMetricSource: {
     fontSize: 6.5,

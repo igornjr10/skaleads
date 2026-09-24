@@ -43,12 +43,13 @@ function computeScore(results: AuditCheckResult[]): { score: number; categorySco
 export async function runAudit(
   clientId: string,
   adAccountId: string,
+  accessToken: string,
   onProgress?: (done: number, total: number, name: string) => void
 ): Promise<AuditReport> {
   const ctx: AuditContext = {
     clientId,
     adAccountId: adAccountId.replace(/^act_/, ''),
-    source: { clientId },
+    accessToken: accessToken.trim(),
   };
 
   const total = ALL_CHECKS.length;

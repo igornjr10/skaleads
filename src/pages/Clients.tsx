@@ -19,6 +19,7 @@ import {
   Activity,
   Filter,
   ShieldAlert,
+  Stethoscope,
   MoreVertical,
   Archive,
   ArchiveRestore,
@@ -30,6 +31,8 @@ import {
   Loader2,
   ExternalLink,
   Wallet,
+  UserCog,
+  PlugZap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,7 +52,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
@@ -66,18 +74,45 @@ import { format, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { syncClientData, validateMetaConnection } from "@/lib/meta-api";
-import { metaGetAll } from "@/lib/meta-client";
-import { ClientAvatar } from "@/components/ClientAvatar";
-import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaPage } from "@/lib/facebook-sdk";
+import { metaGet, metaGetAll } from "@/lib/meta-fetch";
+import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaInstagramAccount, type MetaPage } from "@/lib/facebook-sdk";
 import { BUSINESS_SEGMENTS, LOCAL_GOALS, segmentLabel } from "@/lib/local-business";
 import { computeBudgetStatus } from "@/lib/client-budget";
+import { fetchClientFundingSummaries, type ClientFundingSummary } from "@/lib/meta-funding";
 import { formatCurrency } from "@/lib/format";
+import { errorMessage } from "@/lib/utils";
+import { ConnectDialog } from "@/components/clients/ConnectDialog";
+import { MetaDiagnosticsDialog } from "@/components/clients/MetaDiagnosticsDialog";
+import { BulkMetaConnectDialog } from "@/components/clients/BulkMetaConnectDialog";
+import { ensureAdsScope, exchangeMetaToken } from "@/lib/meta-connect";
+import {
+  discoverInstagramFromAdAccount,
+  discoverMetaInventory,
+  mergeAdAccounts,
+  mergeInstagramAccounts,
+  metaPageLogoUrl,
+  resolveInstagramUser,
+} from "@/lib/meta-discovery";
+import { META_APP_ID, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
 import { ClientBudgetMeter, ClientBudgetCell } from "@/components/clients/ClientBudgetMeter";
 import ClientReportDialog from "@/components/ClientReportDialog";
+import { ClientAvatar } from "@/components/ClientAvatar";
 
-const META_APP_ID = import.meta.env.VITE_META_APP_ID as string;
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const AD_ACCOUNT_STATUS_LABELS: Record<number, string> = {
+  2: "Desativada",
+  3: "Nao liquidada",
+  7: "Em analise",
+  8: "Encerramento pendente",
+  9: "Periodo de carencia",
+  100: "Encerrada",
+};
+
+function adAccountStatusLabel(status?: number) {
+  return status == null ? "" : AD_ACCOUNT_STATUS_LABELS[status] ?? "";
+}
+
+const META_V21 = "https://graph.facebook.com/v21.0";
+const SUPABASE_KEY = SUPABASE_PUBLISHABLE_KEY;
 
 interface Client {
   id: string;
@@ -90,9 +125,9 @@ interface Client {
   address: string | null;
   service_radius_km: number | null;
   primary_goal: string | null;
-  monthly_budget: number | null;
+  meta_balance_cents: number | null;
   meta_ad_account_id: string | null;
-  meta_token_configured: boolean | null;
+  meta_access_token: string | null;
   meta_page_id: string | null;
   meta_page_name: string | null;
   meta_instagram_account_id: string | null;
@@ -105,11 +140,21 @@ interface Client {
   meta_last_verified_at: string | null;
   meta_sync_runs: number;
   meta_sync_status: "pending" | "connected" | "syncing" | "healthy" | "warning" | "error" | "expired";
+  connect_customer_uuid: string | null;
+  connect_connected_at: string | null;
+  manager_id: string | null;
+  company_id: string | null;
   dashboard_share_token: string;
   created_at: string;
   whatsapp_number: string | null;
   whatsapp_group_jid: string | null;
   report_template: Record<string, unknown> | null;
+}
+
+interface ManagerOption {
+  id: string;
+  name: string;
+  is_active: boolean;
 }
 
 interface ReportRow {
@@ -119,8 +164,11 @@ interface ReportRow {
 
 type StatusFilter = "all" | "active" | "inactive" | "archived";
 type ConnectionFilter = "all" | "connected" | "disconnected";
-type SortOption = "recent" | "name" | "reports" | "lastSync" | "budget";
-type BudgetFilter = "all" | "overPace" | "underPace" | "noBudget";
+type SortOption = "recent" | "name" | "reports" | "lastSync" | "balance";
+type BudgetFilter = "all" | "vaiFaltar" | "sobrando" | "lowBalance" | "noBalance";
+type ManagerFilter = "all" | "none" | string;
+
+const NO_MANAGER = "none";
 
 const AUTO_SYNC_OPTIONS = [
   { label: "A cada 6h", value: "6" },
@@ -133,12 +181,21 @@ const AUTO_SYNC_OPTIONS = [
 const HEALTH_STYLES: Record<Client["meta_sync_status"], { label: string; badge: string }> = {
   pending: { label: "Pendente", badge: "border-slate-200 bg-slate-50 text-slate-600" },
   connected: { label: "Conectado", badge: "border-sky-200 bg-sky-50 text-sky-700" },
-  syncing: { label: "Sincronizando", badge: "border-indigo-200 bg-indigo-50 text-indigo-700" },
+  syncing: { label: "Sincronizando", badge: "border-emerald-200 bg-emerald-50 text-emerald-700" },
   healthy: { label: "Saudavel", badge: "border-emerald-200 bg-emerald-50 text-emerald-700" },
   warning: { label: "Atencao", badge: "border-amber-200 bg-amber-50 text-amber-700" },
   error: { label: "Erro", badge: "border-rose-200 bg-rose-50 text-rose-700" },
   expired: { label: "Token expirado", badge: "border-rose-200 bg-rose-50 text-rose-700" },
 };
+
+// Conta arquivada fica na listagem por historico, mas nao e operacao do dia a
+// dia. Ate agora so o badge diferenciava, e badge se perde numa grade de 64
+// cards: o tom recuado separa antes da leitura.
+function tomArquivado(isArchived: boolean, isActive: boolean) {
+  if (isArchived) return "border-slate-200 border-l-4 border-l-slate-400 bg-slate-50";
+  if (!isActive) return "border-slate-200 border-l-4 border-l-amber-300 bg-white";
+  return "border-slate-200 bg-white";
+}
 
 function getInitials(name: string) {
   return name
@@ -173,10 +230,8 @@ function isAutoSyncDue(client: Client) {
 }
 
 export default function Clients() {
-  const { user, role } = useAuth();
-  // A carteira e isolada por dono, entao quem esta aqui gerencia o que e dele.
-  // O papel so restringe o viewer, que continua sendo perfil de leitura.
-  const canManage = role !== "viewer";
+  const { role } = useAuth();
+  const canManage = role === "owner" || role === "admin";
   const navigate = useNavigate();
 
   const [clients, setClients] = useState<Client[]>([]);
@@ -186,9 +241,13 @@ export default function Clients() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [connectionFilter, setConnectionFilter] = useState<ConnectionFilter>("all");
   const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>("all");
+  const [managerFilter, setManagerFilter] = useState<ManagerFilter>("all");
   const [sortBy, setSortBy] = useState<SortOption>("recent");
   const [reportStats, setReportStats] = useState<Record<string, { count: number; latest: string | null }>>({});
   const [monthSpend, setMonthSpend] = useState<Record<string, number>>({});
+  const [fundingSummaries, setFundingSummaries] = useState<Record<string, ClientFundingSummary>>({});
+  const [managers, setManagers] = useState<ManagerOption[]>([]);
+  const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
@@ -200,9 +259,10 @@ export default function Clients() {
   const [newAddress, setNewAddress] = useState("");
   const [newRadius, setNewRadius] = useState("");
   const [newGoal, setNewGoal] = useState("");
-  const [newMonthlyBudget, setNewMonthlyBudget] = useState("");
   const [newWhatsapp, setNewWhatsapp] = useState("");
   const [newWhatsappGroupJid, setNewWhatsappGroupJid] = useState("");
+  const [newManagerId, setNewManagerId] = useState("");
+  const [newCompanyId, setNewCompanyId] = useState("");
   const [waGroups, setWaGroups] = useState<{ id: string; subject: string }[] | null>(null);
   const [loadingWaGroups, setLoadingWaGroups] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -222,11 +282,16 @@ export default function Clients() {
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [selectedPageId, setSelectedPageId] = useState("");
   const [selectedInstagramId, setSelectedInstagramId] = useState("");
+  const [instagramAccounts, setInstagramAccounts] = useState<MetaInstagramAccount[]>([]);
   const [longLivedToken, setLongLivedToken] = useState("");
 
   const [deleteClient, setDeleteClient] = useState<Client | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [reportClient, setReportClient] = useState<Client | null>(null);
+  const [reporteiClient, setReporteiClient] = useState<Client | null>(null);
+  const [diagnosticsClient, setDiagnosticsClient] = useState<Client | null>(null);
+  const [bulkConnectOpen, setBulkConnectOpen] = useState(false);
+  const [refreshingLogos, setRefreshingLogos] = useState(false);
 
   // Gasto do mes corrente por cliente. Paginado porque a tabela tem 1 linha por
   // cliente/dia e o teto padrao do PostgREST corta em 1000 linhas.
@@ -257,22 +322,37 @@ export default function Clients() {
 
   async function load() {
     setLoading(true);
-    const [{ data: clientsData, error: clientsError }, { data: reportsData, error: reportsError }, spendTotals] =
+    const [
+      { data: clientsData, error: clientsError },
+      { data: reportsData, error: reportsError },
+      spendTotals,
+      funding,
+      { data: managersData },
+      { data: companiesData },
+    ] =
       await Promise.all([
         supabase.from("clients").select("*, logo_url").order("created_at", { ascending: false }),
         supabase.from("reports").select("client_id, created_at"),
         fetchMonthSpendByClient().catch((error: unknown) => {
-          toast.error(error instanceof Error ? error.message : "Erro ao carregar verba do mes");
+          toast.error(errorMessage(error, "Erro ao carregar verba do mes"));
           return {} as Record<string, number>;
         }),
+        // Aporte e complemento: sem ele a verba cai no valor digitado, que e
+        // exatamente o comportamento antigo. Nao vale travar a tela por isso.
+        fetchClientFundingSummaries().catch(() => ({} as Record<string, ClientFundingSummary>)),
+        supabase.from("managers").select("id, name, is_active").order("name"),
+        supabase.from("companies").select("id, name").eq("is_active", true).order("name"),
       ]);
 
     if (clientsError) toast.error(clientsError.message);
     if (reportsError) toast.error(reportsError.message);
 
     setMonthSpend(spendTotals);
+    setFundingSummaries(funding);
 
     setClients((clientsData as Client[]) ?? []);
+    setManagers((managersData as ManagerOption[]) ?? []);
+    setCompanies((companiesData as { id: string; name: string }[]) ?? []);
 
     const stats: Record<string, { count: number; latest: string | null }> = {};
     ((reportsData as ReportRow[]) ?? []).forEach((report) => {
@@ -291,10 +371,20 @@ export default function Clients() {
     load();
   }, []);
 
+  const managerById = useMemo(() => {
+    return new Map(managers.map((manager) => [manager.id, manager]));
+  }, [managers]);
+
   const clientsWithStats = useMemo(() => {
     return clients.map((client) => {
       const stats = reportStats[client.id] ?? { count: 0, latest: null };
-      const budget = computeBudgetStatus(client.monthly_budget, monthSpend[client.id] ?? 0);
+      const funding = fundingSummaries[client.id];
+      const budget = computeBudgetStatus({
+        spent: monthSpend[client.id] ?? 0,
+        deposited: funding?.depositedThisMonth ?? null,
+        depositCount: funding?.depositCount ?? 0,
+        balance: client.meta_balance_cents != null ? client.meta_balance_cents / 100 : null,
+      });
       const isConnected = Boolean(client.meta_ad_account_id);
       const isActive = client.status === "active";
       const isArchived = client.status === "archived";
@@ -326,7 +416,7 @@ export default function Clients() {
         syncLabel,
       };
     });
-  }, [clients, reportStats, monthSpend, syncingId, syncProgress]);
+  }, [clients, reportStats, monthSpend, fundingSummaries, syncingId, syncProgress]);
 
   const filteredClients = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -342,72 +432,88 @@ export default function Clients() {
           connectionFilter === "all" ||
           (connectionFilter === "connected" && isConnected) ||
           (connectionFilter === "disconnected" && !isConnected);
+        const matchesManager =
+          managerFilter === "all" ||
+          (managerFilter === NO_MANAGER ? !client.manager_id : client.manager_id === managerFilter);
         const matchesBudget =
           budgetFilter === "all" ||
-          (budgetFilter === "overPace" && (budget.level === "ahead" || budget.level === "over")) ||
-          (budgetFilter === "underPace" && (budget.level === "behind" || budget.level === "idle")) ||
-          (budgetFilter === "noBudget" && budget.level === "none");
+          (budgetFilter === "vaiFaltar" && (budget.level === "ahead" || budget.level === "over")) ||
+          (budgetFilter === "sobrando" && (budget.level === "behind" || budget.level === "idle")) ||
+          (budgetFilter === "lowBalance" && budget.lowBalance) ||
+          (budgetFilter === "noBalance" && budget.balance === null);
 
-        return matchesSearch && matchesStatus && matchesConnection && matchesBudget;
+        return matchesSearch && matchesStatus && matchesConnection && matchesManager && matchesBudget;
       })
       .sort((a, b) => {
         if (sortBy === "name") return a.client.name.localeCompare(b.client.name, "pt-BR");
         if (sortBy === "reports") return b.stats.count - a.stats.count;
         if (sortBy === "lastSync") return (b.lastSyncDate?.getTime() ?? 0) - (a.lastSyncDate?.getTime() ?? 0);
-        if (sortBy === "budget") {
-          // Clientes sem verba cadastrada vao pro fim — nao ha ritmo pra comparar
-          if (a.budget.budget == null) return b.budget.budget == null ? 0 : 1;
-          if (b.budget.budget == null) return -1;
-          return b.budget.pct - a.budget.pct;
+        if (sortBy === "balance") {
+          // Menor saldo primeiro: e quem para de entregar antes. Conta sem
+          // saldo lido vai pro fim, porque ausencia nao e zero.
+          if (a.budget.balance === null) return b.budget.balance === null ? 0 : 1;
+          if (b.budget.balance === null) return -1;
+          return a.budget.balance - b.budget.balance;
         }
         return new Date(b.client.created_at).getTime() - new Date(a.client.created_at).getTime();
       });
-  }, [clientsWithStats, search, statusFilter, connectionFilter, budgetFilter, sortBy]);
+  }, [clientsWithStats, search, statusFilter, connectionFilter, managerFilter, budgetFilter, sortBy]);
 
   const filteredActiveCount = filteredClients.filter(({ isActive }) => isActive).length;
   const filteredConnectedCount = filteredClients.filter(({ isConnected }) => isConnected).length;
   const healthyCount = clients.filter((client) => client.meta_sync_status === "healthy").length;
 
+  // O resumo agora soma dinheiro que existe: saldo nas contas e aporte do mes.
+  // Antes somava o teto digitado, que era promessa e nao caixa.
   const budgetOverview = useMemo(() => {
     return clientsWithStats.reduce(
       (acc, { budget, isArchived }) => {
         if (isArchived) return acc;
         acc.spent += budget.spent;
-        if (budget.budget != null) {
-          acc.total += budget.budget;
-          acc.withBudget += 1;
-          if (budget.level === "ahead" || budget.level === "over") acc.atRisk += 1;
+        if (budget.balance !== null) {
+          acc.balance += budget.balance;
+          acc.withBalance += 1;
+          if (budget.lowBalance) acc.lowBalance += 1;
         } else {
-          acc.withoutBudget += 1;
+          acc.withoutBalance += 1;
         }
+        if (budget.deposited) acc.deposited += budget.deposited;
         return acc;
       },
-      { total: 0, spent: 0, withBudget: 0, withoutBudget: 0, atRisk: 0 }
+      { balance: 0, deposited: 0, spent: 0, withBalance: 0, withoutBalance: 0, lowBalance: 0 }
     );
   }, [clientsWithStats]);
 
-  const budgetOverviewPct = budgetOverview.total > 0 ? (budgetOverview.spent / budgetOverview.total) * 100 : 0;
+  const budgetOverviewPct =
+    budgetOverview.deposited > 0 ? (budgetOverview.spent / budgetOverview.deposited) * 100 : 0;
 
   function resetFilters() {
     setSearch("");
     setStatusFilter("all");
     setConnectionFilter("all");
+    setManagerFilter("all");
     setBudgetFilter("all");
     setSortBy("recent");
   }
 
   function openConnectDialog(client: Client) {
     setAdAccountId(client.meta_ad_account_id ?? "");
-    // O token fica no cofre, fora do alcance do browser: reconectar exige colar
-    // um novo. So o "ja configurado" e visivel aqui.
-    setAccessToken("");
+    setAccessToken(client.meta_access_token ?? "");
     setAutoSyncEnabled(client.meta_auto_sync_enabled ?? false);
     setAutoSyncFrequencyHours(String(client.meta_auto_sync_frequency_hours ?? 24));
     setAdAccounts([]);
     setPages([]);
-    setSelectedAccountId("");
+    // Reabrir o dialogo nao pode perder o que ja estava conectado: zerar isso
+    // obrigava a reescolher a conta, e se ela nao voltasse na lista do OAuth
+    // nao havia como salvar de novo.
+    setSelectedAccountId(client.meta_ad_account_id ?? "");
     setSelectedPageId(client.meta_page_id ?? "");
     setSelectedInstagramId(client.meta_instagram_account_id ?? "");
+    setInstagramAccounts(
+      client.meta_instagram_account_id
+        ? [{ id: client.meta_instagram_account_id, username: client.meta_instagram_username ?? undefined, origin: "Salvo no cliente" }]
+        : []
+    );
     setLongLivedToken("");
     setConnectClient(client);
   }
@@ -419,56 +525,41 @@ export default function Clients() {
     setSelectedAccountId("");
     setSelectedPageId("");
     setSelectedInstagramId("");
+    setInstagramAccounts([]);
     setLongLivedToken("");
     setAutoSyncEnabled(false);
     setAutoSyncFrequencyHours("24");
   }
 
-  // Roda no momento da conexao, com o token que o operador acabou de obter e que
-  // ainda nao foi salvo — por isso rawToken em vez de clientId.
-  async function fetchFacebookPages(token: string) {
-    const source = { rawToken: token };
-    const pageFields = "id,name,fan_count,followers_count,instagram_business_account{id,username,profile_picture_url},picture.width(256).height(256)";
-
-    const directPages = await metaGetAll<MetaPage>(source, "me/accounts", { fields: pageFields, limit: 25 });
-
-    const businesses = await metaGetAll<{ id: string; name: string }>(source, "me/businesses", {
-      fields: "id,name",
-      limit: 100,
+  // Alguns clientes tem o IG vinculado so na conta de anuncios, sem passar pela Pagina.
+  useEffect(() => {
+    if (!selectedAccountId || !longLivedToken) return;
+    let cancelled = false;
+    discoverInstagramFromAdAccount(selectedAccountId, longLivedToken).then((found) => {
+      if (cancelled || found.length === 0) return;
+      setInstagramAccounts((prev) => mergeInstagramAccounts(prev, found));
     });
-
-    const bmPagesNested = await Promise.all(
-      businesses.flatMap((bm) => [
-        metaGetAll<MetaPage>(source, `${bm.id}/owned_pages`, { fields: pageFields, limit: 25 }).catch(() => [] as MetaPage[]),
-        metaGetAll<MetaPage>(source, `${bm.id}/client_pages`, { fields: pageFields, limit: 25 }).catch(() => [] as MetaPage[]),
-      ])
-    );
-
-    const merged = new Map<string, MetaPage>();
-    for (const page of [...directPages, ...bmPagesNested.flat()]) {
-      if (!page?.id) continue;
-      const existing = merged.get(page.id);
-      if (!existing) {
-        merged.set(page.id, page);
-      } else {
-        merged.set(page.id, {
-          ...existing,
-          ...page,
-          instagram_business_account: existing.instagram_business_account || page.instagram_business_account,
-          picture: existing.picture || page.picture,
-        });
-      }
-    }
-
-    return Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
-  }
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAccountId, longLivedToken]);
 
   async function handleFacebookLogin() {
+    // Nao e fatal para o app (so o fluxo de conexao Meta depende dela), por isso
+    // fica fora do REQUIRED do `env.ts` e e checada aqui, no ponto de uso.
+    if (!META_APP_ID) {
+      toast.error("VITE_META_APP_ID nao foi definida no build. Cadastre no Vercel e refaca o deploy.");
+      return;
+    }
+
     setOauthLoading(true);
     try {
       await loadFacebookSDK(META_APP_ID);
       const loginResult = await facebookLogin();
       const shortToken = loginResult.accessToken;
+
+      ensureAdsScope(loginResult.grantedScopes);
 
       const missing = ["instagram_basic", "instagram_manage_insights"].filter(
         (scope) => !loginResult.grantedScopes.includes(scope)
@@ -481,41 +572,45 @@ export default function Clients() {
       }
 
       setSyncProgress("Trocando token...");
-
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/meta-exchange-token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-        body: JSON.stringify({ short_lived_token: shortToken }),
-      });
-
-      const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const data = await exchangeMetaToken(shortToken);
 
       setLongLivedToken(data.access_token);
       setAdAccounts(data.ad_accounts ?? []);
-      const facebookPages = await fetchFacebookPages(data.access_token);
+
+      const inventory = await discoverMetaInventory(data.access_token, setSyncProgress);
+      const facebookPages = inventory.pages;
       setPages(facebookPages);
 
-      if (data.ad_accounts?.length === 1) {
-        setSelectedAccountId(data.ad_accounts[0].id.replace("act_", ""));
+      const accounts = mergeAdAccounts(data.ad_accounts ?? [], inventory.adAccounts);
+      setAdAccounts(accounts);
+
+      if (accounts.length === 1) {
+        setSelectedAccountId((prev) => prev || accounts[0].id.replace("act_", ""));
       }
       if (facebookPages.length === 1) {
-        setSelectedPageId(facebookPages[0].id);
+        setSelectedPageId((prev) => prev || facebookPages[0].id);
       }
 
-      const instagramAccounts = facebookPages
-        .map((page) => page.instagram_business_account)
-        .filter((account): account is { id: string; username?: string; profile_picture_url?: string } => Boolean(account?.id));
-      if (instagramAccounts.length === 1) {
-        setSelectedInstagramId(instagramAccounts[0].id);
+      const discovered = inventory.instagramAccounts;
+      // Merge, nunca substituicao: trocar a lista derrubava o perfil que ja
+      // estava salvo no cliente, e o SearchableSelect mostra o placeholder
+      // quando o id selecionado nao esta entre as opcoes — o perfil "sumia"
+      // da tela mesmo continuando selecionado por baixo.
+      setInstagramAccounts((prev) => mergeInstagramAccounts(prev, discovered));
+      if (discovered.length === 1) {
+        setSelectedInstagramId((prev) => prev || discovered[0].id);
       }
 
-      toast.success(`${data.ad_accounts?.length ?? 0} conta(s) de anuncio · ${facebookPages.length} pagina(s) · ${instagramAccounts.length} Instagram`);
+      if (accounts.length === 0) {
+        toast.warning(
+          "Nenhuma conta de anuncios foi retornada pela Meta. Confirme que o usuario tem acesso a conta no Business Manager e que voce autorizou ads_read/business_management, ou informe o ID manualmente.",
+          { duration: 10000 }
+        );
+      } else {
+        toast.success(`${accounts.length} conta(s) de anuncio · ${facebookPages.length} pagina(s) · ${discovered.length} Instagram`);
+      }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro no login com Facebook");
+      toast.error(errorMessage(error, "Erro no login com Facebook"));
     } finally {
       setOauthLoading(false);
       setSyncProgress("");
@@ -526,9 +621,16 @@ export default function Clients() {
     event.preventDefault();
     if (!connectClient || !selectedAccountId || !longLivedToken) return;
     const selectedPage = pages.find((page) => page.id === selectedPageId);
-    const explicitInstagram = pages
-      .map((page) => page.instagram_business_account)
-      .find((account) => account?.id === selectedInstagramId) ?? null;
+    let explicitInstagram: MetaInstagramAccount | null = null;
+    if (selectedInstagramId) {
+      explicitInstagram =
+        instagramAccounts.find((account) => account.id === selectedInstagramId) ??
+        (await resolveInstagramUser(selectedInstagramId, longLivedToken));
+      if (!explicitInstagram) {
+        toast.error("O ID de Instagram informado nao foi reconhecido pela Meta");
+        return;
+      }
+    }
     await saveAndSync(connectClient, selectedAccountId, longLivedToken, selectedPage, explicitInstagram);
   }
 
@@ -546,42 +648,45 @@ export default function Clients() {
     accountId: string,
     token: string,
     selectedPage?: MetaPage,
-    explicitInstagram?: { id: string; username?: string; profile_picture_url?: string } | null
+    explicitInstagram?: MetaInstagramAccount | null
   ) {
     setSyncingId(client.id);
     setSyncProgress("Salvando configuracoes...");
     try {
-      const instagramFromPage = selectedPage?.instagram_business_account ?? null;
+      const instagramFromPage = selectedPage?.instagram_business_account ?? selectedPage?.connected_instagram_account ?? null;
       const instagramFinal = explicitInstagram ?? instagramFromPage;
-
-      // O token vai para o cofre pela Edge Function; o resto do cadastro segue
-      // sendo update normal na tabela clients.
-      const { data: stored, error: storeError } = await supabase.functions.invoke("meta-store-token", {
-        body: { clientId: client.id, token: token.trim() },
-      });
-      if (storeError || stored?.error) {
-        throw new Error(stored?.error || storeError?.message || "Erro ao guardar o token da Meta");
-      }
-
+      const pageIdForLogo = selectedPage?.id || client.meta_page_id;
       const { error } = await supabase
         .from("clients")
         .update({
           meta_ad_account_id: accountId.replace("act_", ""),
+          meta_access_token: token.trim(),
           meta_page_id: selectedPage?.id || client.meta_page_id,
           meta_page_name: selectedPage?.name || client.meta_page_name,
+          // Vem do PAGE_FIELDS da descoberta e ate agora era descartado.
+          meta_page_access_token: selectedPage?.access_token ?? null,
           meta_instagram_account_id: instagramFinal?.id || client.meta_instagram_account_id,
           meta_instagram_username: instagramFinal?.username || client.meta_instagram_username,
           meta_auto_sync_enabled: autoSyncEnabled,
           meta_auto_sync_frequency_hours: Number(autoSyncFrequencyHours),
           meta_last_sync_error: null,
           meta_sync_status: "connected",
-          logo_url: selectedPage?.picture?.data?.url || client.logo_url,
+          logo_url: pageIdForLogo ? metaPageLogoUrl(pageIdForLogo) : client.logo_url,
         })
         .eq("id", client.id);
 
       if (error) throw error;
 
-      const result = await syncClientData(client.id, accountId, setSyncProgress);
+      // Copia a foto pro Storage em segundo plano. Ate terminar (ou se falhar),
+      // a URL do Graph gravada acima ja segura a exibicao.
+      if (pageIdForLogo) {
+        supabase.functions
+          .invoke("sync-client-logo", { body: { clientId: client.id } })
+          .then(({ error: logoError }) => { if (!logoError) load(); })
+          .catch(() => {});
+      }
+
+      const result = await syncClientData(client.id, accountId, token, setSyncProgress);
       toast.success(
         `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anuncios`,
         { duration: 6000 }
@@ -589,7 +694,7 @@ export default function Clients() {
       closeConnectDialog();
       load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao salvar");
+      toast.error(errorMessage(error, "Erro ao salvar"));
     } finally {
       setSyncingId(null);
       setSyncProgress("");
@@ -597,20 +702,20 @@ export default function Clients() {
   }
 
   async function handleQuickSync(client: Client) {
-    if (!client.meta_ad_account_id || !client.meta_token_configured) {
+    if (!client.meta_ad_account_id || !client.meta_access_token) {
       toast.error("Configure a conta Meta antes de sincronizar");
       return;
     }
     setSyncingId(client.id);
     try {
-      const result = await syncClientData(client.id, client.meta_ad_account_id, setSyncProgress);
+      const result = await syncClientData(client.id, client.meta_ad_account_id, client.meta_access_token, setSyncProgress);
       toast.success(
         `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anuncios`,
         { duration: 6000 }
       );
       load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro na sincronizacao");
+      toast.error(errorMessage(error, "Erro na sincronizacao"));
     } finally {
       setSyncingId(null);
       setSyncProgress("");
@@ -626,9 +731,10 @@ export default function Clients() {
     setNewAddress("");
     setNewRadius("");
     setNewGoal("");
-    setNewMonthlyBudget("");
     setNewWhatsapp("");
     setNewWhatsappGroupJid("");
+    setNewManagerId("");
+    setNewCompanyId("");
   }
 
   async function loadWaGroups() {
@@ -648,6 +754,9 @@ export default function Clients() {
   function openCreateDialog() {
     setEditClient(null);
     resetClientForm();
+    // Cliente sem empresa fica invisivel para quem nao e owner, entao quando so
+    // existe uma empresa ela ja vem escolhida.
+    if (companies.length === 1) setNewCompanyId(companies[0].id);
     setCreateOpen(true);
     loadWaGroups();
   }
@@ -662,9 +771,10 @@ export default function Clients() {
     setNewAddress(client.address ?? "");
     setNewRadius(client.service_radius_km != null ? String(client.service_radius_km) : "");
     setNewGoal(client.primary_goal ?? "");
-    setNewMonthlyBudget(client.monthly_budget != null ? String(client.monthly_budget) : "");
     setNewWhatsapp(client.whatsapp_number ?? "");
     setNewWhatsappGroupJid(client.whatsapp_group_jid ?? "");
+    setNewManagerId(client.manager_id ?? "");
+    setNewCompanyId(client.company_id ?? "");
     setCreateOpen(true);
     loadWaGroups();
   }
@@ -681,11 +791,11 @@ export default function Clients() {
       address: newAddress.trim() || null,
       service_radius_km: newRadius.trim() ? Number(newRadius) : null,
       primary_goal: newGoal || null,
-      monthly_budget: newMonthlyBudget.trim() ? Number(newMonthlyBudget) : null,
       whatsapp_number: newWhatsapp.trim().replace(/\D/g, "") || null,
       whatsapp_group_jid: newWhatsappGroupJid || null,
+      manager_id: newManagerId || null,
+      company_id: newCompanyId || null,
     };
-    // O team_id sai do trigger set_client_team, a partir do time de quem criou.
     const { error } = editClient
       ? await supabase.from("clients").update(payload).eq("id", editClient.id)
       : await supabase.from("clients").insert({ ...payload, status: "active" });
@@ -696,6 +806,17 @@ export default function Clients() {
     setEditClient(null);
     setCreateOpen(false);
     load();
+  }
+
+  async function assignManager(client: Client, managerId: string | null) {
+    const { error } = await supabase.from("clients").update({ manager_id: managerId }).eq("id", client.id);
+    if (error) return toast.error(error.message);
+    setClients((prev) => prev.map((item) => (item.id === client.id ? { ...item, manager_id: managerId } : item)));
+    toast.success(
+      managerId
+        ? `${client.name} atribuido a ${managerById.get(managerId)?.name ?? "gestor"}`
+        : "Gestor removido da conta"
+    );
   }
 
   async function toggleStatus(client: Client) {
@@ -730,14 +851,14 @@ export default function Clients() {
   }
 
   async function handleVerifyConnection(client: Client) {
-    if (!client.meta_ad_account_id || !client.meta_token_configured) {
+    if (!client.meta_ad_account_id || !client.meta_access_token) {
       toast.error("Configure a conta Meta antes de verificar");
       return;
     }
 
     setVerifyingId(client.id);
     try {
-      const result = await validateMetaConnection(client.meta_ad_account_id, { clientId: client.id });
+      const result = await validateMetaConnection(client.meta_ad_account_id, client.meta_access_token);
       const { error } = await supabase
         .from("clients")
         .update({
@@ -751,7 +872,7 @@ export default function Clients() {
       toast.success(result.accountName ? `Conta verificada: ${result.accountName}` : "Conexao Meta validada");
       load();
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao verificar integracao";
+      const message = errorMessage(error, "Erro ao verificar integracao");
       await supabase
         .from("clients")
         .update({
@@ -780,9 +901,36 @@ export default function Clients() {
     load();
   }
 
+  async function refreshClientLogos() {
+    setRefreshingLogos(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-client-logo", { body: { all: true } });
+      if (error) {
+        const detail = await (error as { context?: { json?: () => Promise<{ error?: string }> } })
+          ?.context?.json?.()
+          .catch(() => null);
+        throw new Error(detail?.error || error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+
+      const updated = data?.updated?.length ?? 0;
+      const failed = data?.failed?.length ?? 0;
+      if (updated === 0) {
+        toast.error(failed > 0 ? `Nenhuma foto atualizada · ${failed} com erro` : "Nenhuma foto atualizada");
+      } else {
+        toast.success(`${updated} foto(s) atualizada(s)${failed > 0 ? ` · ${failed} com erro` : ""}`);
+      }
+      load();
+    } catch (error) {
+      toast.error(errorMessage(error, "Erro ao atualizar as fotos"));
+    } finally {
+      setRefreshingLogos(false);
+    }
+  }
+
   async function runDueSyncs() {
     const dueClients = clients.filter(
-      (client) => client.meta_ad_account_id && client.meta_token_configured && isAutoSyncDue(client)
+      (client) => client.meta_ad_account_id && client.meta_access_token && isAutoSyncDue(client)
     );
 
     if (dueClients.length === 0) {
@@ -793,12 +941,12 @@ export default function Clients() {
     try {
       for (const client of dueClients) {
         setSyncingId(client.id);
-        await syncClientData(client.id, client.meta_ad_account_id!, setSyncProgress);
+        await syncClientData(client.id, client.meta_ad_account_id!, client.meta_access_token!, setSyncProgress);
       }
       toast.success(`${dueClients.length} cliente(s) sincronizado(s)`);
       load();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao executar sync automatica");
+      toast.error(errorMessage(error, "Erro ao executar sync automatica"));
       load();
     } finally {
       setSyncingId(null);
@@ -807,7 +955,7 @@ export default function Clients() {
   }
 
   async function verifyConnectedClients() {
-    const connectedClients = clients.filter((client) => client.meta_ad_account_id && client.meta_token_configured);
+    const connectedClients = clients.filter((client) => client.meta_ad_account_id && client.meta_access_token);
     if (connectedClients.length === 0) {
       toast("Nenhum cliente conectado para verificar");
       return;
@@ -817,7 +965,7 @@ export default function Clients() {
       for (const client of connectedClients) {
         setVerifyingId(client.id);
         try {
-          const result = await validateMetaConnection(client.meta_ad_account_id!, { clientId: client.id });
+          const result = await validateMetaConnection(client.meta_ad_account_id!, client.meta_access_token!);
           await supabase
             .from("clients")
             .update({
@@ -827,7 +975,7 @@ export default function Clients() {
             })
             .eq("id", client.id);
         } catch (error) {
-          const message = error instanceof Error ? error.message : "Erro ao verificar integracao";
+          const message = errorMessage(error, "Erro ao verificar integracao");
           await supabase
             .from("clients")
             .update({
@@ -859,7 +1007,7 @@ export default function Clients() {
   // So 3 acoes primarias visiveis (as mais usadas no dia a dia); o resto fica
   // organizado no menu "..." pra nao poluir o card com 9 botoes de uma vez.
   function renderClientActions(client: Client, compact = false) {
-    const connected = !!(client.meta_ad_account_id && client.meta_token_configured);
+    const connected = !!(client.meta_ad_account_id && client.meta_access_token);
 
     return (
       <div className={`flex ${compact ? "flex-wrap" : "justify-end"} gap-2`}>
@@ -904,6 +1052,17 @@ export default function Clients() {
                 {verifyingId === client.id ? "Verificando..." : "Verificar conexão"}
               </DropdownMenuItem>
             )}
+            {canManage && connected && (
+              <DropdownMenuItem onClick={() => setDiagnosticsClient(client)}>
+                <Stethoscope className="mr-2 h-4 w-4" />Diagnosticar conexão
+              </DropdownMenuItem>
+            )}
+            {canManage && (
+              <DropdownMenuItem onClick={() => setReporteiClient(client)}>
+                <PlugZap className="mr-2 h-4 w-4" />
+                {client.connect_customer_uuid ? "Reportei Connect" : "Conectar Reportei"}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => navigate(`/clients/${client.id}/audit`)}>
               <ShieldCheck className="mr-2 h-4 w-4" />Auditar conta
             </DropdownMenuItem>
@@ -919,6 +1078,28 @@ export default function Clients() {
             {canManage && (
               <>
                 <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <UserCog className="mr-2 h-4 w-4" />Gestor responsavel
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuSubContent>
+                    {managers.length === 0 ? (
+                      <DropdownMenuItem disabled>Cadastre gestores em Automacao</DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuRadioGroup
+                        value={client.manager_id ?? NO_MANAGER}
+                        onValueChange={(value) => assignManager(client, value === NO_MANAGER ? null : value)}
+                      >
+                        <DropdownMenuRadioItem value={NO_MANAGER}>Sem gestor</DropdownMenuRadioItem>
+                        {managers.map((manager) => (
+                          <DropdownMenuRadioItem key={manager.id} value={manager.id}>
+                            {manager.name}
+                          </DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    )}
+                  </DropdownMenuSubContent>
+                </DropdownMenuSub>
                 <DropdownMenuItem onClick={() => openEditDialog(client)}>
                   <Pencil className="mr-2 h-4 w-4" />Editar
                 </DropdownMenuItem>
@@ -966,11 +1147,22 @@ export default function Clients() {
               <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? "animate-spin" : ""}`} />
               Sincronizar vencidos
             </Button>
+            <Button variant="outline" onClick={refreshClientLogos} disabled={refreshingLogos}>
+              <ImageIcon className={`mr-2 h-4 w-4 ${refreshingLogos ? "animate-pulse" : ""}`} />
+              {refreshingLogos ? "Atualizando fotos..." : "Atualizar fotos"}
+            </Button>
+            {canManage && (
+              <Button variant="outline" onClick={() => setBulkConnectOpen(true)}>
+                <Link2 className="mr-2 h-4 w-4" />
+                Conectar Meta em massa
+              </Button>
+            )}
             <Button onClick={openCreateDialog}><Plus className="mr-2 h-4 w-4" />Novo cliente</Button>
             <Dialog open={createOpen} onOpenChange={(open) => { setCreateOpen(open); if (!open) setEditClient(null); }}>
-              <DialogContent className="sm:max-w-lg">
-                <DialogHeader><DialogTitle>{editClient ? "Editar cliente" : "Novo cliente"}</DialogTitle></DialogHeader>
-                <form onSubmit={createClient} className="space-y-4">
+              <DialogContent className="flex max-h-[88vh] flex-col overflow-hidden sm:max-w-lg">
+                <DialogHeader className="shrink-0"><DialogTitle>{editClient ? "Editar cliente" : "Novo cliente"}</DialogTitle></DialogHeader>
+                <form onSubmit={createClient} className="flex min-h-0 flex-1 flex-col">
+                  <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-2">
                   <div className="space-y-2">
                     <Label htmlFor="name">Nome do cliente</Label>
                     <Input id="name" value={newName} onChange={(event) => setNewName(event.target.value)} required placeholder="Ex: Pizzaria do Bairro" />
@@ -999,6 +1191,43 @@ export default function Clients() {
                       </Select>
                     </div>
                   </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      Empresa
+                      <span className="text-xs font-normal text-muted-foreground">(quem enxerga esse cliente)</span>
+                    </Label>
+                    <Select value={newCompanyId} onValueChange={setNewCompanyId}>
+                      <SelectTrigger><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
+                      <SelectContent>
+                        {companies.map((company) => (
+                          <SelectItem key={company.id} value={company.id}>{company.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {!newCompanyId && (
+                      <p className="text-xs text-amber-600">
+                        Sem empresa, esse cliente so aparece para o owner.
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5">
+                      Gestor responsavel
+                      <span className="text-xs font-normal text-muted-foreground">(quem cuida dessa conta)</span>
+                    </Label>
+                    <Select
+                      value={newManagerId || NO_MANAGER}
+                      onValueChange={(value) => setNewManagerId(value === NO_MANAGER ? "" : value)}
+                    >
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NO_MANAGER}>Sem gestor definido</SelectItem>
+                        {managers.map((manager) => (
+                          <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="grid gap-3 sm:grid-cols-[1fr_120px_140px]">
                     <div className="space-y-2">
                       <Label htmlFor="city">Cidade</Label>
@@ -1016,21 +1245,6 @@ export default function Clients() {
                   <div className="space-y-2">
                     <Label htmlFor="address">Endereço</Label>
                     <Input id="address" value={newAddress} onChange={(event) => setNewAddress(event.target.value)} placeholder="Rua, número, bairro" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="monthlyBudget" className="flex items-center gap-1.5">
-                      Verba mensal (R$)
-                      <span className="text-xs font-normal text-muted-foreground">(para o alerta de verba acabando)</span>
-                    </Label>
-                    <Input
-                      id="monthlyBudget"
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={newMonthlyBudget}
-                      onChange={(event) => setNewMonthlyBudget(event.target.value)}
-                      placeholder="Ex: 3000"
-                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="logoUrl">Foto ou logo (URL)</Label>
@@ -1070,7 +1284,8 @@ export default function Clients() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <DialogFooter>
+                  </div>
+                  <DialogFooter className="shrink-0 border-t border-border/60 pt-3">
                     <Button type="submit" disabled={saving}>{saving ? "Salvando..." : editClient ? "Salvar" : "Criar"}</Button>
                   </DialogFooter>
                 </form>
@@ -1081,7 +1296,7 @@ export default function Clients() {
       </div>
 
       <Dialog open={!!connectClient} onOpenChange={(open) => !open && closeConnectDialog()}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Conectar Meta Ads - {connectClient?.name}</DialogTitle>
           </DialogHeader>
@@ -1093,7 +1308,7 @@ export default function Clients() {
             </TabsList>
 
             <TabsContent value="oauth" className="space-y-4 pt-2">
-              {adAccounts.length === 0 ? (
+              {!longLivedToken ? (
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">
                     Clique no botao abaixo para autorizar o acesso via sua conta do Facebook.
@@ -1113,19 +1328,55 @@ export default function Clients() {
                 <form onSubmit={handleSaveOAuth} className="space-y-4">
                   <div className="space-y-2">
                     <Label>Conta de anuncios</Label>
-                    <SearchableSelect
-                      value={selectedAccountId}
-                      onChange={setSelectedAccountId}
-                      placeholder="Selecione a conta..."
-                      searchPlaceholder="Buscar conta ou ID..."
-                      emptyText="Nenhuma conta encontrada"
-                      options={adAccounts.map((account) => ({
-                        value: account.id.replace("act_", ""),
-                        label: account.name,
-                        description: account.id,
-                        keywords: [account.id, account.id.replace("act_", "")],
-                      }))}
-                    />
+                    {adAccounts.length > 0 ? (
+                      <SearchableSelect
+                        value={selectedAccountId}
+                        onChange={setSelectedAccountId}
+                        placeholder="Selecione a conta..."
+                        searchPlaceholder="Buscar conta ou ID..."
+                        emptyText="Nenhuma conta encontrada"
+                        options={adAccounts.map((account) => ({
+                          value: account.id.replace("act_", ""),
+                          label: account.name || account.id,
+                          description: [account.id, account.business?.name, adAccountStatusLabel(account.account_status)]
+                            .filter(Boolean)
+                            .join(" · "),
+                          keywords: [account.id, account.id.replace("act_", ""), account.business?.name ?? ""],
+                        }))}
+                      />
+                    ) : (
+                      <Input
+                        value={selectedAccountId}
+                        onChange={(event) => setSelectedAccountId(event.target.value.trim().replace("act_", ""))}
+                        placeholder="ID da conta (ex: 123456789)"
+                      />
+                    )}
+                    {adAccounts.length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        A Meta nao devolveu nenhuma conta de anuncios para este usuario. Verifique em
+                        business.facebook.com se o seu usuario tem acesso a conta do cliente (Contas de anuncio &gt;
+                        Adicionar pessoas) e reconecte, ou cole o ID da conta aqui - o token ja esta salvo.
+                      </p>
+                    )}
+                    {/* A lista da Meta nem sempre traz a conta do cliente. Sem
+                        esta saida, quando ela nao vinha a tela travava: o campo
+                        manual so aparecia com a lista completamente vazia. */}
+                    {adAccounts.length > 0 && (
+                      <>
+                        <Input
+                          value={selectedAccountId}
+                          onChange={(event) => setSelectedAccountId(event.target.value.trim().replace("act_", ""))}
+                          placeholder="Ou informe o ID da conta (ex: 123456789)"
+                          className="text-xs"
+                        />
+                        {selectedAccountId &&
+                          !adAccounts.some((account) => account.id.replace("act_", "") === selectedAccountId) && (
+                            <p className="text-xs text-amber-600">
+                              Essa conta nao veio na lista da Meta, mas o ID informado sera salvo do mesmo jeito.
+                            </p>
+                          )}
+                      </>
+                    )}
                   </div>
                   {pages.length > 0 && (
                     <div className="space-y-2">
@@ -1134,7 +1385,8 @@ export default function Clients() {
                         value={selectedPageId}
                         onChange={(value) => {
                           setSelectedPageId(value);
-                          const igFromPage = pages.find((page) => page.id === value)?.instagram_business_account;
+                          const page = pages.find((item) => item.id === value);
+                          const igFromPage = page?.instagram_business_account ?? page?.connected_instagram_account;
                           if (igFromPage?.id) setSelectedInstagramId(igFromPage.id);
                         }}
                         placeholder="Selecione a pagina para usar a logo..."
@@ -1152,44 +1404,35 @@ export default function Clients() {
                       </p>
                     </div>
                   )}
-                  {(() => {
-                    const instagramOptions = Array.from(
-                      pages
-                        .map((page) => ({ page, account: page.instagram_business_account }))
-                        .filter((entry): entry is { page: MetaPage; account: { id: string; username?: string; profile_picture_url?: string } } => Boolean(entry.account?.id))
-                        .reduce((map, { page, account }) => {
-                          if (!map.has(account.id)) {
-                            map.set(account.id, {
-                              value: account.id,
-                              label: account.username ? `@${account.username}` : `Instagram ${account.id}`,
-                              description: `Vinculado a ${page.name}`,
-                              keywords: [account.id, page.name, account.username ?? ""],
-                            });
-                          }
-                          return map;
-                        }, new Map<string, { value: string; label: string; description: string; keywords: string[] }>())
-                        .values()
-                    );
-
-                    if (instagramOptions.length === 0) return null;
-
-                    return (
-                      <div className="space-y-2">
-                        <Label>Perfil do Instagram</Label>
-                        <SearchableSelect
-                          value={selectedInstagramId}
-                          onChange={setSelectedInstagramId}
-                          placeholder="Selecione o Instagram..."
-                          searchPlaceholder="Buscar Instagram..."
-                          emptyText="Nenhum Instagram encontrado"
-                          options={instagramOptions}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          Define o perfil usado para seguidores, alcance e visitas ao perfil.
-                        </p>
-                      </div>
-                    );
-                  })()}
+                  <div className="space-y-2">
+                    <Label>Perfil do Instagram</Label>
+                    {instagramAccounts.length > 0 ? (
+                      <SearchableSelect
+                        value={selectedInstagramId}
+                        onChange={setSelectedInstagramId}
+                        placeholder="Selecione o Instagram..."
+                        searchPlaceholder="Buscar Instagram..."
+                        emptyText="Nenhum Instagram encontrado"
+                        options={instagramAccounts.map((account) => ({
+                          value: account.id,
+                          label: account.username ? `@${account.username}` : `Instagram ${account.id}`,
+                          description: account.origin ? `Via ${account.origin}` : account.id,
+                          keywords: [account.id, account.username ?? "", account.origin ?? ""],
+                        }))}
+                      />
+                    ) : (
+                      <Input
+                        value={selectedInstagramId}
+                        onChange={(event) => setSelectedInstagramId(event.target.value.trim())}
+                        placeholder="ID do perfil (ex: 17841400000000000)"
+                      />
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {instagramAccounts.length > 0
+                        ? "Define o perfil usado para seguidores, alcance e visitas ao perfil."
+                        : "Nenhum perfil vinculado foi encontrado nesta conta. Cole o ID do Instagram (Meta Business > Contas do Instagram) ou vincule o perfil a Pagina e conecte de novo."}
+                    </p>
+                  </div>
                   <div className="rounded-xl border border-slate-200 p-3 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -1329,10 +1572,10 @@ export default function Clients() {
                 <Wallet className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-muted-foreground">Verba do mes</p>
-                <p className="text-2xl font-bold">{formatCurrency(budgetOverview.spent)}</p>
+                <p className="text-sm text-muted-foreground">Saldo nas contas</p>
+                <p className="text-2xl font-bold">{formatCurrency(budgetOverview.balance)}</p>
                 <p className="text-xs text-muted-foreground">
-                  de {formatCurrency(budgetOverview.total)} · {Math.round(budgetOverviewPct)}%
+                  {formatCurrency(budgetOverview.spent)} gastos · {formatCurrency(budgetOverview.deposited)} aportados
                 </p>
                 <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
                   <div
@@ -1341,7 +1584,7 @@ export default function Clients() {
                   />
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {budgetOverview.atRisk} acima do ritmo · {budgetOverview.withoutBudget} sem verba
+                  {budgetOverview.lowBalance} com saldo baixo · {budgetOverview.withoutBalance} sem saldo lido
                 </p>
               </div>
             </div>
@@ -1350,7 +1593,7 @@ export default function Clients() {
         <Card className="border-slate-200">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-indigo-100 p-3 text-indigo-600">
+              <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-600">
                 <Sparkles className="h-5 w-5" />
               </div>
               <div>
@@ -1440,6 +1683,19 @@ export default function Clients() {
                   <SelectItem value="disconnected">Nao conectada</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={managerFilter} onValueChange={(value) => setManagerFilter(value as ManagerFilter)}>
+                <SelectTrigger className="w-[170px]">
+                  <UserCog className="mr-2 h-4 w-4" />
+                  <SelectValue placeholder="Gestor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos gestores</SelectItem>
+                  <SelectItem value={NO_MANAGER}>Sem gestor</SelectItem>
+                  {managers.map((manager) => (
+                    <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Select value={budgetFilter} onValueChange={(value) => setBudgetFilter(value as BudgetFilter)}>
                 <SelectTrigger className="w-[180px]">
                   <Wallet className="mr-2 h-4 w-4" />
@@ -1447,9 +1703,10 @@ export default function Clients() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toda verba</SelectItem>
-                  <SelectItem value="overPace">Acima do ritmo</SelectItem>
-                  <SelectItem value="underPace">Abaixo do ritmo</SelectItem>
-                  <SelectItem value="noBudget">Sem verba definida</SelectItem>
+                  <SelectItem value="vaiFaltar">Saldo nao cobre o mes</SelectItem>
+                  <SelectItem value="sobrando">Saldo sobrando</SelectItem>
+                  <SelectItem value="lowBalance">Saldo baixo</SelectItem>
+                  <SelectItem value="noBalance">Sem saldo lido</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={sortBy} onValueChange={(value) => setSortBy(value as SortOption)}>
@@ -1462,7 +1719,7 @@ export default function Clients() {
                   <SelectItem value="name">Nome A-Z</SelectItem>
                   <SelectItem value="reports">Mais relatorios</SelectItem>
                   <SelectItem value="lastSync">Ultima sync</SelectItem>
-                  <SelectItem value="budget">Verba consumida</SelectItem>
+                  <SelectItem value="balance">Menor saldo</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="ghost" size="sm" onClick={resetFilters} className="text-muted-foreground">
@@ -1489,7 +1746,7 @@ export default function Clients() {
             </Badge>
             <Badge variant="secondary" className="gap-1 rounded-full bg-violet-500/10 text-violet-200">
               <Wallet className="h-3 w-3" />
-              {formatCurrency(budgetOverview.spent)} de {formatCurrency(budgetOverview.total)}
+              {formatCurrency(budgetOverview.balance)} em saldo
             </Badge>
           </div>
         </CardHeader>
@@ -1508,16 +1765,16 @@ export default function Clients() {
                   : "nenhum gerado ainda";
 
                 return (
-                  <Card key={client.id} className="overflow-hidden border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+                  <Card key={client.id} className={`overflow-hidden shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${tomArquivado(isArchived, isActive)}`}>
                     <CardContent className="p-5">
                       <div className="flex items-center justify-between gap-3">
                         <div
                           className="flex items-center min-w-0 cursor-pointer group/clientlink"
                           onClick={() => navigate(`/clients/${client.id}`)}
                         >
-                          <ClientAvatar name={client.name} logoUrl={client.logo_url} className="mr-4 h-10 w-10" />
+                          <ClientAvatar name={client.name} logoUrl={client.logo_url} className={`mr-4 h-10 w-10 ${isArchived ? "opacity-60 grayscale" : ""}`} />
                           <div className="min-w-0">
-                            <h3 className="text-lg font-semibold truncate group-hover/clientlink:text-primary group-hover/clientlink:underline">{client.name}</h3>
+                            <h3 className={`text-lg font-semibold truncate group-hover/clientlink:text-primary group-hover/clientlink:underline ${isArchived ? "text-slate-500" : ""}`}>{client.name}</h3>
                             <div className="mt-1 flex flex-wrap gap-2">
                               <Badge variant="outline" className={isArchived ? "border-amber-200 bg-amber-50 text-amber-700" : isActive ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
                                 {isArchived ? "Arquivado" : isActive ? "Ativo" : "Inativo"}
@@ -1525,6 +1782,11 @@ export default function Clients() {
                               <Badge variant="outline" className={isConnected ? "border-sky-200 bg-sky-50 text-sky-700" : "border-slate-200 bg-slate-50 text-slate-500"}>
                                 {isConnected ? "Meta conectada" : "Sem Meta"}
                               </Badge>
+                              {client.connect_customer_uuid && (
+                                <Badge variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-700">
+                                  <PlugZap className="h-3 w-3" />Reportei
+                                </Badge>
+                              )}
                               <Badge variant="outline" className={health.badge}>
                                 {health.label}
                               </Badge>
@@ -1538,6 +1800,15 @@ export default function Clients() {
                                   <Store className="h-3 w-3" />{segmentLabel(client.business_segment)}
                                 </Badge>
                               )}
+                              <Badge
+                                variant="outline"
+                                className={client.manager_id
+                                  ? "gap-1 border-emerald-200 bg-emerald-50 text-emerald-700"
+                                  : "gap-1 border-dashed border-slate-200 bg-slate-50 text-slate-500"}
+                              >
+                                <UserCog className="h-3 w-3" />
+                                {client.manager_id ? managerById.get(client.manager_id)?.name ?? "Gestor removido" : "Sem gestor"}
+                              </Badge>
                               {(client.city || client.state) && (
                                 <Badge variant="outline" className="gap-1 border-slate-200 bg-slate-50 text-slate-600">
                                   <MapPin className="h-3 w-3" />{[client.city, client.state].filter(Boolean).join("/")}
@@ -1548,7 +1819,7 @@ export default function Clients() {
                         </div>
                         <div className="shrink-0 text-right">
                           {syncingId === client.id ? (
-                            <span className="inline-flex items-center text-xs font-medium text-indigo-600">
+                            <span className="inline-flex items-center text-xs font-medium text-emerald-600">
                               <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
                               Sync...
                             </span>
@@ -1585,7 +1856,7 @@ export default function Clients() {
                       <div className="mt-3">
                         <ClientBudgetMeter
                           status={budget}
-                          onSetBudget={canManage ? () => openEditDialog(client) : undefined}
+                          onSync={canManage && client.meta_ad_account_id ? () => handleQuickSync(client) : undefined}
                         />
                       </div>
 
@@ -1604,6 +1875,7 @@ export default function Clients() {
                   <TableHead>Cliente</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Meta Ads</TableHead>
+                  <TableHead>Gestor</TableHead>
                   <TableHead>Verba do mes</TableHead>
                   <TableHead>Relatorios</TableHead>
                   <TableHead>Ultima sync</TableHead>
@@ -1612,15 +1884,15 @@ export default function Clients() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredClients.map(({ client, stats, budget, isConnected, lastSyncDate, syncLabel, health, syncDue }) => {
+                {filteredClients.map(({ client, stats, budget, isArchived, isConnected, lastSyncDate, syncLabel, health, syncDue }) => {
                   return (
-                    <TableRow key={client.id}>
+                    <TableRow key={client.id} className={isArchived ? "bg-slate-50/70 text-slate-500" : undefined}>
                       <TableCell>
                         <div
                           className="flex items-center gap-3 cursor-pointer group/clientlink"
                           onClick={() => navigate(`/clients/${client.id}`)}
                         >
-                          <Avatar className="h-10 w-10 border border-slate-200">
+                          <Avatar className={`h-10 w-10 border border-slate-200 ${isArchived ? "opacity-60 grayscale" : ""}`}>
                             {client.logo_url && <AvatarImage src={client.logo_url} alt={client.name} />}
                             <AvatarFallback className={`${getAvatarTone(client.name)} text-xs font-semibold`}>
                               {getInitials(client.name)}
@@ -1664,6 +1936,15 @@ export default function Clients() {
                         </div>
                       </TableCell>
                       <TableCell>
+                        {client.manager_id ? (
+                          <span className="text-xs font-medium text-slate-700">
+                            {managerById.get(client.manager_id)?.name ?? "Gestor removido"}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Sem gestor</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <ClientBudgetCell status={budget} />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
@@ -1671,7 +1952,7 @@ export default function Clients() {
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {syncingId === client.id ? (
-                          <span className="inline-flex items-center text-indigo-600">
+                          <span className="inline-flex items-center text-emerald-600">
                             <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
                             {syncProgress || "Sincronizando"}
                           </span>
@@ -1728,6 +2009,41 @@ export default function Clients() {
           client={reportClient}
         />
       )}
+
+      {reporteiClient && (
+        <ConnectDialog
+          open={!!reporteiClient}
+          onClose={() => setReporteiClient(null)}
+          client={reporteiClient}
+          onConnected={(customerUuid) => {
+            setClients((prev) =>
+              prev.map((item) =>
+                item.id === reporteiClient.id
+                  ? { ...item, connect_customer_uuid: customerUuid, connect_connected_at: new Date().toISOString() }
+                  : item,
+              ),
+            );
+            setReporteiClient((current) =>
+              current ? { ...current, connect_customer_uuid: customerUuid } : current,
+            );
+          }}
+        />
+      )}
+
+      {diagnosticsClient && (
+        <MetaDiagnosticsDialog
+          open={!!diagnosticsClient}
+          onClose={() => setDiagnosticsClient(null)}
+          client={diagnosticsClient}
+        />
+      )}
+
+      <BulkMetaConnectDialog
+        open={bulkConnectOpen}
+        onClose={() => setBulkConnectOpen(false)}
+        clients={clients}
+        onSaved={load}
+      />
     </div>
   );
 }

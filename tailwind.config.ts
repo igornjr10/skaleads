@@ -1,4 +1,6 @@
 import type { Config } from "tailwindcss";
+import tailwindcssAnimate from "tailwindcss-animate";
+import typography from "@tailwindcss/typography";
 
 export default {
   darkMode: ["class"],
@@ -88,12 +90,35 @@ export default {
             height: "0",
           },
         },
+        // O Collapsible do Radix expoe a altura em OUTRA variavel que o
+        // Accordion. Reaproveitar as keyframes acima deixa a altura invalida e
+        // o submenu do sidebar abre sem animacao nenhuma.
+        "collapsible-down": {
+          from: {
+            height: "0",
+          },
+          to: {
+            height: "var(--radix-collapsible-content-height)",
+          },
+        },
+        "collapsible-up": {
+          from: {
+            height: "var(--radix-collapsible-content-height)",
+          },
+          to: {
+            height: "0",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "collapsible-down": "collapsible-down 0.2s ease-out",
+        "collapsible-up": "collapsible-up 0.2s ease-out",
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  // O typography estava no package.json desde sempre e nunca foi registrado:
+  // toda classe `prose` do sistema era decorativa ate 18/09/2026.
+  plugins: [tailwindcssAnimate, typography],
 } satisfies Config;

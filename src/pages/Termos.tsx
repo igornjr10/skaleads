@@ -1,82 +1,68 @@
-import { Bloco, LegalShell } from "@/components/LegalShell";
-
-// ATENCAO: revise com quem cuida do juridico antes de divulgar.
-const EMPRESA = "[RAZÃO SOCIAL]";
-const EMAIL = "[email de contato]";
+import { LegalPage, Section } from "@/components/legal/LegalPage";
 
 export default function Termos() {
   return (
-    <LegalShell titulo="Termos de Uso" atualizadoEm="12 de agosto de 2026">
-      <Bloco titulo="O serviço">
-        <p>
-          O Scale Ads, operado por {EMPRESA}, é uma plataforma de gestão de campanhas de anúncios da Meta. Ao criar uma
-          conta, você concorda com estes termos.
-        </p>
-      </Bloco>
+    <LegalPage title="Termos de Uso" updatedAt="16 de setembro de 2026">
+      <p className="text-[15px] leading-relaxed text-muted-foreground">
+        Estes termos regem o uso do Ad Campaign Hub, plataforma de gestão de tráfego pago operada pela
+        Scale Ads (CNPJ [PREENCHER]) em manager.marketprosystem.com.
+      </p>
 
-      <Bloco titulo="Sua conta">
-        <p>
-          Você é responsável pelas credenciais de acesso e por tudo que for feito através da sua conta. Avise-nos em{" "}
-          {EMAIL} se suspeitar de uso indevido.
-        </p>
-        <p>
-          Cada equipe enxerga apenas a própria carteira de clientes. Ao convidar alguém para a sua equipe, você autoriza
-          essa pessoa a ver e gerenciar os clientes daquela carteira.
-        </p>
-      </Bloco>
+      <Section title="1. Do que se trata">
+        O Ad Campaign Hub centraliza o acompanhamento de campanhas de anúncios da Meta: sincroniza os
+        dados da conta, gera relatórios e auditorias, dispara alertas de desempenho e organiza a rotina
+        de produção da agência. O acesso é concedido pela Scale Ads a colaboradores e a clientes
+        contratantes — não há cadastro aberto.
+      </Section>
 
-      <Bloco titulo="Conexão com a Meta">
+      <Section title="2. Conta e responsabilidade">
         <p>
-          Para funcionar, o sistema precisa de um token de acesso às contas de anúncios que você administra. Você declara
-          ter autorização dos seus clientes para conectar essas contas e consultar os dados delas.
+          Cada usuário é responsável por manter as credenciais em sigilo e por tudo que for feito com o
+          login dele. Avise imediatamente em contato@marketproads.com se suspeitar de acesso indevido.
         </p>
         <p>
-          O uso da API da Meta segue as políticas da própria Meta. Mudanças, indisponibilidades ou restrições impostas
-          por ela podem afetar funções do serviço, sem que isso configure descumprimento da nossa parte.
+          Ao conectar uma conta de anúncios, você declara ter autorização do titular dessa conta para
+          compartilhar os dados com a plataforma.
         </p>
-      </Bloco>
+      </Section>
 
-      <Bloco titulo="Uso aceitável">
+      <Section title="3. Uso aceitável">
+        <p>Ao usar a plataforma, você concorda em não:</p>
         <p>
-          Não é permitido usar a plataforma para atividade ilegal, para acessar contas sem autorização do titular, para
-          tentar burlar limites técnicos, nem para revender acesso sem contrato específico conosco.
+          • acessar contas de anúncio sem autorização do titular;<br />
+          • extrair dados em massa para uso fora da finalidade contratada;<br />
+          • tentar contornar os controles de acesso ou as políticas de segurança do banco;<br />
+          • usar a plataforma para violar as políticas de publicidade ou os termos da Meta.
         </p>
-      </Bloco>
+      </Section>
 
-      <Bloco titulo="Disponibilidade">
-        <p>
-          Trabalhamos para manter o serviço no ar, mas ele é fornecido "como está". Pode haver manutenção, indisponibilidade
-          de provedores externos ou falha de sincronização com a Meta. Sempre que possível, avisamos com antecedência.
-        </p>
-      </Bloco>
+      <Section title="4. Dados e privacidade">
+        O tratamento de dados pessoais está descrito na{" "}
+        <a href="/privacidade" className="text-primary underline underline-offset-4">Política de Privacidade</a>,
+        que é parte integrante destes termos. As instruções para apagar seus dados estão em{" "}
+        <a href="/exclusao-de-dados" className="text-primary underline underline-offset-4">Exclusão de dados</a>.
+      </Section>
 
-      <Bloco titulo="Dados e relatórios">
-        <p>
-          Os números exibidos vêm da API da Meta e refletem o que ela reporta no momento da sincronização. A Meta
-          reprocessa dados de atribuição, então valores podem variar entre consultas. Decisões de investimento tomadas
-          com base nos relatórios são de responsabilidade de quem as toma.
-        </p>
-      </Bloco>
+      <Section title="5. Dados de terceiros">
+        Os números exibidos vêm da Graph API da Meta e refletem o que a plataforma de anúncios reporta.
+        Divergências, atrasos de atualização ou indisponibilidade da API da Meta estão fora do nosso
+        controle. A plataforma é uma ferramenta de apoio à decisão e não garante resultado de campanha.
+      </Section>
 
-      <Bloco titulo="Encerramento">
-        <p>
-          Você pode encerrar sua conta quando quiser, pelo canal {EMAIL}. Podemos suspender contas que violem estes
-          termos, com aviso prévio sempre que a situação permitir.
-        </p>
-      </Bloco>
+      <Section title="6. Disponibilidade e alterações">
+        Fazemos o possível para manter o serviço no ar, mas ele pode ficar indisponível para manutenção
+        ou por falha de fornecedores. Podemos alterar ou descontinuar funcionalidades, avisando os
+        usuários ativos com antecedência razoável quando a mudança for relevante.
+      </Section>
 
-      <Bloco titulo="Alterações">
-        <p>
-          Estes termos podem mudar. Alterações relevantes serão comunicadas por e-mail ou dentro do sistema antes de
-          entrarem em vigor.
-        </p>
-      </Bloco>
+      <Section title="7. Encerramento">
+        O acesso pode ser encerrado por qualquer das partes, a qualquer momento. Encerrado o acesso,
+        os dados são tratados conforme a seção de retenção da Política de Privacidade.
+      </Section>
 
-      <Bloco titulo="Foro">
-        <p>
-          Aplica-se a legislação brasileira. Fica eleito o foro do domicílio do contratante para dirimir controvérsias.
-        </p>
-      </Bloco>
-    </LegalShell>
+      <Section title="8. Foro e contato">
+        Estes termos são regidos pela lei brasileira. Dúvidas e notificações: contato@marketproads.com.
+      </Section>
+    </LegalPage>
   );
 }

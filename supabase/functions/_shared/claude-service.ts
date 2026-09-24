@@ -109,6 +109,12 @@ async function callClaudeWithRetry(
       }
 
       const data = await response.json();
+      // Recusa por seguranca volta com HTTP 200 e `content` vazio: sem esta
+      // checagem, `content[0].text` estoura com TypeError e o motivo real da
+      // recusa, que vem em `stop_details`, se perde.
+      if (data.stop_reason === "refusal") {
+        throw new Error(`Claude recusou a requisicao (${data.stop_details?.category ?? "sem categoria"})`);
+      }
       return {
         content: data.content[0].text,
         tokens: {
@@ -392,3 +398,4 @@ export async function logTokenUsage(
     cost_usd: cost.toFixed(6),
   }));
 }
+

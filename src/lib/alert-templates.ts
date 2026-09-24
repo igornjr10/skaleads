@@ -12,15 +12,15 @@ export interface AlertTemplate {
 
 export const ALERT_TEMPLATES: AlertTemplate[] = [
   {
-    id: "budget_running_out",
-    name: "Verba mensal acabando",
-    description: "Avisa o gestor no WhatsApp quando o cliente consome 80% ou mais da verba mensal cadastrada",
-    icon: "🔔",
+    id: "balance_low",
+    name: "Saldo baixo na conta Meta",
+    description: "Avisa o gestor quando o saldo da conta cai abaixo de R$ 50 — conta zerada para a entrega sem aviso",
+    icon: "🪫",
     rule: {
-      conditions: [{ metric: "budget", comparator: "gte", value: 80, period: "30d", entityType: "CLIENT" }],
+      conditions: [{ metric: "balance", comparator: "lt", value: 50, period: "1d", entityType: "CLIENT" }],
       logic: "AND",
     },
-    cooldownMinutes: 1440,
+    cooldownMinutes: 720,
     enableWhatsapp: true,
   },
   {

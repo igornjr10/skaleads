@@ -10,6 +10,19 @@ interface EdgeFunctionResponse<T> {
   [key: string]: unknown;
 }
 
+async function lerErroDoCorpo(error: unknown): Promise<string | null> {
+  const contexto = (error as { context?: unknown } | null)?.context;
+  if (!(contexto instanceof Response)) return null;
+  try {
+    const corpo = await contexto.clone().json();
+    return typeof corpo?.error === "string" ? corpo.error : null;
+  } catch {
+    // Corpo nao-JSON (timeout do gateway, stack trace crua): melhor cair no
+    // fallback do que estourar aqui e esconder o erro original.
+    return null;
+  }
+}
+
 async function callEdgeFunction<T>(
   functionName: string,
   payload: Record<string, unknown>
@@ -17,15 +30,22 @@ async function callEdgeFunction<T>(
   const { data: user } = await supabase.auth.getUser();
   if (!user?.user?.id) throw new Error("Usuario nao autenticado");
 
-  // O tenant sai do JWT no servidor; mandar no corpo so daria margem a spoof.
+  const fullPayload = { ...payload, tenantId: user.user.id };
+
   const { data, error } = await supabase.functions.invoke(functionName, {
-    body: payload,
+    body: fullPayload,
   });
 
   const response = data as EdgeFunctionResponse<T> | null;
 
   if (error || !response?.success) {
-    throw new Error(response?.error || error?.message || `Erro ao chamar funcao de IA (${functionName})`);
+    // Num status fora do 2xx o supabase-js nao le o corpo: `data` vem null e
+    // sobra "Edge Function returned a non-2xx status code", que nao diz nada.
+    // A causa real esta no corpo da resposta, guardado em `error.context`.
+    const doCorpo = await lerErroDoCorpo(error);
+    throw new Error(
+      doCorpo || response?.error || error?.message || `Erro ao chamar funcao de IA (${functionName})`
+    );
   }
 
   const inferredKey =
@@ -145,7 +165,7 @@ export async function sendChatMessage(
   if (!user?.user?.id) throw new Error("Usuario nao autenticado");
 
   const { data, error } = await supabase.functions.invoke("chat-assistant", {
-    body: { messages, clientId },
+    body: { messages, clientId, tenantId: user.user.id },
   });
 
   const response = data as { success: boolean; reply: string; tokens: { input: number; output: number }; cost_usd: string; error?: string } | null;
@@ -175,4 +195,66 @@ export async function prioritizeAuditActions(payload: AuditActionInput): Promise
     cost: response.cost,
     cached: response.cached,
   };
+}
+
+export interface NicheBriefingPayload {
+  segmentLabel: string;
+  goalLabel: string;
+  benchmark: {
+    clientes: number;
+    spend: number;
+    ctr: number;
+    cpm: number;
+    cpc: number;
+    custoPorResultado: number | null;
+    confiavel: boolean;
+  };
+  creatives: Array<{ title: string; ctr: number; impressions: number; creativeType: string }>;
+  formatos: Array<{ creativeType: string; ctr: number; anuncios: number }>;
+  /** Presente = briefing de diagnostico deste cliente contra o nicho dele. */
+  client?: {
+    name: string;
+    spend: number;
+    ctr: number;
+    cpm: number;
+    cpc: number;
+    custoPorResultado: number | null;
+    diasComGasto: number;
+    creatives: Array<{ title: string; ctr: number; impressions: number; creativeType: string }>;
+  };
+}
+
+export async function generateNicheBriefing(payload: NicheBriefingPayload): Promise<{
+  briefing: string;
+  tokens: { input: number; output: number };
+  cost: number;
+  cached: boolean;
+}> {
+  const response = await callEdgeFunction<string>("niche-briefing", { ...payload });
+
+  return {
+    briefing: response.data as string,
+    tokens: response.tokens,
+    cost: response.cost,
+    cached: response.cached,
+  };
+}
+
+export async function gerarPautaDeConteudo(payload: NicheBriefingPayload): Promise<Record<string, unknown>> {
+  const { data: user } = await supabase.auth.getUser();
+  if (!user?.user?.id) throw new Error("Usuario nao autenticado");
+
+  const { data, error } = await supabase.functions.invoke("niche-briefing", {
+    body: { ...payload, modo: "pauta", tenantId: user.user.id },
+  });
+
+  const response = data as (EdgeFunctionResponse<unknown> & { pauta?: Record<string, unknown> }) | null;
+
+  if (error || !response?.success) {
+    const doCorpo = await lerErroDoCorpo(error);
+    throw new Error(doCorpo || response?.error || error?.message || "Erro ao gerar a pauta de conteudo");
+  }
+
+  if (!response.pauta) throw new Error("A pauta voltou vazia. Tente gerar de novo.");
+  return response.pauta;
 }

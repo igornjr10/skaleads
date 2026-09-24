@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { loadWhatsappConfig, sendText, type WhatsappConfig } from "../_shared/whatsapp.ts";
+import { sendText } from "../_shared/whatsapp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -81,23 +81,15 @@ interface SendResult {
   error: string | null;
 }
 
-async function sendToGroups(
-  cfg: WhatsappConfig,
-  jids: string[],
-  text: string
-): Promise<SendResult[]> {
+async function sendToGroups(jids: string[], text: string): Promise<SendResult[]> {
   const results: SendResult[] = [];
 
   for (const jid of jids) {
     try {
-      const { messageId } = await sendText(cfg, jid, text);
-
-      // O provedor pode devolver 200 sem realmente enfileirar a mensagem
-      if (!messageId) {
-        results.push({ jid, ok: false, status: 200, error: "Resposta sem message id" });
-        continue;
-      }
-
+      // A checagem de `key.id` saiu junto com a Evolution: ela devolvia 200 sem
+      // enfileirar e so o message id denunciava. A uazapi erra com status != 2xx
+      // e corpo {error:true}, que o helper compartilhado ja transforma em throw.
+      await sendText(jid, text);
       results.push({ jid, ok: true, status: 200, error: null });
     } catch (err) {
       results.push({ jid, ok: false, status: null, error: (err as Error).message });
@@ -124,8 +116,6 @@ serve(async (req) => {
     if (!supabaseUrl || !svcKey) {
       throw new Error("Variáveis de ambiente não configuradas");
     }
-
-    const cfg = await loadWhatsappConfig();
 
     const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
     const testId = body?.test_id as string | undefined;
@@ -156,11 +146,13 @@ serve(async (req) => {
         throw new Error("Este agendamento não tem nenhum grupo de destino selecionado");
       }
 
-      const results = await sendToGroups(cfg, scheduled.target_group_jids, scheduled.message);
+      const results = await sendToGroups(
+        scheduled.target_group_jids, scheduled.message
+      );
       const failed = results.filter(r => !r.ok);
 
       if (failed.length === results.length) {
-        throw new Error(`O provedor recusou todos os envios — ${failed[0].jid}: ${failed[0].error}`);
+        throw new Error(`uazapi recusou todos os envios — ${failed[0].jid}: ${failed[0].error}`);
       }
 
       return new Response(
@@ -197,7 +189,9 @@ serve(async (req) => {
         if (timeToMinutes(item.send_time) > minutesOfDay) continue;
         if (!item.target_group_jids || item.target_group_jids.length === 0) continue;
 
-        const results = await sendToGroups(cfg, item.target_group_jids, item.message);
+        const results = await sendToGroups(
+          item.target_group_jids, item.message
+        );
         const delivered = results.filter(r => r.ok).length;
 
         for (const r of results.filter(r => !r.ok)) {
