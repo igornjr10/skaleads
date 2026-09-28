@@ -8,6 +8,7 @@
 // 16/08/2026). Como secret, trocar o modelo nao exige redeploy — mesmo padrao
 // do chat-assistant.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { guard } from "../_shared/auth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -278,6 +279,9 @@ Nada de introducao nem despedida.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+
+  const acesso = await guard(req, cors);
+  if (!acesso.ok) return acesso.response;
 
   try {
     const body = await req.json();

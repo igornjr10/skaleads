@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, sendDocument, sendText } from "../_shared/whatsapp.ts";
+import { guard } from "../_shared/auth.ts";
 
 interface RequestPayload {
   client_id: string;
@@ -29,6 +30,9 @@ serve(async (req) => {
     if (!client_id || !file_name || !media_base64) {
       throw new Error("client_id, file_name e media_base64 são obrigatórios");
     }
+
+    const acesso = await guard(req, corsHeaders, { clientId: client_id });
+    if (!acesso.ok) return acesso.response;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;

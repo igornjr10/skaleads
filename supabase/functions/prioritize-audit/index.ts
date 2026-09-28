@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { prioritizeAuditActions, logTokenUsage } from "../_shared/claude-service.ts";
+import { guard } from "../_shared/auth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -8,6 +9,9 @@ const cors = {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+
+  const acesso = await guard(req, cors);
+  if (!acesso.ok) return acesso.response;
 
   try {
     const { auditResults, tenantId } = await req.json();

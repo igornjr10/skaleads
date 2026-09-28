@@ -32,6 +32,7 @@ interface StoredAlert {
   name: string;
   description: string | null;
   client_id: string | null;
+  company_id: string | null;
   rule_json: AlertRule;
   channels: AlertChannels;
   cooldown_minutes: number;
@@ -343,7 +344,7 @@ serve(async (req) => {
 
     const alerts: StoredAlert[] = await dbGet(
       supabaseUrl, svcKey,
-      `alerts?is_active=eq.true&select=id,name,description,client_id,rule_json,channels,cooldown_minutes,last_triggered_at,is_active`
+      `alerts?is_active=eq.true&select=id,name,description,client_id,company_id,rule_json,channels,cooldown_minutes,last_triggered_at,is_active`
     );
 
     let totalFired = 0;
@@ -379,7 +380,7 @@ serve(async (req) => {
 
         if (channels.whatsapp && whatsappConfigured) {
           try {
-            const targets = await resolveTargets(channels.whatsappTarget || managerNumber);
+            const targets = await resolveTargets(channels.whatsappTarget || managerNumber, alert.company_id);
             const message = buildWhatsAppMessage(alert, firedEntities);
             // Um numero invalido nao pode calar os outros: cada envio tem o
             // proprio catch, e o que falhou vai para o log da execucao.

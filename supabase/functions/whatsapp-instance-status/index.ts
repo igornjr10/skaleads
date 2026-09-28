@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, instanceStatus } from "../_shared/whatsapp.ts";
+import { guard } from "../_shared/auth.ts";
 
 // A tela fala o vocabulario do Baileys (open/connecting/close), herdado da
 // Evolution. A uazapi diz connected/connecting/disconnected. Traduzir aqui sai
@@ -32,6 +33,9 @@ function describe(state: ConnectionState, reason: string | null): string {
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  const acesso = await guard(req, corsHeaders);
+  if (!acesso.ok) return acesso.response;
 
   try {
     const result = await instanceStatus();

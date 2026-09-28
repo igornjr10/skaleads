@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, resolveTargets, sendText } from "../_shared/whatsapp.ts";
+import { companyIdsOf, guard } from "../_shared/auth.ts";
 
 interface FiredEntity {
   entityType: string;
@@ -54,12 +55,16 @@ serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const acesso = await guard(req, corsHeaders);
+  if (!acesso.ok) return acesso.response;
+
   try {
     const payload: WhatsAppAlertPayload = await req.json();
+    const [companyId] = acesso.user ? await companyIdsOf(acesso.user.id) : [];
 
     const managerNumber = Deno.env.get("MANAGER_WHATSAPP_NUMBER");
 
-    const targets = await resolveTargets(payload.target || managerNumber);
+    const targets = await resolveTargets(payload.target || managerNumber, companyId);
 
     if (targets.length === 0) {
       return new Response(

@@ -1,4 +1,5 @@
 import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
+import { supabase } from "@/integrations/supabase/client";
 import type { MetaAdAccount } from "@/lib/facebook-sdk";
 
 // A Meta deixa desmarcar permissao por permissao na tela de consentimento. Sem
@@ -28,11 +29,17 @@ export interface MetaTokenExchange {
 }
 
 export async function exchangeMetaToken(shortLivedToken: string): Promise<MetaTokenExchange> {
+  // A function exige sessao: com a anon key qualquer um trocaria token com o
+  // App Secret da agencia.
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) throw new Error("Sessão expirada. Entre de novo para conectar a Meta.");
+
   const res = await fetch(`${SUPABASE_URL}/functions/v1/meta-exchange-token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${session.access_token}`,
     },
     body: JSON.stringify({ short_lived_token: shortLivedToken }),
   });

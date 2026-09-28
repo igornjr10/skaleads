@@ -50,16 +50,24 @@ async function call(path: string, init: RequestInit = {}): Promise<any> {
 // Deno nao importa de `src/`, entao os dois precisam andar juntos.
 export const ALL_MANAGERS = "all_managers";
 
-/** Numeros que devem receber a mensagem. Vazio significa "nao ha para quem enviar". */
-export async function resolveTargets(target: string | null | undefined): Promise<string[]> {
+/**
+ * Numeros que devem receber a mensagem. Vazio significa "nao ha para quem enviar".
+ * "Todos os gestores" e da empresa do alerta: sem empresa nao ha para quem enviar,
+ * senao o gestor de uma agencia recebe o alerta do cliente de outra.
+ */
+export async function resolveTargets(
+  target: string | null | undefined,
+  companyId?: string | null
+): Promise<string[]> {
   if (target !== ALL_MANAGERS) return target ? [target] : [];
+  if (!companyId) return [];
 
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SVC_ROLE_KEY");
   if (!url || !key) throw new Error("SUPABASE_URL / SVC_ROLE_KEY nao configurados");
 
   const res = await fetch(
-    `${url}/rest/v1/managers?is_active=eq.true&whatsapp_number=not.is.null&select=whatsapp_number`,
+    `${url}/rest/v1/managers?is_active=eq.true&whatsapp_number=not.is.null&company_id=eq.${companyId}&select=whatsapp_number`,
     { headers: { apikey: key, Authorization: `Bearer ${key}` } }
   );
   if (!res.ok) throw new Error(`Nao consegui ler os gestores (${res.status})`);

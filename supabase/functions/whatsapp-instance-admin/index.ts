@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, instanceConnect, instanceDisconnect } from "../_shared/whatsapp.ts";
+import { guard } from "../_shared/auth.ts";
 
 // A uazapi nao tem restart: connect e a unica primitiva de religar, e devolve o
 // QR quando a sessao precisa ser pareada de novo. "restart" continua aqui como
@@ -15,6 +16,9 @@ type Action = keyof typeof ACTIONS;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  const acesso = await guard(req, corsHeaders, { roles: ["owner", "admin"] });
+  if (!acesso.ok) return acesso.response;
 
   try {
     const body = await req.json().catch(() => ({}));

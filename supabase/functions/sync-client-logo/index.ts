@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { guard } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -133,6 +134,12 @@ serve(async (req) => {
 
     const { clientId, all } = await req.json().catch(() => ({ clientId: undefined, all: false }));
     if (!clientId && !all) throw new Error("Informe clientId ou all: true");
+
+    // `all` varre a base inteira: so cron (service role) ou owner.
+    const acesso = clientId
+      ? await guard(req, corsHeaders, { clientId })
+      : await guard(req, corsHeaders, { roles: ["owner"] });
+    if (!acesso.ok) return acesso.response;
 
     const select = "id,name,meta_page_id,meta_access_token";
     const query = clientId

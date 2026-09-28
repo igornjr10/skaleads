@@ -1,10 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, listGroups } from "../_shared/whatsapp.ts";
+import { guard } from "../_shared/auth.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  const acesso = await guard(req, corsHeaders, { roles: ["owner", "admin"] });
+  if (!acesso.ok) return acesso.response;
 
   try {
     const groups = await listGroups();

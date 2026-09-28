@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getUser, ownsClient, jsonResponse } from "../_shared/auth.ts";
+import { companyIdsOf, getUser, jsonResponse, ownsClient } from "../_shared/auth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -32,7 +32,7 @@ async function dbGet(baseUrl: string, serviceKey: string, dbAuthHeader: string, 
   return res.json();
 }
 
-async function fetchContext(baseUrl: string, serviceKey: string, dbAuthHeader: string, clientId?: string): Promise<string> {
+async function fetchContext(baseUrl: string, serviceKey: string, dbAuthHeader: string, companyIds: string[], clientId?: string): Promise<string> {
   const since30d = new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
 
   if (clientId) {
@@ -103,18 +103,21 @@ Principais problemas:
 ${topIssues}`;
   }
 
-  // Visão geral — todos os clientes
-  const [clients, campaigns] = await Promise.all([
-    dbGet(baseUrl, serviceKey, dbAuthHeader, "clients", {
-      select: "id,name,status,meta_sync_status,city",
-      order: "name.asc",
-    }),
-    dbGet(baseUrl, serviceKey, dbAuthHeader, "campaigns", {
-      select: "name,status,spend,ctr,client_id",
-      order: "spend.desc",
-      limit: "10",
-    }),
-  ]);
+  // Visão geral — os clientes das empresas de quem pergunta. O service role
+  // ignora RLS: sem este filtro o chat listava a carteira de todas as agências.
+  if (companyIds.length === 0) return "=== VISÃO GERAL ===\nUsuário sem empresa vinculada.";
+  const clients = await dbGet(baseUrl, serviceKey, dbAuthHeader, "clients", {
+    select: "id,name,status,meta_sync_status,city",
+    company_id: `in.(${companyIds.join(",")})`,
+    order: "name.asc",
+  });
+  const clientIds = clients.map((c: any) => c.id);
+  const campaigns = clientIds.length === 0 ? [] : await dbGet(baseUrl, serviceKey, dbAuthHeader, "campaigns", {
+    select: "name,status,spend,ctr,client_id",
+    client_id: `in.(${clientIds.join(",")})`,
+    order: "spend.desc",
+    limit: "10",
+  });
 
   return `=== VISÃO GERAL ===
 Total de clientes: ${clients.length}
@@ -155,7 +158,7 @@ serve(async (req) => {
       return jsonResponse(cors, { error: "Cliente não encontrado na sua carteira" }, 404);
     }
 
-    const context = await fetchContext(baseUrl, serviceKey, dbAuthHeader, clientId);
+    const context = await fetchContext(baseUrl, serviceKey, dbAuthHeader, await companyIdsOf(user.id), clientId);
 
     const systemPrompt = `Você é um assistente especialista em gestão de tráfego pago e campanhas Meta Ads. Seu nome é Assistente IA do Scale Ads.
 

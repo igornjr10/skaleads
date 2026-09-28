@@ -13,6 +13,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders } from "../_shared/whatsapp.ts";
+import { companyIdsOf, getUser, ownsClient } from "../_shared/auth.ts";
 
 const FUSO = "-03:00"; // America/Sao_Paulo, sem horario de verao desde 2019
 const PARALELO = 6;
@@ -215,25 +216,19 @@ async function emLotes<T>(tarefas: (() => Promise<T>)[], limite: number): Promis
  * do site. Sem esta checagem qualquer um dispara varreduras na instancia de
  * WhatsApp da agencia.
  */
-async function autorizado(req: Request): Promise<boolean> {
+async function autorizado(req: Request): Promise<{ ok: boolean; userId: string | null }> {
   const segredo = Deno.env.get("CRON_SECRET");
-  if (segredo && req.headers.get("x-cron-secret") === segredo) return true;
+  if (segredo && req.headers.get("x-cron-secret") === segredo) return { ok: true, userId: null };
 
-  const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-  const anon = Deno.env.get("SUPABASE_ANON_KEY");
-  if (!token || token === anon) return false;
-
-  const url = Deno.env.get("SUPABASE_URL");
-  const res = await fetch(`${url}/auth/v1/user`, {
-    headers: { apikey: anon ?? "", Authorization: `Bearer ${token}` },
-  });
-  return res.ok;
+  const user = await getUser(req);
+  return user ? { ok: true, userId: user.id } : { ok: false, userId: null };
 }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
-  if (!await autorizado(req)) {
+  const acesso = await autorizado(req);
+  if (!acesso.ok) {
     return new Response(JSON.stringify({ error: "Nao autorizado" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -256,7 +251,17 @@ serve(async (req) => {
     // em aberto na segunda, e um recorte de 24h a esconderia.
     const desde = inicioDoDia(dia) - 2 * 24 * 3600 * 1000;
 
-    const filtroCliente = corpo.clientId ? `&id=eq.${corpo.clientId}` : "&status=eq.active";
+    // O cron varre todas as empresas; um usuario so os clientes da empresa dele.
+    let filtroEmpresa = "";
+    if (acesso.userId) {
+      if (corpo.clientId && !(await ownsClient(acesso.userId, corpo.clientId))) {
+        throw new Error("Cliente não encontrado na sua carteira");
+      }
+      const empresas = await companyIdsOf(acesso.userId);
+      if (empresas.length === 0) throw new Error("Usuário sem empresa");
+      filtroEmpresa = `&company_id=in.(${empresas.join(",")})`;
+    }
+    const filtroCliente = (corpo.clientId ? `&id=eq.${corpo.clientId}` : "&status=eq.active") + filtroEmpresa;
     const clientes = await dbGet<ClienteComGrupo>(
       supabaseUrl, svcKey,
       `clients?whatsapp_group_jid=not.is.null${filtroCliente}&select=id,name,whatsapp_group_jid`

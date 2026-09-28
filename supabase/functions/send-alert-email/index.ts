@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { guard } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -111,6 +112,9 @@ serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
+
+  const acesso = await guard(req, corsHeaders);
+  if (!acesso.ok) return acesso.response;
 
   try {
     const payload: AlertEmailPayload = await req.json();

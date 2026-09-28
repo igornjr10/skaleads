@@ -16,6 +16,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, sendDocument, sendText } from "../_shared/whatsapp.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
+import { guard } from "../_shared/auth.ts";
 
 type Period = "1d" | "7d" | "14d" | "30d";
 type MetricKey =
@@ -167,6 +168,9 @@ serve(async (req) => {
 
   try {
     const { client_id, template: templateOverride, save_template, targets: targetsOverride }: RequestPayload = await req.json();
+
+    const acesso = await guard(req, corsHeaders, { clientId: client_id });
+    if (!acesso.ok) return acesso.response;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
