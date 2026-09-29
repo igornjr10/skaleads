@@ -40,6 +40,12 @@ RLS habilitado em todas. Funcoes SECURITY DEFINER: `get_my_role()`, `has_role()`
 - Modulos: catalogo e padrao por papel em `src/lib/permissoes.ts`; `user_companies.modulos` null = padrao. Rota nova precisa entrar em `MODULOS` para ser guardada
 - Equipe (convite, papel, modulos, clientes) passa pela Edge Function `company-members`
 
+## Demandas
+- `tasks` e a fila unica (substituiu Tarefas, Producao, Esteira e Time). Status: a_fazer, fazendo, revisao, aprovado, concluida
+- ADM ve tudo da empresa; os demais veem o que esta com eles ou o que pediram. Quem pediu edita tudo; o responsavel so status e checklist (`guard_task_update`)
+- Historico (`task_events`) e escrito so por trigger; anexos em `task_anexos` + bucket privado `demandas` (empresa/demanda/arquivo)
+- Nome de cliente fora da carteira (designer recebendo arte) vem de `clientes_das_minhas_demandas()`, nao de `clients`
+
 ## Deploy
 **Nao existe branch `main`.** O repo (renomeado de `marketpro-manager` para
 `skaleads`) tem como default a branch `fix/whatsapp-connection-ui` — push nela

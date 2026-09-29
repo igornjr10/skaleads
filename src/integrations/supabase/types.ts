@@ -682,7 +682,10 @@ export type Database = {
       tasks: {
         Row: {
           assigned_to: string | null
+          categoria: string
+          checklist: Json
           client_id: string | null
+          company_id: string | null
           concluida_at: string | null
           created_at: string
           created_by: string | null
@@ -696,7 +699,10 @@ export type Database = {
         }
         Insert: {
           assigned_to?: string | null
+          categoria?: string
+          checklist?: Json
           client_id?: string | null
+          company_id?: string | null
           concluida_at?: string | null
           created_at?: string
           created_by?: string | null
@@ -710,7 +716,10 @@ export type Database = {
         }
         Update: {
           assigned_to?: string | null
+          categoria?: string
+          checklist?: Json
           client_id?: string | null
+          company_id?: string | null
           concluida_at?: string | null
           created_at?: string
           created_by?: string | null
@@ -721,6 +730,174 @@ export type Database = {
           status?: string
           titulo?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      task_events: {
+        Row: {
+          autor_id: string | null
+          created_at: string
+          de: string | null
+          id: string
+          para: string | null
+          task_id: string
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          created_at?: string
+          de?: string | null
+          id?: string
+          para?: string | null
+          task_id: string
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          created_at?: string
+          de?: string | null
+          id?: string
+          para?: string | null
+          task_id?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
+      task_anexos: {
+        Row: {
+          autor_id: string | null
+          caminho: string | null
+          created_at: string
+          id: string
+          nome: string
+          tamanho: number | null
+          task_id: string
+          tipo: string | null
+          url: string | null
+        }
+        Insert: {
+          autor_id?: string | null
+          caminho?: string | null
+          created_at?: string
+          id?: string
+          nome: string
+          tamanho?: number | null
+          task_id: string
+          tipo?: string | null
+          url?: string | null
+        }
+        Update: {
+          autor_id?: string | null
+          caminho?: string | null
+          created_at?: string
+          id?: string
+          nome?: string
+          tamanho?: number | null
+          task_id?: string
+          tipo?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
+      invoices: {
+        Row: {
+          amount: number
+          client_id: string
+          competencia: string
+          created_at: string
+          due_date: string
+          external_id: string | null
+          gateway: string | null
+          id: string
+          paid_amount: number | null
+          paid_at: string | null
+          payment_link: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          client_id: string
+          competencia: string
+          created_at?: string
+          due_date: string
+          external_id?: string | null
+          gateway?: string | null
+          id?: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_link?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          competencia?: string
+          created_at?: string
+          due_date?: string
+          external_id?: string | null
+          gateway?: string | null
+          id?: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_link?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          data: Json | null
+          file_url: string | null
+          id: string
+          name: string
+          pdf_base64: string | null
+          period: Json | null
+          schedule_id: string | null
+          sent_at: string | null
+          share_expires_at: string | null
+          share_token: string | null
+          status: string | null
+          template_id: string | null
+          tenant_id: string
+          view_count: number | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          data?: Json | null
+          file_url?: string | null
+          id?: string
+          name: string
+          pdf_base64?: string | null
+          period?: Json | null
+          schedule_id?: string | null
+          sent_at?: string | null
+          share_expires_at?: string | null
+          share_token?: string | null
+          status?: string | null
+          template_id?: string | null
+          tenant_id: string
+          view_count?: number | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          data?: Json | null
+          file_url?: string | null
+          id?: string
+          name?: string
+          pdf_base64?: string | null
+          period?: Json | null
+          schedule_id?: string | null
+          sent_at?: string | null
+          share_expires_at?: string | null
+          share_token?: string | null
+          status?: string | null
+          template_id?: string | null
+          tenant_id?: string
+          view_count?: number | null
         }
         Relationships: []
       }
@@ -1024,6 +1201,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      clientes_das_minhas_demandas: {
+        Args: Record<string, never>
+        Returns: { id: string; name: string; logo_url: string | null }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

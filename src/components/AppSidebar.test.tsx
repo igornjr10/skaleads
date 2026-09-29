@@ -42,23 +42,22 @@ beforeEach(() => {
 describe("AppSidebar", () => {
   it("mostra os pais e esconde os filhos com os grupos fechados", () => {
     montar();
-    expect(screen.getByText("Rotina")).toBeInTheDocument();
+    expect(screen.getByText("Demandas")).toBeInTheDocument();
     expect(screen.getByText("Envios")).toBeInTheDocument();
-    expect(screen.queryByText("Tarefas")).not.toBeInTheDocument();
+    expect(screen.queryByText("Planner")).not.toBeInTheDocument();
     expect(screen.queryByText("Msgs WhatsApp")).not.toBeInTheDocument();
   });
 
   it("abre os filhos ao clicar na setinha, sem sair da pagina", () => {
     montar();
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Rotina" }));
-    expect(screen.getByText("Tarefas")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demandas" }));
     expect(screen.getByText("Planner")).toBeInTheDocument();
-    expect(screen.getByText("Produção")).toBeInTheDocument();
+    expect(screen.getByText("Rotina")).toBeInTheDocument();
   });
 
   it("abre o grupo sozinho quando a rota ativa e de um filho", () => {
-    montar("/tarefas");
-    expect(screen.getByText("Tarefas")).toBeInTheDocument();
+    montar("/planner");
+    expect(screen.getByText("Planner")).toBeInTheDocument();
   });
 
   // Grupo sem pagina propria (Envios, Inteligencia) alterna pela linha inteira:
@@ -79,9 +78,9 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Automações")).toBeInTheDocument();
   });
 
-  it("nao perde nenhum destino: os 15 continuam alcancaveis", () => {
+  it("nao perde nenhum destino: todos continuam alcancaveis", () => {
     montar();
-    for (const grupo of ["Abrir Rotina", "Abrir Campanhas"]) {
+    for (const grupo of ["Abrir Demandas", "Abrir Campanhas", "Abrir Clientes"]) {
       fireEvent.click(screen.getByRole("button", { name: grupo }));
     }
     fireEvent.click(screen.getByText("Envios"));
@@ -90,7 +89,7 @@ describe("AppSidebar", () => {
     const links = screen.getAllByRole("link");
     const destinos = new Set(links.map(l => l.getAttribute("href")));
     for (const url of [
-      "/dashboard", "/clients", "/rotina", "/tarefas", "/planner", "/producao",
+      "/dashboard", "/agencia", "/clients", "/onboarding", "/demandas", "/planner", "/rotina",
       "/campaigns", "/nichos", "/alerts", "/report-schedules",
       "/whatsapp-scheduled", "/automations", "/chat", "/cerebro", "/settings",
     ]) {
@@ -98,10 +97,12 @@ describe("AppSidebar", () => {
     }
   });
 
-  it("designer nao ve financeiro nem campanhas, mas ve producao", () => {
+  it("designer nao ve financeiro nem campanhas, mas ve demandas", () => {
     const liberados = modulosEfetivos("designer", null);
     const destinos = urls(navPermitida((m: Modulo) => liberados.includes(m)));
-    expect(destinos).toContain("/producao");
+    expect(destinos).toContain("/demandas");
+    expect(destinos).toContain("/planner");
+    expect(destinos).not.toContain("/agencia");
     expect(destinos).not.toContain("/financeiro");
     expect(destinos).not.toContain("/campaigns");
     expect(destinos).toContain("/settings");

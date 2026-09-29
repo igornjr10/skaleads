@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -12,17 +12,16 @@ const Auth = lazy(() => import("./pages/Auth"));
 const DefinirSenha = lazy(() => import("./pages/DefinirSenha"));
 const Landing = lazy(() => import("./pages/Landing"));
 const Financeiro = lazy(() => import("./pages/Financeiro"));
-const Time = lazy(() => import("./pages/Time"));
-const Producao = lazy(() => import("./pages/Producao"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Clients = lazy(() => import("./pages/Clients"));
 const ClientHub = lazy(() => import("./pages/ClientHub"));
 const Campaigns = lazy(() => import("./pages/Campaigns"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const Planner = lazy(() => import("./pages/Planner"));
-const Tasks = lazy(() => import("./pages/Tasks"));
+const Demandas = lazy(() => import("./pages/Demandas"));
+const Agencia = lazy(() => import("./pages/Agencia"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Rotina = lazy(() => import("./pages/Rotina"));
-const Production = lazy(() => import("./pages/Production"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Andromeda = lazy(() => import("./pages/Andromeda"));
 const Nichos = lazy(() => import("./pages/Nichos"));
@@ -74,16 +73,20 @@ const App = () => (
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/financeiro" element={<Financeiro />} />
-                <Route path="/time" element={<Time />} />
-                <Route path="/esteira" element={<Producao />} />
+                <Route path="/agencia" element={<Agencia />} />
+                <Route path="/demandas" element={<Demandas />} />
+                <Route path="/onboarding" element={<Onboarding />} />
+                {/* Telas que viraram a central de demandas: favorito antigo ainda chega. */}
+                <Route path="/time" element={<Navigate to="/demandas" replace />} />
+                <Route path="/esteira" element={<Navigate to="/demandas" replace />} />
+                <Route path="/tarefas" element={<Navigate to="/demandas" replace />} />
+                <Route path="/producao" element={<Navigate to="/demandas" replace />} />
                 <Route path="/clients" element={<Clients />} />
                 <Route path="/clients/:id" element={<ClientHub />} />
                 <Route path="/campaigns" element={<Campaigns />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/planner" element={<Planner />} />
-                <Route path="/tarefas" element={<Tasks />} />
                 <Route path="/rotina" element={<Rotina />} />
-                <Route path="/producao" element={<Production />} />
                 <Route path="/andromeda" element={<Andromeda />} />
                 <Route path="/nichos" element={<Nichos />} />
                 <Route path="/grupos" element={<Grupos />} />

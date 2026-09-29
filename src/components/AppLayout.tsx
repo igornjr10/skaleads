@@ -17,8 +17,10 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/andromeda":   { title: "Andromeda IA",     subtitle: "Motor de inteligência artificial" },
   "/report-schedules": { title: "Relatórios",  subtitle: "Envio recorrente por cliente" },
   "/financeiro":  { title: "Financeiro",       subtitle: "Cobranças e recebimentos" },
-  "/time":        { title: "Time",             subtitle: "Equipe e demandas" },
-  "/esteira":     { title: "Esteira criativa", subtitle: "Kanban de produção" },
+  "/agencia":     { title: "Visão da agência", subtitle: "Carteira, mídia, dinheiro e equipe" },
+  "/demandas":    { title: "Demandas",         subtitle: "Fila da equipe" },
+  "/planner":     { title: "Planner",          subtitle: "Calendário e carga por pessoa" },
+  "/onboarding":  { title: "Onboarding",       subtitle: "Checklist de cliente novo" },
   "/cerebro":     { title: "Cérebro",          subtitle: "Memória da empresa" },
   "/settings":    { title: "Configurações",    subtitle: "Preferências da plataforma" },
 };

@@ -14,9 +14,10 @@ const corsHeaders = {
 // Owner e papel da plataforma, nao da empresa: nunca sai por esta porta.
 const PAPEIS_ATRIBUIVEIS = ["admin", "analyst", "viewer", "editor", "designer", "sdr", "closer", "social_seller"];
 
+// Espelho de MODULOS em src/lib/permissoes.ts.
 const MODULOS = [
-  "dashboard", "clientes", "contratos", "financeiro", "rotina", "producao",
-  "time", "campanhas", "alertas", "envios", "ia",
+  "dashboard", "agencia", "clientes", "contratos", "financeiro", "demandas",
+  "rotina", "campanhas", "alertas", "envios", "ia",
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

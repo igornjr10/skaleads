@@ -32,25 +32,25 @@ export function veTodosOsClientes(role: string | null | undefined): boolean {
 
 export type Modulo =
   | "dashboard"
+  | "agencia"
   | "clientes"
   | "contratos"
   | "financeiro"
+  | "demandas"
   | "rotina"
-  | "producao"
-  | "time"
   | "campanhas"
   | "alertas"
   | "envios"
   | "ia";
 
 export const MODULOS: { key: Modulo; label: string; rotas: string[] }[] = [
-  { key: "dashboard", label: "Dashboard", rotas: ["/dashboard"] },
-  { key: "clientes", label: "Clientes e grupos", rotas: ["/clients", "/grupos"] },
+  { key: "dashboard", label: "Dashboard de campanhas", rotas: ["/dashboard"] },
+  { key: "agencia", label: "Visão da agência", rotas: ["/agencia"] },
+  { key: "clientes", label: "Clientes, onboarding e grupos", rotas: ["/clients", "/onboarding", "/grupos"] },
   { key: "contratos", label: "Contratos", rotas: ["/contratos"] },
   { key: "financeiro", label: "Financeiro", rotas: ["/financeiro"] },
-  { key: "rotina", label: "Rotina, tarefas e planner", rotas: ["/rotina", "/tarefas", "/planner"] },
-  { key: "producao", label: "Produção e esteira criativa", rotas: ["/producao", "/esteira"] },
-  { key: "time", label: "Time", rotas: ["/time"] },
+  { key: "demandas", label: "Demandas e planner", rotas: ["/demandas", "/planner"] },
+  { key: "rotina", label: "Rotina", rotas: ["/rotina"] },
   { key: "campanhas", label: "Campanhas e nichos", rotas: ["/campaigns", "/nichos"] },
   { key: "alertas", label: "Alertas", rotas: ["/alerts", "/alert-events"] },
   { key: "envios", label: "Relatórios, WhatsApp e automações", rotas: ["/report-schedules", "/whatsapp-scheduled", "/automations"] },
@@ -62,12 +62,12 @@ const TODOS = MODULOS.map(m => m.key);
 const PADRAO_POR_PAPEL: Record<AppRole, Modulo[]> = {
   owner: TODOS,
   admin: TODOS,
-  analyst: ["dashboard", "clientes", "rotina", "producao", "time", "campanhas", "alertas", "envios", "ia"],
-  designer: ["rotina", "producao", "time"],
-  editor: ["rotina", "producao", "time"],
-  sdr: ["rotina", "time"],
-  closer: ["rotina", "time"],
-  social_seller: ["rotina", "time"],
+  analyst: ["dashboard", "clientes", "demandas", "rotina", "campanhas", "alertas", "envios", "ia"],
+  designer: ["demandas", "rotina"],
+  editor: ["demandas", "rotina"],
+  sdr: ["demandas", "rotina"],
+  closer: ["demandas", "rotina"],
+  social_seller: ["demandas", "rotina"],
   viewer: ["dashboard", "clientes", "campanhas"],
 };
 

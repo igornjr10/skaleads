@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Megaphone, Bell, Settings, LogOut, MessageSquare, Activity, ClipboardList, Clapperboard, Network, CalendarClock, ListTodo, Repeat, Compass, Send, Sparkles, MessagesSquare, ChevronRight, FileSignature, CircleDollarSign, UsersRound, Kanban, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Bell, Settings, LogOut, MessageSquare, Activity, ClipboardList, Network, CalendarClock, Repeat, Compass, Send, Sparkles, MessagesSquare, ChevronRight, FileSignature, CircleDollarSign, Building2, Inbox, CalendarDays, type LucideIcon } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import {
   Sidebar,
@@ -34,22 +34,21 @@ type NavNode = NavLeaf | NavGroup;
 // inteira alterna.
 const NAV: NavNode[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Visão da agência", url: "/agencia", icon: Building2 },
   {
     title: "Clientes", url: "/clients", icon: Users,
     children: [
+      { title: "Onboarding", url: "/onboarding", icon: ClipboardList },
       { title: "Grupos", url: "/grupos", icon: MessagesSquare },
       { title: "Contratos", url: "/contratos", icon: FileSignature },
       { title: "Financeiro", url: "/financeiro", icon: CircleDollarSign },
     ],
   },
   {
-    title: "Rotina", url: "/rotina", icon: Repeat,
+    title: "Demandas", url: "/demandas", icon: Inbox,
     children: [
-      { title: "Tarefas", url: "/tarefas", icon: ListTodo },
-      { title: "Planner", url: "/planner", icon: ClipboardList },
-      { title: "Produção", url: "/producao", icon: Clapperboard },
-      { title: "Esteira criativa", url: "/esteira", icon: Kanban },
-      { title: "Time", url: "/time", icon: UsersRound },
+      { title: "Planner", url: "/planner", icon: CalendarDays },
+      { title: "Rotina", url: "/rotina", icon: Repeat },
     ],
   },
   {
