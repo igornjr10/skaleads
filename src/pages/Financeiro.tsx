@@ -252,7 +252,7 @@ export default function Financeiro() {
       {/* ── Cabeçalho ───────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20">
             <CircleDollarSign className="h-6 w-6" />
           </div>
           <div>

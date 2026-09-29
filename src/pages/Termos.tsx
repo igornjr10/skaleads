@@ -4,14 +4,14 @@ export default function Termos() {
   return (
     <LegalPage title="Termos de Uso" updatedAt="16 de setembro de 2026">
       <p className="text-[15px] leading-relaxed text-muted-foreground">
-        Estes termos regem o uso do Ad Campaign Hub, plataforma de gestão de tráfego pago operada pela
-        Scale Ads (CNPJ [PREENCHER]) em manager.marketprosystem.com.
+        Estes termos regem o uso do Midsam Business, plataforma de gestão de tráfego pago operada pela
+        SAMUEL DO NASCIMENTO FÉLIX (CNPJ 58.606.648/0001-96).
       </p>
 
       <Section title="1. Do que se trata">
-        O Ad Campaign Hub centraliza o acompanhamento de campanhas de anúncios da Meta: sincroniza os
+        O Midsam Business centraliza o acompanhamento de campanhas de anúncios da Meta: sincroniza os
         dados da conta, gera relatórios e auditorias, dispara alertas de desempenho e organiza a rotina
-        de produção da agência. O acesso é concedido pela Scale Ads a colaboradores e a clientes
+        de produção da agência. O acesso é concedido pela Midsam a colaboradores e a clientes
         contratantes — não há cadastro aberto.
       </Section>
 

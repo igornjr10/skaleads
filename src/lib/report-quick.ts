@@ -177,7 +177,7 @@ export async function montarReportDataDoBanco(
       "directions",
       "leads",
     ],
-    branding: { primaryColor: "#10b981", agencyName: "Scale Ads" },
+    branding: { primaryColor: "#3b82f6", agencyName: "Midsam Business" },
   };
 }
 

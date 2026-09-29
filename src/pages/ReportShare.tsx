@@ -197,7 +197,7 @@ export default function ReportShare() {
   const { data } = report;
   const generatedAt = data?.generatedAt;
   const primaryColor = data?.branding?.primaryColor || "#6366f1";
-  const agencyName = data?.branding?.agencyName || "Scale Ads";
+  const agencyName = data?.branding?.agencyName || "Midsam Business";
   const preferredMetrics = getPreferredMetrics(data);
 
   return (

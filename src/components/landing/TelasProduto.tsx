@@ -48,7 +48,7 @@ export function MockDashboard() {
             <span
               key={p}
               className={`rounded-md px-2 py-1 text-[10px] font-semibold ${
-                p === "14d" ? "bg-emerald-500/15 text-emerald-400" : "text-muted-foreground"
+                p === "14d" ? "bg-blue-500/15 text-blue-400" : "text-muted-foreground"
               }`}
             >
               {p}
@@ -126,7 +126,7 @@ export function MockAuditoria() {
                 cy="50"
                 r="42"
                 fill="none"
-                stroke="hsl(160 84% 44%)"
+                stroke="hsl(217 91% 60%)"
                 strokeWidth="9"
                 strokeLinecap="round"
                 strokeDasharray="264"
@@ -134,7 +134,7 @@ export function MockAuditoria() {
               />
             </svg>
             <div className="text-center">
-              <p className="text-[26px] font-extrabold leading-none tabular-nums text-emerald-400">75</p>
+              <p className="text-[26px] font-extrabold leading-none tabular-nums text-blue-400">75</p>
               <p className="text-[9px] uppercase tracking-wider text-muted-foreground">de 100</p>
             </div>
           </div>
@@ -147,7 +147,7 @@ export function MockAuditoria() {
                   <span className="text-[9px] font-semibold tabular-nums text-foreground">{nota}</span>
                 </div>
                 <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/[0.07]">
-                  <div className="h-full rounded-full bg-emerald-500/70" style={{ width: `${nota}%` }} />
+                  <div className="h-full rounded-full bg-blue-500/70" style={{ width: `${nota}%` }} />
                 </div>
               </div>
             ))}
@@ -181,13 +181,13 @@ export function MockClientes() {
   return (
     <Moldura>
       <div className="flex items-center gap-2.5">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/15 text-[11px] font-bold text-emerald-400">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-500/15 text-[11px] font-bold text-blue-400">
           AM
         </div>
         <div className="min-w-0">
           <p className="truncate text-[12px] font-bold tracking-tight text-foreground">AUTOCENTER MODELO</p>
           <div className="mt-1 flex flex-wrap gap-1">
-            <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400">
+            <span className="rounded border border-blue-500/25 bg-blue-500/10 px-1.5 py-0.5 text-[9px] font-medium text-blue-400">
               Meta conectada
             </span>
             <span className="rounded border border-white/[0.08] px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
@@ -202,7 +202,7 @@ export function MockClientes() {
           <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
             Saúde da integração
           </span>
-          <Activity className="h-3 w-3 text-emerald-400" />
+          <Activity className="h-3 w-3 text-blue-400" />
         </div>
         <p className="mt-1.5 text-[11px] text-foreground">4 relatórios · último há 2 dias</p>
         <p className="text-[10px] text-muted-foreground">Última sync há 3 horas</p>
@@ -213,7 +213,7 @@ export function MockClientes() {
           <span className="inline-flex items-center gap-1.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
             <Wallet className="h-3 w-3" /> Verba do mês
           </span>
-          <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[9px] font-medium text-emerald-400">
+          <span className="rounded-full border border-blue-500/25 bg-blue-500/10 px-2 py-0.5 text-[9px] font-medium text-blue-400">
             No ritmo
           </span>
         </div>
@@ -221,10 +221,10 @@ export function MockClientes() {
           <p className="text-[13px] font-bold tabular-nums text-foreground">
             R$ 2.810 <span className="text-[10px] font-normal text-muted-foreground">de R$ 5.000</span>
           </p>
-          <span className="text-[11px] font-bold tabular-nums text-emerald-400">56%</span>
+          <span className="text-[11px] font-bold tabular-nums text-blue-400">56%</span>
         </div>
         <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-          <div className="h-full w-[56%] rounded-full bg-emerald-500" />
+          <div className="h-full w-[56%] rounded-full bg-blue-500" />
         </div>
       </div>
 
@@ -232,7 +232,7 @@ export function MockClientes() {
         <span className="inline-flex items-center gap-1 rounded-lg border border-white/[0.08] px-2 py-1 text-[9px] font-medium text-muted-foreground">
           <RefreshCw className="h-2.5 w-2.5" /> Sincronizar
         </span>
-        <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/25 px-2 py-1 text-[9px] font-medium text-emerald-400">
+        <span className="inline-flex items-center gap-1 rounded-lg border border-blue-500/25 px-2 py-1 text-[9px] font-medium text-blue-400">
           Relatório WA
         </span>
       </div>
@@ -254,7 +254,7 @@ export function MockAlertas() {
           <p className="text-[13px] font-bold tracking-tight text-foreground">Alertas</p>
           <p className="text-[10px] text-muted-foreground">3 ativos · 2 abertos</p>
         </div>
-        <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2 py-1 text-[9px] font-semibold text-emerald-400">
+        <span className="inline-flex items-center gap-1 rounded-lg bg-blue-500/15 px-2 py-1 text-[9px] font-semibold text-blue-400">
           <Bell className="h-2.5 w-2.5" /> Novo alerta
         </span>
       </div>
@@ -265,7 +265,7 @@ export function MockAlertas() {
             <div className="flex items-center justify-between gap-2">
               <span className="truncate text-[11px] font-semibold text-foreground">{nome}</span>
               <span
-                className={`h-3 w-6 shrink-0 rounded-full p-0.5 ${ativo ? "bg-emerald-500" : "bg-white/15"}`}
+                className={`h-3 w-6 shrink-0 rounded-full p-0.5 ${ativo ? "bg-blue-500" : "bg-white/15"}`}
                 aria-hidden="true"
               >
                 <span className={`block h-2 w-2 rounded-full bg-white ${ativo ? "ml-auto" : ""}`} />
@@ -307,11 +307,11 @@ export function MockPlanner() {
           <p className="text-[13px] font-bold tracking-tight text-foreground">Planner</p>
           <p className="text-[10px] text-muted-foreground">Onboarding de clientes novos</p>
         </div>
-        <span className="text-[11px] font-bold tabular-nums text-emerald-400">14/22</span>
+        <span className="text-[11px] font-bold tabular-nums text-blue-400">14/22</span>
       </div>
 
       <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-white/[0.07]">
-        <div className="h-full w-[64%] rounded-full bg-emerald-500" />
+        <div className="h-full w-[64%] rounded-full bg-blue-500" />
       </div>
 
       <div className="mt-3.5 space-y-2">
@@ -319,7 +319,7 @@ export function MockPlanner() {
           <div key={nome} className="flex items-center gap-2.5">
             <span
               className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                feito ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-400" : "border-white/[0.12]"
+                feito ? "border-blue-500/40 bg-blue-500/20 text-blue-400" : "border-white/[0.12]"
               }`}
             >
               {feito && <Check className="h-2.5 w-2.5" />}

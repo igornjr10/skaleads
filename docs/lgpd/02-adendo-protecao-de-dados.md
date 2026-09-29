@@ -15,20 +15,20 @@ Anexo ao contrato de prestação de serviços celebrado entre:
 
 **CONTROLADOR:** `[RAZÃO SOCIAL DO CLIENTE]`, CNPJ `[CNPJ]`, doravante CLIENTE.
 
-**OPERADOR:** `[SUA RAZÃO SOCIAL]`, CNPJ `[SEU CNPJ]`, doravante SCALE ADS.
+**OPERADOR:** SAMUEL DO NASCIMENTO FÉLIX, CNPJ 58.606.648/0001-96, doravante MIDSAM BUSINESS.
 
 ---
 
 ### 1. Objeto
 
-Este adendo rege o tratamento de dados pessoais realizado pela SCALE ADS por
+Este adendo rege o tratamento de dados pessoais realizado pela MIDSAM BUSINESS por
 conta e ordem do CLIENTE, no âmbito da gestão de campanhas publicitárias na
 plataforma Meta (Facebook e Instagram), nos termos da Lei 13.709/2018.
 
 ### 2. Papéis
 
 O CLIENTE é o **controlador**: decide as finalidades e os meios do tratamento dos
-dados de sua conta de anúncios. A SCALE ADS é a **operadora**: trata os dados
+dados de sua conta de anúncios. A MIDSAM BUSINESS é a **operadora**: trata os dados
 exclusivamente conforme as instruções do CLIENTE e este adendo.
 
 ### 3. Objeto do tratamento
@@ -49,7 +49,7 @@ identificáveis de usuários que visualizaram ou interagiram com os anúncios.
 
 **Duração:** enquanto vigente o contrato principal.
 
-### 4. Obrigações da SCALE ADS
+### 4. Obrigações da MIDSAM BUSINESS
 
 4.1 Tratar os dados apenas conforme as instruções documentadas do CLIENTE,
 comunicando-o caso entenda que uma instrução viola a LGPD.
@@ -78,7 +78,7 @@ mediante solicitação motivada.
 
 ### 5. Obrigações do CLIENTE
 
-5.1 Declarar que possui base legal e autorização para conceder à SCALE ADS acesso
+5.1 Declarar que possui base legal e autorização para conceder à MIDSAM BUSINESS acesso
 à conta de anúncios e aos dados dela decorrentes.
 
 5.2 Fornecer instruções lícitas e responder pelas finalidades que determinar.
@@ -88,10 +88,10 @@ descrito.
 
 ### 6. Suboperadores
 
-6.1 O CLIENTE autoriza a SCALE ADS a contratar suboperadores para infraestrutura,
+6.1 O CLIENTE autoriza a MIDSAM BUSINESS a contratar suboperadores para infraestrutura,
 comunicação e processamento analítico, listados no Anexo I.
 
-6.2 A SCALE ADS responde perante o CLIENTE pelos atos de seus suboperadores.
+6.2 A MIDSAM BUSINESS responde perante o CLIENTE pelos atos de seus suboperadores.
 
 6.3 Alterações relevantes na lista serão comunicadas com antecedência de
 `[PRAZO — sugestão: 30 dias]`, cabendo ao CLIENTE opor-se de forma fundamentada.
@@ -104,7 +104,7 @@ fornecedor / garantias contratuais equivalentes]`, nos termos do art. 33 da LGPD
 
 ### 8. Segurança
 
-A SCALE ADS adota, no mínimo: criptografia em trânsito, isolamento de dados por
+A MIDSAM BUSINESS adota, no mínimo: criptografia em trânsito, isolamento de dados por
 cliente com controle no banco de dados, segregação de credenciais fora do alcance
 da aplicação cliente, controle de acesso por perfil e registro de autoria das
 operações sensíveis.
@@ -125,7 +125,7 @@ caso de conflito quanto a proteção de dados.
 `[CIDADE]`, `[DATA]`
 
 _______________________________  _______________________________
-CONTROLADOR (CLIENTE)             OPERADOR (SCALE ADS)
+CONTROLADOR (CLIENTE)             OPERADOR (MIDSAM BUSINESS)
 
 ---
 
@@ -143,7 +143,7 @@ CONTROLADOR (CLIENTE)             OPERADOR (SCALE ADS)
 
 ## Anexo II — Instruções documentadas do controlador
 
-O CLIENTE instrui a SCALE ADS a:
+O CLIENTE instrui a MIDSAM BUSINESS a:
 
 1. conectar-se à sua conta de anúncios pela API Oficial da Meta e sincronizar
    dados de campanha na periodicidade configurada;

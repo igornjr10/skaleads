@@ -1,5 +1,5 @@
-import { ScaleAdsLogo } from "@/components/ScaleAdsLogo";
+import { MidsamLogo } from "@/components/MidsamLogo";
 
 export function MarketProLogo({ size = 36, className = "" }: { size?: number; className?: string }) {
-  return <ScaleAdsLogo size={size} className={className} />;
+  return <MidsamLogo size={size} className={className} />;
 }

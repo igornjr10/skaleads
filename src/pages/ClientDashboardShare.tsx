@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { MarketProLogo } from "@/components/MarketProLogo";
+import { MidsamLogo } from "@/components/MidsamLogo";
 
 interface DashboardData {
   client: { name: string; logoUrl: string | null; businessSegment: string | null };
@@ -184,7 +184,7 @@ export default function ClientDashboardShare() {
             </div>
           </div>
           <div className="hidden opacity-60 md:block">
-            <MarketProLogo size={28} />
+            <MidsamLogo size={28} />
           </div>
         </div>
       </div>
@@ -245,8 +245,8 @@ export default function ClientDashboardShare() {
               <AreaChart data={dailySeries} margin={{ left: 4, right: 12, top: 8 }}>
                 <defs>
                   <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="hsl(24 95% 55%)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="hsl(24 95% 55%)" stopOpacity={0} />
+                    <stop offset="0%" stopColor="hsl(217 91% 60%)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="hsl(217 91% 60%)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
@@ -258,7 +258,7 @@ export default function ClientDashboardShare() {
                 />
                 <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} width={40} />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="spend" stroke="hsl(24 95% 55%)" strokeWidth={2} fill="url(#spendFill)" />
+                <Area type="monotone" dataKey="spend" stroke="hsl(217 91% 60%)" strokeWidth={2} fill="url(#spendFill)" />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>

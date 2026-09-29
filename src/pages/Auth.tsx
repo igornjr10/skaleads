@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { ScaleAdsLogo } from "@/components/ScaleAdsLogo";
+import { MidsamLogo } from "@/components/MidsamLogo";
 
 const features = [
   { icon: BarChart3, text: "Dashboards em tempo real" },
@@ -96,14 +96,14 @@ export default function Auth() {
 
   const inputCls =
     "bg-white/5 border-white/10 text-white placeholder:text-white/25 " +
-    "focus:border-emerald-500/60 focus:ring-1 focus:ring-emerald-500/30 h-11 rounded-xl transition-colors";
+    "focus:border-blue-500/60 focus:ring-1 focus:ring-blue-500/30 h-11 rounded-xl transition-colors";
 
   const labelCls = "text-[11px] uppercase tracking-widest text-white/50 font-semibold";
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-[#080808]">
       <div className="relative flex flex-col justify-between p-12 lg:w-1/2 xl:w-[55%] overflow-hidden min-h-[420px] lg:min-h-screen">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_25%_65%,rgba(16,185,129,0.13)_0%,transparent_70%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_25%_65%,rgba(59,130,246,0.13)_0%,transparent_70%)]" />
 
         <div
           className="absolute inset-0 opacity-30"
@@ -119,23 +119,23 @@ export default function Auth() {
 
         <div className="relative flex items-center gap-3">
           <div className="relative">
-            <div className="absolute inset-0 rounded-2xl bg-emerald-500/30 blur-md scale-110" />
-            <ScaleAdsLogo size={46} className="relative rounded-2xl" />
+            <div className="absolute inset-0 rounded-2xl bg-blue-500/30 blur-md scale-110" />
+            <MidsamLogo size={46} className="relative rounded-2xl ring-1 ring-blue-500/30" />
           </div>
           <div className="flex flex-col leading-none gap-0.5">
             <span className="text-white font-extrabold text-[17px] tracking-tight">
-              Scale<span className="text-emerald-400">Ads</span>
+              Midsam <span className="text-blue-400">Business</span>
             </span>
-            <span className="text-[10px] tracking-[0.22em] uppercase font-semibold text-emerald-500/60">
+            <span className="text-[10px] tracking-[0.22em] uppercase font-semibold text-blue-500/60">
               Manager
             </span>
           </div>
         </div>
 
         <div className="relative space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[11px] text-emerald-400 font-semibold tracking-wide">
+          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+            <span className="text-[11px] text-blue-400 font-semibold tracking-wide">
               Meta Ads Manager Profissional
             </span>
           </div>
@@ -145,14 +145,14 @@ export default function Auth() {
             <br />
             Meta Ads
             <br />
-            <span className="text-emerald-400">como um profissional.</span>
+            <span className="text-blue-400">como um profissional.</span>
           </h1>
 
           <div className="space-y-3">
             {features.map(({ icon: Icon, text }) => (
               <div key={text} className="flex items-center gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <Icon className="h-3.5 w-3.5 text-emerald-400" />
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
+                  <Icon className="h-3.5 w-3.5 text-blue-400" />
                 </div>
                 <span className="text-[13px] text-white/55 font-medium">{text}</span>
               </div>
@@ -160,24 +160,24 @@ export default function Auth() {
           </div>
         </div>
 
-        <p className="relative text-[11px] text-white/25">© 2026 Scale Ads</p>
+        <p className="relative text-[11px] text-white/25">© {new Date().getFullYear()} Midsam Business</p>
       </div>
 
       <div className="relative flex flex-1 flex-col justify-center items-center p-10 bg-[#0c0c0c]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_40%,rgba(16,185,129,0.05)_0%,transparent_70%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_40%,rgba(59,130,246,0.05)_0%,transparent_70%)]" />
 
         <div className="relative w-full max-w-[360px]">
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 rounded-xl p-1 mb-7 h-10">
               <TabsTrigger
                 value="login"
-                className="rounded-lg text-white/50 text-[13px] font-semibold transition-all duration-200 data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-lg"
+                className="rounded-lg text-white/50 text-[13px] font-semibold transition-all duration-200 data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg"
               >
                 Entrar
               </TabsTrigger>
               <TabsTrigger
                 value="signup"
-                className="rounded-lg text-white/50 text-[13px] font-semibold transition-all duration-200 data-[state=active]:bg-emerald-500 data-[state=active]:text-white data-[state=active]:shadow-lg"
+                className="rounded-lg text-white/50 text-[13px] font-semibold transition-all duration-200 data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-lg"
               >
                 Criar conta
               </TabsTrigger>
@@ -215,7 +215,7 @@ export default function Auth() {
                 <Button
                   type="submit"
                   disabled={submitting}
-                  className="w-full h-11 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl shadow-lg hover:shadow-emerald-500/40 transition-all duration-200 mt-1"
+                  className="w-full h-11 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl shadow-lg hover:shadow-blue-500/40 transition-all duration-200 mt-1"
                 >
                   {submitting ? "Entrando..." : "Entrar"}
                 </Button>
@@ -280,7 +280,7 @@ export default function Auth() {
                 <Button
                   type="submit"
                   disabled={submitting}
-                  className="w-full h-11 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl shadow-lg hover:shadow-emerald-500/40 transition-all duration-200 mt-1"
+                  className="w-full h-11 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-xl shadow-lg hover:shadow-blue-500/40 transition-all duration-200 mt-1"
                 >
                   {submitting ? "Criando..." : "Criar conta"}
                 </Button>

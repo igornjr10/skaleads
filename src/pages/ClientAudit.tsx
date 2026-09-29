@@ -206,7 +206,7 @@ function printReport(report: AuditReport, clientName: string) {
 </head>
 <body>
 <h1>Auditoria Meta Ads — ${clientName}</h1>
-<p class="subtitle">Gerada em ${format(new Date(report.runAt), "d 'de' MMMM 'de' yyyy 'às' HH:mm", { locale: ptBR })} • Scale Ads</p>
+<p class="subtitle">Gerada em ${format(new Date(report.runAt), "d 'de' MMMM 'de' yyyy 'às' HH:mm", { locale: ptBR })} • Midsam Business</p>
 
 <div class="score-row">
   <div class="score-box">
@@ -242,7 +242,7 @@ ${['fail', 'warn', 'pass'].map(status => {
 }).join('')}
 
 <div class="footer">
-  Auditoria gerada por Scale Ads — Score ${report.score}/100 — ${format(new Date(report.runAt), "dd/MM/yyyy HH:mm")}
+  Auditoria gerada por Midsam Business — Score ${report.score}/100 — ${format(new Date(report.runAt), "dd/MM/yyyy HH:mm")}
 </div>
 </body>
 </html>`;

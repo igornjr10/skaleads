@@ -233,7 +233,7 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
       linhas.push("", `*🔍 Auditoria da conta:* ${cor} ${auditoria.score}/100`);
     }
 
-    linhas.push("", "_Enviado por Scale Ads_");
+    linhas.push("", "_Enviado por Midsam Business_");
     return linhas.join("\n");
   }
 

@@ -1734,11 +1734,11 @@ export default function Clients() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 px-6 pb-2">
-            <Badge variant="secondary" className="gap-1 rounded-full bg-emerald-500/10 text-emerald-200">
+            <Badge variant="secondary" className="gap-1 rounded-full bg-blue-500/10 text-blue-200">
               <Sparkles className="h-3 w-3" />
               {filteredClients.length} em foco
             </Badge>
-            <Badge variant="secondary" className="rounded-full bg-emerald-500/10 text-emerald-200">
+            <Badge variant="secondary" className="rounded-full bg-blue-500/10 text-blue-200">
               {filteredActiveCount} ativos
             </Badge>
             <Badge variant="secondary" className="rounded-full bg-sky-500/10 text-sky-200">

@@ -158,7 +158,7 @@ async function buildReportPdf(params: {
 
   y -= 20;
   draw(`Gerado em ${params.generatedAt}`, { size: 9, color: gray });
-  draw("Enviado por MarketProAds", { size: 9, color: gray });
+  draw("Enviado por Midsam Business", { size: 9, color: gray });
 
   return doc.save();
 }
@@ -322,7 +322,7 @@ serve(async (req) => {
     }
 
     lines.push("");
-    lines.push("_Enviado por MarketProAds_");
+    lines.push("_Enviado por Midsam Business_");
 
     const message = lines.join("\n");
 

@@ -849,7 +849,7 @@ export function ReportGeneratorPanel({
       topCampaigns,
       topAds,
       metricPreferences,
-      branding: { primaryColor: "#2563eb", agencyName: "Scale Ads" },
+      branding: { primaryColor: "#2563eb", agencyName: "Midsam Business" },
     };
   }
 

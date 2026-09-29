@@ -491,7 +491,7 @@ export default function Settings() {
             <ol className="list-decimal space-y-1 pl-5">
               <li>
                 Acesse{" "}
-                <a href="https://supabase.com/dashboard/project/npfcxgijwrxrssinpkdw/functions" target="_blank" rel="noreferrer" className="text-primary underline">
+                <a href="https://supabase.com/dashboard/project/ntlcyabztsdddsuobhhi/functions" target="_blank" rel="noreferrer" className="text-primary underline">
                   Supabase → Edge Functions
                 </a>
                 {" "}e crie uma nova função chamada <code className="rounded bg-muted px-1 font-mono text-xs">meta-exchange-token</code>
@@ -499,7 +499,7 @@ export default function Settings() {
               <li>Cole o conteúdo de <code className="rounded bg-muted px-1 font-mono text-xs">supabase/functions/meta-exchange-token/index.ts</code></li>
               <li>
                 Em{" "}
-                <a href="https://supabase.com/dashboard/project/npfcxgijwrxrssinpkdw/settings/vault" target="_blank" rel="noreferrer" className="text-primary underline">
+                <a href="https://supabase.com/dashboard/project/ntlcyabztsdddsuobhhi/settings/vault" target="_blank" rel="noreferrer" className="text-primary underline">
                   Supabase → Settings → Edge Function Secrets
                 </a>
                 , adicione as variáveis:

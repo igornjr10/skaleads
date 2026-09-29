@@ -163,7 +163,7 @@ export function ContentBriefPdfTemplate({ pauta, segmentLabel, contas, geradoEm 
         </Text>
 
         <Text style={styles.rodape} fixed>
-          Scale Ads · calendario de conteudo por nicho
+          Midsam Business · calendario de conteudo por nicho
         </Text>
       </Page>
     </Document>

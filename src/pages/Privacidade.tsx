@@ -4,14 +4,14 @@ export default function Privacidade() {
   return (
     <LegalPage title="Política de Privacidade" updatedAt="16 de setembro de 2026">
       <p className="text-[15px] leading-relaxed text-muted-foreground">
-        Esta política descreve como a Scale Ads trata os dados usados no Ad Campaign Hub,
+        Esta política descreve como SAMUEL DO NASCIMENTO FÉLIX trata os dados usados no Midsam Business,
         a plataforma interna de gestão de tráfego pago disponível em manager.marketprosystem.com.
-        O responsável pelo tratamento é a Scale Ads (CNPJ [PREENCHER]), que pode ser
+        O responsável pelo tratamento é SAMUEL DO NASCIMENTO FÉLIX (CNPJ 58.606.648/0001-96), que pode ser
         contatada em contato@marketproads.com.
       </p>
 
       <Section title="1. Quem usa a plataforma">
-        O Ad Campaign Hub é usado pela equipe da Scale Ads e pelos clientes da agência que
+        O Midsam Business é usado pela equipe da Midsam e pelos clientes da agência que
         autorizam o acompanhamento das próprias contas de anúncio. Não há cadastro aberto ao
         público: todo acesso é criado e controlado pela agência.
       </Section>

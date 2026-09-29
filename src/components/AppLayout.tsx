@@ -30,7 +30,7 @@ function getPageMeta(pathname: string) {
   const key = Object.keys(PAGE_TITLES)
     .sort((a, b) => b.length - a.length)
     .find(k => pathname === k || (k !== "/" && pathname.startsWith(k)));
-  return key ? PAGE_TITLES[key] : { title: "Scale Ads", subtitle: "" };
+  return key ? PAGE_TITLES[key] : { title: "Midsam Business", subtitle: "" };
 }
 
 // O SidebarProvider grava o estado num cookie mas nunca le de volta — ele nasceu

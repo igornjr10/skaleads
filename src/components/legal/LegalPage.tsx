@@ -30,7 +30,7 @@ export function LegalPage({ title, updatedAt, children }: LegalPageProps) {
       </main>
 
       <footer className="border-t border-border/60 py-8 text-center text-xs text-muted-foreground">
-        Scale Ads · contato@marketproads.com
+        Midsam Business · contato@marketproads.com
       </footer>
     </div>
   );

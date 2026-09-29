@@ -18,5 +18,5 @@ export function LogoEmpresa({ size = 36, className = "" }: { size?: number; clas
 }
 
 export function nomeDaMarca(empresa: { nome_exibicao: string | null; name: string } | null): string {
-  return empresa?.nome_exibicao?.trim() || empresa?.name || "Scale Ads";
+  return empresa?.nome_exibicao?.trim() || empresa?.name || "Midsam Business";
 }

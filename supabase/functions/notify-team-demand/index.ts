@@ -118,7 +118,7 @@ function buildEmailHtml(demand: Demand, member: Member, siteUrl: string): string
 <body style="margin:0;padding:0;background:#0a0a0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
   <div style="max-width:560px;margin:32px auto;background:#111111;border:1px solid #1f2937;border-radius:16px;overflow:hidden;">
     <div style="padding:28px 32px;background:linear-gradient(135deg,#052e16,#111111);border-bottom:1px solid #1f2937;">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#34d399;margin-bottom:10px;">Scale Ads · Gestão de time</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#60a5fa;margin-bottom:10px;">Midsam Business · Gestão de time</div>
       <h1 style="margin:0;color:#fff;font-size:22px;font-weight:800;line-height:1.3;">Nova demanda para você, ${escapeHtml(member.nome.split(" ")[0])}</h1>
       <p style="margin:8px 0 0;color:#9ca3af;font-size:14px;">Alguém do time marcou o seu nome nesta demanda.</p>
     </div>
@@ -144,7 +144,7 @@ function buildEmailHtml(demand: Demand, member: Member, siteUrl: string): string
     </div>
 
     <div style="padding:16px 32px;border-top:1px solid #1f2937;">
-      <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Você recebe este email porque está cadastrado no time no Scale Ads.</p>
+      <p style="margin:0;font-size:12px;color:#6b7280;text-align:center;">Você recebe este email porque está cadastrado no time no Midsam Business.</p>
     </div>
   </div>
 </body>
@@ -161,7 +161,7 @@ async function sendEmail(demand: Demand, member: Member, siteUrl: string): Promi
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: "Scale Ads <alertas@marketproads.com.br>",
+      from: "Midsam Business <alertas@marketproads.com.br>",
       to: [member.email],
       subject: `${p.emoji} [${p.label}] ${demand.titulo}${demand.prazo ? ` · até ${describePrazo(demand.prazo).texto.split(" ")[0]}` : ""}`,
       html: buildEmailHtml(demand, member, siteUrl),

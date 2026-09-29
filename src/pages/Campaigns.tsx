@@ -523,13 +523,13 @@ export default function Campaigns() {
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="border-emerald-100 bg-gradient-to-br from-white via-emerald-50/40 to-amber-50/60 shadow-card">
+        <Card className="border-blue-100 bg-gradient-to-br from-white via-blue-50/40 to-indigo-50/60 shadow-card">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
-              <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-600">
+              <div className="rounded-2xl bg-blue-600 p-3 text-white shadow-sm">
                 <Sparkles className="h-5 w-5" />
               </div>
-              <Badge variant="outline" className="border-emerald-200 bg-white/80 text-emerald-700">
+              <Badge variant="outline" className="border-blue-200 bg-white/80 text-blue-700">
                 {filteredCampaigns.length} no filtro
               </Badge>
             </div>
@@ -542,7 +542,7 @@ export default function Campaigns() {
         <Card className="shadow-card">
           <CardContent className="p-5">
             <div className="flex items-center justify-between">
-              <div className="rounded-2xl bg-emerald-100 p-3 text-emerald-700">
+              <div className="rounded-2xl bg-blue-100 p-3 text-blue-700">
                 <CircleDollarSign className="h-5 w-5" />
               </div>
               <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Investimento</span>

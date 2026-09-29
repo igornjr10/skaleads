@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
 function Footer({ agency, page }: { agency: string; page: number }) {
   return (
     <View style={styles.footer}>
-      <Text style={styles.footerText}>{agency || "Scale Ads"}  |  Relatorio executivo</Text>
+      <Text style={styles.footerText}>{agency || "Midsam Business"}  |  Relatorio executivo</Text>
       <Text style={styles.footerText}>{page}</Text>
     </View>
   );
@@ -659,7 +659,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   ];
 
   return (
-    <Document title={`Relatorio - ${sanitizePdfText(data.client.name)}`} author={sanitizePdfText(data.branding.agencyName) || "Scale Ads"}>
+    <Document title={`Relatorio - ${sanitizePdfText(data.client.name)}`} author={sanitizePdfText(data.branding.agencyName) || "Midsam Business"}>
       <Page size="A4" style={styles.page}>
         <View style={styles.shell}>
           <View style={styles.cover}>

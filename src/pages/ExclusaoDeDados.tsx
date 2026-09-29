@@ -4,7 +4,7 @@ export default function ExclusaoDeDados() {
   return (
     <LegalPage title="Exclusão de dados" updatedAt="16 de setembro de 2026">
       <p className="text-[15px] leading-relaxed text-muted-foreground">
-        Esta página explica como apagar os dados que o Ad Campaign Hub guardou sobre você e sobre
+        Esta página explica como apagar os dados que o Midsam Business guardou sobre você e sobre
         as contas do Facebook e do Instagram conectadas à plataforma.
       </p>
 
@@ -29,7 +29,7 @@ export default function ExclusaoDeDados() {
         </p>
         <p>
           1. Acesse <a href="https://www.facebook.com/settings?tab=applications" className="text-primary underline underline-offset-4" target="_blank" rel="noreferrer">Configurações do Facebook → Apps e sites</a>;<br />
-          2. encontre <strong className="text-foreground">Scale Ads</strong> na lista;<br />
+          2. encontre <strong className="text-foreground">Midsam Business</strong> na lista;<br />
           3. clique em <strong className="text-foreground">Remover</strong> e confirme.
         </p>
         <p>

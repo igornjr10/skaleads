@@ -1,4 +1,4 @@
-# Registro de Operações de Tratamento — Scale Ads
+# Registro de Operações de Tratamento — Midsam Business
 
 > **Documento interno.** Exigido pelo art. 37 da LGPD. É o que a ANPD pede primeiro
 > numa fiscalização, e o que uma agência-cliente pede antes de assinar contrato.
@@ -9,10 +9,10 @@
 
 | | |
 |---|---|
-| Controlador | `[RAZÃO SOCIAL]`, CNPJ `[CNPJ]` |
+| Controlador | SAMUEL DO NASCIMENTO FÉLIX, CNPJ 58.606.648/0001-96 |
 | Encarregado (DPO) | `[NOME]` — `[E-MAIL]` |
 | Última revisão | 12 de agosto de 2026 |
-| Sistema | Scale Ads — gestão de campanhas Meta Ads |
+| Sistema | Midsam Business — gestão de campanhas Meta Ads |
 
 ---
 
