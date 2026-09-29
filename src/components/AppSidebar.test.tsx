@@ -89,7 +89,7 @@ describe("AppSidebar", () => {
     const links = screen.getAllByRole("link");
     const destinos = new Set(links.map(l => l.getAttribute("href")));
     for (const url of [
-      "/dashboard", "/agencia", "/clients", "/onboarding", "/demandas", "/planner", "/rotina",
+      "/dashboard", "/agencia", "/comercial", "/clients", "/onboarding", "/demandas", "/planner", "/rotina",
       "/campaigns", "/nichos", "/alerts", "/report-schedules",
       "/whatsapp-scheduled", "/automations", "/chat", "/cerebro", "/settings",
     ]) {

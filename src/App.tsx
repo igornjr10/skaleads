@@ -19,6 +19,7 @@ const Campaigns = lazy(() => import("./pages/Campaigns"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const Planner = lazy(() => import("./pages/Planner"));
 const Demandas = lazy(() => import("./pages/Demandas"));
+const Comercial = lazy(() => import("./pages/Comercial"));
 const Agencia = lazy(() => import("./pages/Agencia"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Rotina = lazy(() => import("./pages/Rotina"));
@@ -75,6 +76,7 @@ const App = () => (
                 <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/agencia" element={<Agencia />} />
                 <Route path="/demandas" element={<Demandas />} />
+                <Route path="/comercial" element={<Comercial />} />
                 <Route path="/onboarding" element={<Onboarding />} />
                 {/* Telas que viraram a central de demandas: favorito antigo ainda chega. */}
                 <Route path="/time" element={<Navigate to="/demandas" replace />} />

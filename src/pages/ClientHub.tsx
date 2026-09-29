@@ -16,6 +16,7 @@ import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { ClientAvatar } from "@/components/ClientAvatar";
 import { ClientFundingPanel } from "@/components/clients/ClientFundingPanel";
 import { ClientBriefingCard } from "@/components/clients/ClientBriefingCard";
+import { HistoricoComercialCard } from "@/components/clients/HistoricoComercialCard";
 import { supabase } from "@/integrations/supabase/client";
 import { loadLatestAudit } from "@/lib/audit/runner";
 import type { AuditReport } from "@/lib/audit/types";
@@ -340,6 +341,8 @@ export default function ClientHub() {
           balanceAt={client.meta_balance_at}
         />
       )}
+
+      <HistoricoComercialCard clientId={client.id} />
     </div>
   );
 }

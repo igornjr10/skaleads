@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorMessage } from "@/lib/utils";
+import { buscarTudo } from "@/lib/buscar-tudo";
 import { hojeISO } from "@/lib/demandas";
 import {
   type ClienteAgencia, type FaturaAgencia, type GastoDiario, type VisaoAgencia,
@@ -16,22 +17,10 @@ import {
 
 const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
-// PostgREST corta em 1000 linhas: metrica diaria de dezenas de clientes em
-// dois meses passa disso facil, e o total sairia menor sem aviso.
-async function todosOsGastos(desde: string): Promise<GastoDiario[]> {
-  const pagina = 1000;
-  const linhas: GastoDiario[] = [];
-  for (let de = 0; ; de += pagina) {
-    const { data, error } = await supabase
-      .from("campaign_daily_metrics")
-      .select("client_id, date, spend")
-      .gte("date", desde)
-      .order("date")
-      .range(de, de + pagina - 1);
-    if (error) throw error;
-    linhas.push(...((data ?? []) as GastoDiario[]));
-    if (!data || data.length < pagina) return linhas;
-  }
+function todosOsGastos(desde: string): Promise<GastoDiario[]> {
+  return buscarTudo<GastoDiario>((de, ate) =>
+    supabase.from("campaign_daily_metrics").select("client_id, date, spend").gte("date", desde).order("date").range(de, ate)
+  );
 }
 
 function Kpi({ icon: Icon, titulo, valor, detalhe, alerta }: {

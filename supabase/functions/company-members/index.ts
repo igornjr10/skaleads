@@ -17,7 +17,7 @@ const PAPEIS_ATRIBUIVEIS = ["admin", "analyst", "viewer", "editor", "designer", 
 // Espelho de MODULOS em src/lib/permissoes.ts.
 const MODULOS = [
   "dashboard", "agencia", "clientes", "contratos", "financeiro", "demandas",
-  "rotina", "campanhas", "alertas", "envios", "ia",
+  "comercial", "rotina", "campanhas", "alertas", "envios", "ia",
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

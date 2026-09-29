@@ -37,6 +37,7 @@ export type Modulo =
   | "contratos"
   | "financeiro"
   | "demandas"
+  | "comercial"
   | "rotina"
   | "campanhas"
   | "alertas"
@@ -50,6 +51,7 @@ export const MODULOS: { key: Modulo; label: string; rotas: string[] }[] = [
   { key: "contratos", label: "Contratos", rotas: ["/contratos"] },
   { key: "financeiro", label: "Financeiro", rotas: ["/financeiro"] },
   { key: "demandas", label: "Demandas e planner", rotas: ["/demandas", "/planner"] },
+  { key: "comercial", label: "Comercial (CRM e prospecção)", rotas: ["/comercial"] },
   { key: "rotina", label: "Rotina", rotas: ["/rotina"] },
   { key: "campanhas", label: "Campanhas e nichos", rotas: ["/campaigns", "/nichos"] },
   { key: "alertas", label: "Alertas", rotas: ["/alerts", "/alert-events"] },
@@ -62,12 +64,12 @@ const TODOS = MODULOS.map(m => m.key);
 const PADRAO_POR_PAPEL: Record<AppRole, Modulo[]> = {
   owner: TODOS,
   admin: TODOS,
-  analyst: ["dashboard", "clientes", "demandas", "rotina", "campanhas", "alertas", "envios", "ia"],
+  analyst: ["dashboard", "clientes", "demandas", "comercial", "rotina", "campanhas", "alertas", "envios", "ia"],
   designer: ["demandas", "rotina"],
   editor: ["demandas", "rotina"],
-  sdr: ["demandas", "rotina"],
-  closer: ["demandas", "rotina"],
-  social_seller: ["demandas", "rotina"],
+  sdr: ["comercial", "demandas", "rotina"],
+  closer: ["comercial", "demandas", "rotina"],
+  social_seller: ["comercial", "demandas", "rotina"],
   viewer: ["dashboard", "clientes", "campanhas"],
 };
 

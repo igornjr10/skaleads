@@ -46,6 +46,12 @@ RLS habilitado em todas. Funcoes SECURITY DEFINER: `get_my_role()`, `has_role()`
 - Historico (`task_events`) e escrito so por trigger; anexos em `task_anexos` + bucket privado `demandas` (empresa/demanda/arquivo)
 - Nome de cliente fora da carteira (designer recebendo arte) vem de `clientes_das_minhas_demandas()`, nao de `clients`
 
+## Comercial (CRM)
+- `crm_funis` sem `client_id` = prospeccao da agencia (criado por `garantir_funil_prospeccao()` na 1a visita); com `client_id` = funil de vendas do cliente
+- `crm_leads`: empresa e cliente vem do funil (trigger `preparar_lead`); etapa `ganho`/`perdido` carimba `ganho_em`/`perdido_em`
+- Visibilidade: ADM tudo; sdr/closer/social_seller os seus + os sem dono (fila) da prospeccao; gestor os funis dos clientes da carteira
+- `crm_atividades` tipo `etapa` e `convertido` so o banco escreve. Lead vira cliente por `converter_lead_em_cliente()` (so ADM)
+
 ## Deploy
 **Nao existe branch `main`.** O repo (renomeado de `marketpro-manager` para
 `skaleads`) tem como default a branch `fix/whatsapp-connection-ui` — push nela

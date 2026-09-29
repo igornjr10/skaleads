@@ -901,6 +901,186 @@ export type Database = {
         }
         Relationships: []
       }
+      crm_funis: {
+        Row: {
+          client_id: string | null
+          company_id: string
+          created_at: string
+          id: string
+          nome: string
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          nome: string
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      crm_etapas: {
+        Row: {
+          created_at: string
+          funil_id: string
+          id: string
+          nome: string
+          posicao: number
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          funil_id: string
+          id?: string
+          nome: string
+          posicao?: number
+          tipo?: string
+        }
+        Update: {
+          created_at?: string
+          funil_id?: string
+          id?: string
+          nome?: string
+          posicao?: number
+          tipo?: string
+        }
+        Relationships: []
+      }
+      crm_leads: {
+        Row: {
+          canal: string
+          cargo: string | null
+          cidade: string | null
+          client_id: string | null
+          closer_id: string | null
+          company_id: string | null
+          contato_nome: string
+          convertido_client_id: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          empresa: string | null
+          etapa_id: string
+          funil_id: string
+          ganho_em: string | null
+          id: string
+          instagram: string | null
+          motivo_perda: string | null
+          observacoes: string | null
+          origem: string | null
+          perdido_em: string | null
+          posicao: number
+          proximo_contato_em: string | null
+          responsavel_id: string | null
+          reuniao_em: string | null
+          segmento: string | null
+          telefone: string | null
+          updated_at: string
+          valor_estimado: number | null
+          whatsapp: string | null
+        }
+        Insert: {
+          canal?: string
+          cargo?: string | null
+          cidade?: string | null
+          client_id?: string | null
+          closer_id?: string | null
+          company_id?: string | null
+          contato_nome: string
+          convertido_client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          empresa?: string | null
+          etapa_id: string
+          funil_id: string
+          ganho_em?: string | null
+          id?: string
+          instagram?: string | null
+          motivo_perda?: string | null
+          observacoes?: string | null
+          origem?: string | null
+          perdido_em?: string | null
+          posicao?: number
+          proximo_contato_em?: string | null
+          responsavel_id?: string | null
+          reuniao_em?: string | null
+          segmento?: string | null
+          telefone?: string | null
+          updated_at?: string
+          valor_estimado?: number | null
+          whatsapp?: string | null
+        }
+        Update: {
+          canal?: string
+          cargo?: string | null
+          cidade?: string | null
+          client_id?: string | null
+          closer_id?: string | null
+          company_id?: string | null
+          contato_nome?: string
+          convertido_client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          empresa?: string | null
+          etapa_id?: string
+          funil_id?: string
+          ganho_em?: string | null
+          id?: string
+          instagram?: string | null
+          motivo_perda?: string | null
+          observacoes?: string | null
+          origem?: string | null
+          perdido_em?: string | null
+          posicao?: number
+          proximo_contato_em?: string | null
+          responsavel_id?: string | null
+          reuniao_em?: string | null
+          segmento?: string | null
+          telefone?: string | null
+          updated_at?: string
+          valor_estimado?: number | null
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      crm_atividades: {
+        Row: {
+          autor_id: string | null
+          canal: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          lead_id: string
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          canal?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          lead_id: string
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          canal?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          lead_id?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
       task_comments: {
         Row: {
           autor_id: string | null
@@ -1201,6 +1381,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      garantir_funil_prospeccao: { Args: Record<string, never>; Returns: string }
+      criar_funil_de_cliente: { Args: { _client_id: string; _nome?: string }; Returns: string }
+      converter_lead_em_cliente: { Args: { _lead_id: string }; Returns: string }
+      is_comercial: { Args: { _user_id: string }; Returns: boolean }
       clientes_das_minhas_demandas: {
         Args: Record<string, never>
         Returns: { id: string; name: string; logo_url: string | null }[]

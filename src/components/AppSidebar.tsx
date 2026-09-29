@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Megaphone, Bell, Settings, LogOut, MessageSquare, Activity, ClipboardList, Network, CalendarClock, Repeat, Compass, Send, Sparkles, MessagesSquare, ChevronRight, FileSignature, CircleDollarSign, Building2, Inbox, CalendarDays, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Bell, Settings, LogOut, MessageSquare, Activity, ClipboardList, Network, CalendarClock, Repeat, Compass, Send, Sparkles, MessagesSquare, ChevronRight, FileSignature, CircleDollarSign, Building2, Inbox, CalendarDays, Handshake, type LucideIcon } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import {
   Sidebar,
@@ -35,6 +35,7 @@ type NavNode = NavLeaf | NavGroup;
 const NAV: NavNode[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Visão da agência", url: "/agencia", icon: Building2 },
+  { title: "Comercial", url: "/comercial", icon: Handshake },
   {
     title: "Clientes", url: "/clients", icon: Users,
     children: [
