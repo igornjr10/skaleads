@@ -9,3 +9,7 @@ verify_jwt = false
 # Mesmo motivo do delete-user: a function checa sessao e papel por conta propria.
 [functions.company-members]
 verify_jwt = false
+
+# Quem chama e o servidor da uazapi, sem JWT; a function confere o token da instancia no corpo.
+[functions.wa-webhook]
+verify_jwt = false

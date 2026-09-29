@@ -51,7 +51,7 @@ export const MODULOS: { key: Modulo; label: string; rotas: string[] }[] = [
   { key: "contratos", label: "Contratos", rotas: ["/contratos"] },
   { key: "financeiro", label: "Financeiro", rotas: ["/financeiro"] },
   { key: "demandas", label: "Demandas e planner", rotas: ["/demandas", "/planner"] },
-  { key: "comercial", label: "Comercial (CRM e prospecção)", rotas: ["/comercial"] },
+  { key: "comercial", label: "Comercial (CRM, prospecção e WhatsApp)", rotas: ["/comercial", "/conversas"] },
   { key: "rotina", label: "Rotina", rotas: ["/rotina"] },
   { key: "campanhas", label: "Campanhas e nichos", rotas: ["/campaigns", "/nichos"] },
   { key: "alertas", label: "Alertas", rotas: ["/alerts", "/alert-events"] },

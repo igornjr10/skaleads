@@ -20,6 +20,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/agencia":     { title: "Visão da agência", subtitle: "Carteira, mídia, dinheiro e equipe" },
   "/demandas":    { title: "Demandas",         subtitle: "Fila da equipe" },
   "/comercial":   { title: "Comercial",        subtitle: "Prospecção, pipeline e CRM" },
+  "/conversas":   { title: "WhatsApp",         subtitle: "Conversas, disparos e sequências" },
   "/planner":     { title: "Planner",          subtitle: "Calendário e carga por pessoa" },
   "/onboarding":  { title: "Onboarding",       subtitle: "Checklist de cliente novo" },
   "/cerebro":     { title: "Cérebro",          subtitle: "Memória da empresa" },

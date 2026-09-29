@@ -954,6 +954,7 @@ export type Database = {
       }
       crm_leads: {
         Row: {
+          wa_chave: string | null
           canal: string
           cargo: string | null
           cidade: string | null
@@ -1078,6 +1079,291 @@ export type Database = {
           id?: string
           lead_id?: string
           tipo?: string
+        }
+        Relationships: []
+      }
+      wa_mensagens: {
+        Row: {
+          autor_id: string | null
+          chatid: string | null
+          chave: string
+          company_id: string
+          created_at: string
+          direcao: string
+          enviada_em: string
+          fila_id: string | null
+          id: string
+          lead_id: string | null
+          lida_em: string | null
+          messageid: string | null
+          nome_contato: string | null
+          origem: string
+          status: string | null
+          telefone: string | null
+          texto: string | null
+          tipo: string | null
+        }
+        Insert: {
+          autor_id?: string | null
+          chatid?: string | null
+          chave: string
+          company_id: string
+          created_at?: string
+          direcao: string
+          enviada_em?: string
+          fila_id?: string | null
+          id?: string
+          lead_id?: string | null
+          lida_em?: string | null
+          messageid?: string | null
+          nome_contato?: string | null
+          origem: string
+          status?: string | null
+          telefone?: string | null
+          texto?: string | null
+          tipo?: string | null
+        }
+        Update: {
+          autor_id?: string | null
+          chatid?: string | null
+          chave?: string
+          company_id?: string
+          created_at?: string
+          direcao?: string
+          enviada_em?: string
+          fila_id?: string | null
+          id?: string
+          lead_id?: string | null
+          lida_em?: string | null
+          messageid?: string | null
+          nome_contato?: string | null
+          origem?: string
+          status?: string | null
+          telefone?: string | null
+          texto?: string | null
+          tipo?: string | null
+        }
+        Relationships: []
+      }
+      wa_config: {
+        Row: {
+          company_id: string
+          hora_fim: number
+          hora_inicio: number
+          intervalo_seg: number
+          limite_diario: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          hora_fim?: number
+          hora_inicio?: number
+          intervalo_seg?: number
+          limite_diario?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          hora_fim?: number
+          hora_inicio?: number
+          intervalo_seg?: number
+          limite_diario?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wa_modelos: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          nome: string
+          texto: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome: string
+          texto: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      wa_sequencias: {
+        Row: {
+          ativa: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          nome: string
+          parar_se_responder: boolean
+        }
+        Insert: {
+          ativa?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome: string
+          parar_se_responder?: boolean
+        }
+        Update: {
+          ativa?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome?: string
+          parar_se_responder?: boolean
+        }
+        Relationships: []
+      }
+      wa_sequencia_passos: {
+        Row: {
+          espera_dias: number
+          id: string
+          ordem: number
+          sequencia_id: string
+          texto: string
+        }
+        Insert: {
+          espera_dias?: number
+          id?: string
+          ordem: number
+          sequencia_id: string
+          texto: string
+        }
+        Update: {
+          espera_dias?: number
+          id?: string
+          ordem?: number
+          sequencia_id?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      wa_disparos: {
+        Row: {
+          company_id: string
+          created_at: string
+          criado_por: string | null
+          id: string
+          nome: string
+          status: string
+          texto: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          nome: string
+          status?: string
+          texto: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          nome?: string
+          status?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      wa_inscricoes: {
+        Row: {
+          company_id: string
+          created_at: string
+          criado_por: string | null
+          id: string
+          lead_id: string
+          passo_atual: number
+          sequencia_id: string
+          status: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          lead_id: string
+          passo_atual?: number
+          sequencia_id: string
+          status?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          lead_id?: string
+          passo_atual?: number
+          sequencia_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      wa_fila: {
+        Row: {
+          company_id: string
+          created_at: string
+          criado_por: string | null
+          disparo_id: string | null
+          enviado_em: string | null
+          enviar_apos: string
+          erro: string | null
+          id: string
+          inscricao_id: string | null
+          lead_id: string
+          origem: string
+          passo: number | null
+          status: string
+          texto: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          disparo_id?: string | null
+          enviado_em?: string | null
+          enviar_apos?: string
+          erro?: string | null
+          id?: string
+          inscricao_id?: string | null
+          lead_id: string
+          origem: string
+          passo?: number | null
+          status?: string
+          texto: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          disparo_id?: string | null
+          enviado_em?: string | null
+          enviar_apos?: string
+          erro?: string | null
+          id?: string
+          inscricao_id?: string | null
+          lead_id?: string
+          origem?: string
+          passo?: number | null
+          status?: string
+          texto?: string
         }
         Relationships: []
       }
@@ -1381,6 +1667,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      inscrever_em_sequencia: { Args: { _sequencia_id: string; _lead_ids: string[] }; Returns: number }
       garantir_funil_prospeccao: { Args: Record<string, never>; Returns: string }
       criar_funil_de_cliente: { Args: { _client_id: string; _nome?: string }; Returns: string }
       converter_lead_em_cliente: { Args: { _lead_id: string }; Returns: string }

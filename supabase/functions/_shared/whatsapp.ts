@@ -129,3 +129,24 @@ export function instanceConnect() {
 export function instanceDisconnect() {
   return call("/instance/disconnect", { method: "POST", body: JSON.stringify({}) });
 }
+
+/**
+ * Liga o webhook da instancia no modo simples (um so, cria ou atualiza).
+ * wasSentByApi fica de fora: o que o sistema envia ja e gravado por quem
+ * enviou, e voltaria duplicado. Grupo tambem: a caixa e de conversa com lead.
+ */
+export function configureWebhook(url: string) {
+  return call("/webhook", {
+    method: "POST",
+    body: JSON.stringify({
+      url,
+      enabled: true,
+      events: ["messages", "messages_update"],
+      excludeMessages: ["wasSentByApi", "isGroupYes"],
+    }),
+  });
+}
+
+export function getWebhook() {
+  return call("/webhook");
+}

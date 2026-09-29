@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, instanceConnect, instanceDisconnect } from "../_shared/whatsapp.ts";
+import { configureWebhook, corsHeaders, getWebhook, instanceConnect, instanceDisconnect } from "../_shared/whatsapp.ts";
 import { guard } from "../_shared/auth.ts";
 
 // A uazapi nao tem restart: connect e a unica primitiva de religar, e devolve o
@@ -10,6 +10,9 @@ const ACTIONS = {
   connect: instanceConnect,
   logout: instanceDisconnect,
   disconnect: instanceDisconnect,
+  // Liga a caixa de conversas: a uazapi passa a mandar cada mensagem para wa-webhook.
+  webhook: () => configureWebhook(`${Deno.env.get("SUPABASE_URL")}/functions/v1/wa-webhook`),
+  webhook_status: getWebhook,
 } as const;
 
 type Action = keyof typeof ACTIONS;

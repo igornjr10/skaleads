@@ -35,7 +35,12 @@ type NavNode = NavLeaf | NavGroup;
 const NAV: NavNode[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Visão da agência", url: "/agencia", icon: Building2 },
-  { title: "Comercial", url: "/comercial", icon: Handshake },
+  {
+    title: "Comercial", url: "/comercial", icon: Handshake,
+    children: [
+      { title: "WhatsApp", url: "/conversas", icon: WhatsAppIcon },
+    ],
+  },
   {
     title: "Clientes", url: "/clients", icon: Users,
     children: [

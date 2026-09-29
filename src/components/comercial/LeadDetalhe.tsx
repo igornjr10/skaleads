@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { ChatThread } from "@/components/whatsapp/ChatThread";
 import { useAuth } from "@/hooks/useAuth";
 import type { Pessoa } from "@/hooks/useDemandas";
 import { errorMessage } from "@/lib/utils";
@@ -55,6 +56,13 @@ export function LeadDetalhe({ lead, etapas, pessoas, pessoaPorId, onClose, onCha
   const [registro, setRegistro] = useState({ tipo: "mensagem", canal: "whatsapp", descricao: "", proximo: "" });
   const [salvando, setSalvando] = useState(false);
   const [perda, setPerda] = useState<{ etapaId: string; motivo: string } | null>(null);
+  const [sequencias, setSequencias] = useState<{ id: string; nome: string }[]>([]);
+  const [sequencia, setSequencia] = useState("");
+
+  useEffect(() => {
+    supabase.from("wa_sequencias").select("id, nome").eq("ativa", true).order("nome")
+      .then(({ data }) => setSequencias((data ?? []) as { id: string; nome: string }[]));
+  }, []);
 
   const id = lead?.id;
   useEffect(() => {
@@ -80,7 +88,7 @@ export function LeadDetalhe({ lead, etapas, pessoas, pessoaPorId, onClose, onCha
   const podeApagar = isAdmin || lead.created_by === user?.id;
   const podeConverter = isAdmin && !lead.client_id && !lead.convertido_client_id;
 
-  async function gravar(mudanca: Partial<Lead>, sucesso?: string) {
+  async function gravar(mudanca: Partial<Omit<Lead, "wa_chave">>, sucesso?: string) {
     const { data, error } = await supabase.from("crm_leads").update(mudanca).eq("id", lead!.id).select("*").single();
     if (error) {
       toast.error(errorMessage(error, "Não foi possível salvar"));
@@ -166,6 +174,14 @@ export function LeadDetalhe({ lead, etapas, pessoas, pessoaPorId, onClose, onCha
     }
     toast.success("Cliente criado a partir do lead");
     return data;
+  }
+
+  async function inscrever() {
+    if (!sequencia) return;
+    const { data, error } = await supabase.rpc("inscrever_em_sequencia", { _sequencia_id: sequencia, _lead_ids: [lead!.id] });
+    if (error) return toast.error(errorMessage(error, "Não foi possível inscrever"));
+    toast.success(data ? "Lead inscrito: a primeira mensagem entrou na fila" : "Este lead já está nessa sequência");
+    setSequencia("");
   }
 
   async function apagar() {
@@ -260,6 +276,7 @@ export function LeadDetalhe({ lead, etapas, pessoas, pessoaPorId, onClose, onCha
         <Tabs defaultValue="historico" className="mt-4">
           <TabsList className="w-full justify-start">
             <TabsTrigger value="historico">Histórico ({historico.length})</TabsTrigger>
+            {lead.wa_chave && <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>}
             <TabsTrigger value="dados">Dados</TabsTrigger>
           </TabsList>
 
@@ -309,6 +326,22 @@ export function LeadDetalhe({ lead, etapas, pessoas, pessoaPorId, onClose, onCha
               {historico.length === 0 && <li className="text-xs text-muted-foreground">Nenhum contato registrado ainda.</li>}
             </ol>
           </TabsContent>
+
+          {lead.wa_chave && (
+            <TabsContent value="whatsapp" className="space-y-3">
+              <ChatThread chave={lead.wa_chave} leadId={lead.id} lead={lead} altura="h-[320px]" />
+              {sequencias.length > 0 && (
+                <div className="flex flex-col gap-2 rounded-xl border border-border/60 p-3 sm:flex-row sm:items-center">
+                  <span className="text-sm text-muted-foreground">Colocar numa sequência:</span>
+                  <Select value={sequencia} onValueChange={setSequencia}>
+                    <SelectTrigger className="sm:w-56"><SelectValue placeholder="Escolha" /></SelectTrigger>
+                    <SelectContent>{sequencias.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                  <Button size="sm" onClick={inscrever} disabled={!sequencia}>Inscrever</Button>
+                </div>
+              )}
+            </TabsContent>
+          )}
 
           <TabsContent value="dados" className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">

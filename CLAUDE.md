@@ -52,6 +52,12 @@ RLS habilitado em todas. Funcoes SECURITY DEFINER: `get_my_role()`, `has_role()`
 - Visibilidade: ADM tudo; sdr/closer/social_seller os seus + os sem dono (fila) da prospeccao; gestor os funis dos clientes da carteira
 - `crm_atividades` tipo `etapa` e `convertido` so o banco escreve. Lead vira cliente por `converter_lead_em_cliente()` (so ADM)
 
+## WhatsApp (uazapi, numero unico da agencia)
+- Entrada: uazapi -> Edge Function `wa-webhook` (sem JWT; autentica pelo `token` da instancia no corpo). Liga-se em WhatsApp > Configuracao (`whatsapp-instance-admin`, action `webhook`)
+- Mensagem casa com lead pela chave de telefone (pais + DDD + 8 ultimos digitos): `public.wa_chave`, `_shared/wa-crm.ts` e `src/lib/whatsapp.ts` precisam andar juntas
+- Resposta manual: `wa-enviar` (le o lead com o JWT do usuario, a RLS decide). Disparo e sequencia so enfileiram em `wa_fila`; quem envia e o cron `wa-processar-fila` (1/min), respeitando `wa_config` (teto diario, intervalo, horario)
+- Lead que responde encerra as sequencias com `parar_se_responder`
+
 ## Deploy
 **Nao existe branch `main`.** O repo (renomeado de `marketpro-manager` para
 `skaleads`) tem como default a branch `fix/whatsapp-connection-ui` — push nela

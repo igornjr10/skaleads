@@ -80,7 +80,7 @@ describe("AppSidebar", () => {
 
   it("nao perde nenhum destino: todos continuam alcancaveis", () => {
     montar();
-    for (const grupo of ["Abrir Demandas", "Abrir Campanhas", "Abrir Clientes"]) {
+    for (const grupo of ["Abrir Demandas", "Abrir Campanhas", "Abrir Clientes", "Abrir Comercial"]) {
       fireEvent.click(screen.getByRole("button", { name: grupo }));
     }
     fireEvent.click(screen.getByText("Envios"));
@@ -89,7 +89,7 @@ describe("AppSidebar", () => {
     const links = screen.getAllByRole("link");
     const destinos = new Set(links.map(l => l.getAttribute("href")));
     for (const url of [
-      "/dashboard", "/agencia", "/comercial", "/clients", "/onboarding", "/demandas", "/planner", "/rotina",
+      "/dashboard", "/agencia", "/comercial", "/conversas", "/clients", "/onboarding", "/demandas", "/planner", "/rotina",
       "/campaigns", "/nichos", "/alerts", "/report-schedules",
       "/whatsapp-scheduled", "/automations", "/chat", "/cerebro", "/settings",
     ]) {

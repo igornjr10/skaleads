@@ -41,6 +41,8 @@ export interface Lead {
   ganho_em: string | null;
   perdido_em: string | null;
   convertido_client_id: string | null;
+  /** Chave de telefone calculada no banco (public.wa_chave); liga o lead as conversas. */
+  wa_chave?: string | null;
   posicao: number;
   created_by: string | null;
   created_at: string;
