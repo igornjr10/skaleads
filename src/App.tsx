@@ -9,6 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
 
 const Auth = lazy(() => import("./pages/Auth"));
+const DefinirSenha = lazy(() => import("./pages/DefinirSenha"));
 const Landing = lazy(() => import("./pages/Landing"));
 const Financeiro = lazy(() => import("./pages/Financeiro"));
 const Time = lazy(() => import("./pages/Time"));
@@ -69,6 +70,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/auth" element={<Auth />} />
+              <Route path="/definir-senha" element={<DefinirSenha />} />
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/financeiro" element={<Financeiro />} />

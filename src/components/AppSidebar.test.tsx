@@ -2,17 +2,28 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "./AppSidebar";
+import { AppSidebar, navPermitida } from "./AppSidebar";
+import { modulosEfetivos, type Modulo } from "@/lib/permissoes";
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     user: { email: "gestor@marketproads.com" },
     session: null,
     role: "owner",
+    empresa: null,
+    modulos: modulosEfetivos("owner", null),
+    pode: () => true,
     loading: false,
     signOut: vi.fn(),
   }),
 }));
+
+function urls(nav: ReturnType<typeof navPermitida>): string[] {
+  return nav.flatMap(n => [
+    ...("url" in n && n.url ? [n.url] : []),
+    ...("children" in n ? n.children.map(c => c.url) : []),
+  ]);
+}
 
 function montar(rota = "/") {
   return render(
@@ -79,11 +90,33 @@ describe("AppSidebar", () => {
     const links = screen.getAllByRole("link");
     const destinos = new Set(links.map(l => l.getAttribute("href")));
     for (const url of [
-      "/", "/clients", "/rotina", "/tarefas", "/planner", "/producao",
+      "/dashboard", "/clients", "/rotina", "/tarefas", "/planner", "/producao",
       "/campaigns", "/nichos", "/alerts", "/report-schedules",
       "/whatsapp-scheduled", "/automations", "/chat", "/cerebro", "/settings",
     ]) {
       expect(destinos).toContain(url);
     }
+  });
+
+  it("designer nao ve financeiro nem campanhas, mas ve producao", () => {
+    const liberados = modulosEfetivos("designer", null);
+    const destinos = urls(navPermitida((m: Modulo) => liberados.includes(m)));
+    expect(destinos).toContain("/producao");
+    expect(destinos).not.toContain("/financeiro");
+    expect(destinos).not.toContain("/campaigns");
+    expect(destinos).toContain("/settings");
+  });
+
+  it("grupo com a pagina fechada e filho liberado vira agrupador", () => {
+    const nav = navPermitida((m: Modulo) => m === "alertas");
+    const campanhas = nav.find(n => n.title === "Campanhas");
+    expect(campanhas && "children" in campanhas ? campanhas.url : "x").toBeUndefined();
+    expect(urls(nav)).toContain("/alerts");
+    expect(urls(nav)).not.toContain("/campaigns");
+  });
+
+  it("grupo sem nada liberado some do menu", () => {
+    const nav = navPermitida(() => false);
+    expect(nav.map(n => n.title)).toEqual(["Configurações"]);
   });
 });

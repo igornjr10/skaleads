@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { LayoutDashboard, Users, Megaphone, Bell, Settings, LogOut, MessageSquare, Activity, ClipboardList, Clapperboard, Network, CalendarClock, ListTodo, Repeat, Compass, Send, Sparkles, MessagesSquare, ChevronRight, FileSignature, CircleDollarSign, UsersRound, Kanban, type LucideIcon } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
@@ -21,7 +21,8 @@ import {
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { MarketProLogo } from "./MarketProLogo";
+import { LogoEmpresa, nomeDaMarca } from "./MarcaEmpresa";
+import { moduloDaRota, rotuloPapel, type Modulo } from "@/lib/permissoes";
 
 type NavIcon = LucideIcon | typeof WhatsAppIcon;
 type NavLeaf = { title: string; url: string; icon: NavIcon };
@@ -80,14 +81,35 @@ function hasChildren(node: NavNode): node is NavGroup {
   return "children" in node;
 }
 
+/**
+ * Menu so com o que a pessoa pode abrir. Grupo cuja pagina propria esta
+ * fechada mas com filhos liberados vira agrupador; grupo sem nada liberado some.
+ */
+export function navPermitida(pode: (m: Modulo) => boolean): NavNode[] {
+  const livre = (url: string) => {
+    const modulo = moduloDaRota(url);
+    return !modulo || pode(modulo);
+  };
+  return NAV.flatMap((node): NavNode[] => {
+    if (!hasChildren(node)) return livre(node.url) ? [node] : [];
+    const children = node.children.filter(c => livre(c.url));
+    const url = node.url && livre(node.url) ? node.url : undefined;
+    if (!url && children.length === 0) return [];
+    if (children.length === 0) return [{ title: node.title, url: url!, icon: node.icon }];
+    return [{ ...node, url, children }];
+  });
+}
+
 // No modo icone o shadcn esconde `SidebarMenuSub`, entao filho dentro de grupo
 // ficaria inalcancavel. Recolhido a lista volta a ser plana: todo destino
 // continua a um clique.
-const FLAT: NavLeaf[] = NAV.flatMap(node =>
-  hasChildren(node)
-    ? [...(node.url ? [{ title: node.title, url: node.url, icon: node.icon }] : []), ...node.children]
-    : [node]
-);
+function achatar(nav: NavNode[]): NavLeaf[] {
+  return nav.flatMap(node =>
+    hasChildren(node)
+      ? [...(node.url ? [{ title: node.title, url: node.url, icon: node.icon }] : []), ...node.children]
+      : [node]
+  );
+}
 
 const GROUPS_KEY = "sidebar:groups";
 
@@ -104,7 +126,14 @@ export function AppSidebar() {
   // No mobile o sidebar vira Sheet em largura total, mas `state` continua "collapsed"
   const collapsed = !isMobile && state === "collapsed";
   const location = useLocation();
-  const { user, signOut, role } = useAuth();
+  const { user, signOut, role, modulos, empresa } = useAuth();
+  // A lista de modulos nasce nova a cada render; a chave em texto e que diz se mudou.
+  const chaveModulos = modulos.join(",");
+  const nav = useMemo(() => {
+    const liberados = chaveModulos.split(",");
+    return navPermitida(m => liberados.includes(m));
+  }, [chaveModulos]);
+  const flat = useMemo(() => achatar(nav), [nav]);
 
   // useCallback para o efeito abaixo poder depender dela sem rodar a cada
   // render: so muda quando a rota muda, que e exatamente quando importa.
@@ -118,9 +147,9 @@ export function AppSidebar() {
   // Chegar num filho por link direto ou refresh tem que abrir o grupo dele,
   // senao a pagina ativa nao aparece em lugar nenhum do menu.
   useEffect(() => {
-    const dono = NAV.find(n => hasChildren(n) && n.children.some(c => isActive(c.url)));
+    const dono = nav.find(n => hasChildren(n) && n.children.some(c => isActive(c.url)));
     if (dono) setOpenGroups(prev => (prev[dono.title] ? prev : { ...prev, [dono.title]: true }));
-  }, [isActive]);
+  }, [isActive, nav]);
 
   function toggleGroup(title: string) {
     setOpenGroups(prev => {
@@ -269,7 +298,7 @@ export function AppSidebar() {
           <div className="flex items-center justify-center py-4">
             <div className="relative">
               <div className="absolute inset-0 rounded-xl bg-emerald-500/20 blur-md" />
-              <MarketProLogo size={36} className="relative shrink-0 rounded-xl ring-1 ring-emerald-500/30" />
+              <LogoEmpresa size={36} className="relative shrink-0 rounded-xl ring-1 ring-emerald-500/30" />
             </div>
           </div>
         ) : (
@@ -277,7 +306,7 @@ export function AppSidebar() {
             {/* Logo com glow */}
             <div className="relative">
               <div className="absolute inset-0 rounded-2xl bg-emerald-500/25 blur-lg scale-110" />
-              <MarketProLogo
+              <LogoEmpresa
                 size={64}
                 className="relative shrink-0 rounded-2xl ring-1 ring-emerald-500/40 shadow-[0_0_24px_rgba(16,185,129,0.25)]"
               />
@@ -286,7 +315,7 @@ export function AppSidebar() {
             {/* Brand name */}
             <div className="flex flex-col items-center gap-0.5 text-center">
               <span className="text-[17px] font-extrabold tracking-tight text-white leading-none">
-                Scale<span className="text-emerald-400">Ads</span>
+                {empresa ? nomeDaMarca(empresa) : <>Scale<span className="text-emerald-400">Ads</span></>}
               </span>
               <span className="text-[10px] font-medium tracking-[0.22em] uppercase text-emerald-500/80">
                 Manager
@@ -310,8 +339,8 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu className="gap-2">
               {collapsed
-                ? FLAT.map(renderLeaf)
-                : NAV.map(node => (hasChildren(node) ? renderGroup(node) : renderLeaf(node)))}
+                ? flat.map(renderLeaf)
+                : nav.map(node => (hasChildren(node) ? renderGroup(node) : renderLeaf(node)))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -331,7 +360,7 @@ export function AppSidebar() {
                     {user?.email}
                   </span>
                   <span className="text-[10px] uppercase tracking-widest text-muted-foreground/70">
-                    {role}
+                    {rotuloPapel(role)}
                   </span>
                 </div>
               </div>

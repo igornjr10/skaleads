@@ -30,9 +30,15 @@ supabase/
 - Imports: usar `@/` como alias para `src/`
 - Toasts: usar `sonner` (`import { toast } from "sonner"`)
 
-## Banco de dados (Supabase: npfcxgijwrxrssinpkdw)
+## Banco de dados (Supabase: ntlcyabztsdddsuobhhi)
 Tabelas principais: `clients`, `campaigns`, `ad_sets`, `ads`, `campaign_daily_metrics`, `audit_runs`
 RLS habilitado em todas. Funcoes SECURITY DEFINER: `get_my_role()`, `has_role()`, `is_admin_or_owner()`
+
+## Permissoes
+- Isolamento por empresa (`companies` + `user_companies`); `owner` e o dono da plataforma e ve tudo
+- Carteira: `admin` ve todos os clientes da empresa; os outros papeis so os de `client_assignments`. A regra vive na policy de `clients` e em `user_can_access_client` — tabela nova pendurada em cliente herda filtrando por `client_id in (select id from clients)`
+- Modulos: catalogo e padrao por papel em `src/lib/permissoes.ts`; `user_companies.modulos` null = padrao. Rota nova precisa entrar em `MODULOS` para ser guardada
+- Equipe (convite, papel, modulos, clientes) passa pela Edge Function `company-members`
 
 ## Deploy
 **Nao existe branch `main`.** O repo (renomeado de `marketpro-manager` para
@@ -41,7 +47,7 @@ dispara o CI e o deploy do projeto `scale-ads` no Vercel.
 
 Edge Functions saem pela CLI, sem precisar de Docker:
 ```
-supabase functions deploy <nome> --project-ref npfcxgijwrxrssinpkdw
+supabase functions deploy <nome> --project-ref ntlcyabztsdddsuobhhi
 ```
 O deploy sobe junto os arquivos de `_shared/` que a function importa.
 

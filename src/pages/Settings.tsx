@@ -13,6 +13,9 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert, QrCode, RotateCw, Power, Trash2 } from "lucide-react";
+import { EquipeCard } from "@/components/settings/EquipeCard";
+import { EmpresaCard } from "@/components/settings/EmpresaCard";
+import { PAPEIS, rotuloPapel } from "@/lib/permissoes";
 
 interface Member {
   user_id: string;
@@ -48,7 +51,7 @@ interface InstanceStatus {
   profileName: string | null;
 }
 
-const ROLES = ["owner", "admin", "analyst", "viewer"] as const;
+const ROLES = ["owner", ...PAPEIS.map(p => p.value)] as const;
 
 const IMPACT_LABELS: Record<string, string> = {
   reports: "relatórios",
@@ -82,6 +85,7 @@ function adminErrorMessage(detail: any, fallback: string): string {
 export default function Settings() {
   const { user, role } = useAuth();
   const isOwner = role === "owner";
+  const gereEquipe = isOwner || role === "admin";
   const [members, setMembers] = useState<Member[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [fullName, setFullName] = useState("");
@@ -324,11 +328,15 @@ export default function Settings() {
         </CardContent>
       </Card>
 
+      {gereEquipe && <EmpresaCard />}
+      {gereEquipe && <EquipeCard />}
+
+      {isOwner && (
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle>Membros</CardTitle>
+          <CardTitle>Membros da plataforma</CardTitle>
           <CardDescription>
-            {isOwner ? "Gerencie os papéis dos membros da plataforma" : "Apenas Owners podem alterar papéis"}
+            Todas as empresas. Aqui você vincula pessoas a empresas; o dia a dia da equipe fica no card Equipe.
           </CardDescription>
         </CardHeader>
         <CardContent className="px-0">
@@ -352,11 +360,11 @@ export default function Settings() {
                       <Select value={m.role} onValueChange={(v) => changeRole(m.user_id, v)}>
                         <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {ROLES.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}
+                          {ROLES.map((r) => (<SelectItem key={r} value={r}>{rotuloPapel(r)}</SelectItem>))}
                         </SelectContent>
                       </Select>
                     ) : (
-                      <span className="text-xs uppercase text-muted-foreground">{m.role}</span>
+                      <span className="text-xs text-muted-foreground">{rotuloPapel(m.role)}</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -400,6 +408,7 @@ export default function Settings() {
           </Table>
         </CardContent>
       </Card>
+      )}
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>

@@ -864,22 +864,34 @@ export type Database = {
       }
       companies: {
         Row: {
+          cor_primaria: string | null
           created_at: string
+          dominio: string | null
           id: string
           is_active: boolean
+          logo_url: string | null
           name: string
+          nome_exibicao: string | null
         }
         Insert: {
+          cor_primaria?: string | null
           created_at?: string
+          dominio?: string | null
           id?: string
           is_active?: boolean
+          logo_url?: string | null
           name: string
+          nome_exibicao?: string | null
         }
         Update: {
+          cor_primaria?: string | null
           created_at?: string
+          dominio?: string | null
           id?: string
           is_active?: boolean
+          logo_url?: string | null
           name?: string
+          nome_exibicao?: string | null
         }
         Relationships: []
       }
@@ -887,19 +899,59 @@ export type Database = {
         Row: {
           company_id: string
           created_at: string
+          modulos: string[] | null
           user_id: string
         }
         Insert: {
           company_id: string
           created_at?: string
+          modulos?: string[] | null
           user_id: string
         }
         Update: {
           company_id?: string
           created_at?: string
+          modulos?: string[] | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_companies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_assignments: {
+        Row: {
+          client_id: string
+          company_id: string | null
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          company_id?: string | null
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          company_id?: string | null
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_assignments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       managers: {
         Row: {
@@ -997,7 +1049,16 @@ export type Database = {
       revelar_senha_acesso: { Args: { p_acesso_id: string }; Returns: string | null }
     }
     Enums: {
-      app_role: "owner" | "admin" | "analyst" | "viewer" | "editor" | "designer"
+      app_role:
+        | "owner"
+        | "admin"
+        | "analyst"
+        | "viewer"
+        | "editor"
+        | "designer"
+        | "sdr"
+        | "closer"
+        | "social_seller"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1125,7 +1186,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["owner", "admin", "analyst", "viewer"],
+      app_role: ["owner", "admin", "analyst", "viewer", "editor", "designer", "sdr", "closer", "social_seller"],
     },
   },
 } as const

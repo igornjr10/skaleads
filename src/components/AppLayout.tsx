@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { NotificationsBell } from "./NotificationsBell";
-import { MarketProLogo } from "./MarketProLogo";
 import { ClientSwitcher } from "./ClientSwitcher";
+import { RotaPermitida } from "./RotaPermitida";
+import { LogoEmpresa, nomeDaMarca } from "./MarcaEmpresa";
+import { useAuth } from "@/hooks/useAuth";
+import { aplicarCorDaMarca } from "@/lib/marca";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard":   { title: "Dashboard",        subtitle: "Visão geral das campanhas" },
@@ -39,6 +42,13 @@ export function AppLayout() {
   const location = useLocation();
   const meta = getPageMeta(location.pathname);
   const [sidebarInicial] = useState(estadoSalvoDaSidebar);
+  const { empresa } = useAuth();
+  const corDaMarca = empresa?.cor_primaria ?? null;
+
+  useEffect(() => {
+    aplicarCorDaMarca(corDaMarca);
+    return () => aplicarCorDaMarca(null);
+  }, [corDaMarca]);
 
   return (
     <SidebarProvider defaultOpen={sidebarInicial}>
@@ -78,20 +88,22 @@ export function AppLayout() {
               <NotificationsBell />
               {/* Brand mark (shown when sidebar collapsed) */}
               <div className="hidden md:flex items-center gap-1.5 opacity-40 hover:opacity-70 transition-opacity">
-                <MarketProLogo size={22} />
+                <LogoEmpresa size={22} className="rounded-md" />
               </div>
             </div>
           </header>
 
           {/* ── Page content ─────────────────────────────────── */}
           <main className="flex-1 px-4 pb-4 pt-4 md:px-6 md:pb-6 md:pt-5 lg:px-8 lg:pb-8 lg:pt-6">
-            <Outlet />
+            <RotaPermitida>
+              <Outlet />
+            </RotaPermitida>
           </main>
 
           {/* ── Footer ───────────────────────────────────────── */}
           <footer className="mx-2 mb-2 flex items-center justify-between rounded-2xl border border-white/[0.05] bg-background/40 px-6 py-2 backdrop-blur-md">
             <span className="text-[10px] text-muted-foreground/40 tracking-wide uppercase">
-              Scale Ads © {new Date().getFullYear()}
+              {nomeDaMarca(empresa)} © {new Date().getFullYear()}
             </span>
             <span className="text-[10px] text-muted-foreground/40">
               Meta Graph API v21.0

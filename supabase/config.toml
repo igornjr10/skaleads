@@ -5,3 +5,7 @@ project_id = "ntlcyabztsdddsuobhhi"
 # usa mais o secret legado.
 [functions.delete-user]
 verify_jwt = false
+
+# Mesmo motivo do delete-user: a function checa sessao e papel por conta propria.
+[functions.company-members]
+verify_jwt = false
