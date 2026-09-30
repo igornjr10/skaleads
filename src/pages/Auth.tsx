@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import { BarChart3, Bell, Shield, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,13 +8,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { MidsamLogo } from "@/components/MidsamLogo";
-
-const features = [
-  { icon: BarChart3, text: "Dashboards em tempo real" },
-  { icon: Bell, text: "Alertas inteligentes automaticos" },
-  { icon: Zap, text: "Drill-down completo de campanhas" },
-  { icon: Shield, text: "Auditoria avancada de conta Meta" },
-];
 
 // Destino do link de confirmacao. Sem a variavel, quem cria conta rodando o
 // app local manda para o proprio localhost — e o e-mail chega no usuario com um
@@ -101,72 +93,36 @@ export default function Auth() {
   const labelCls = "text-[11px] uppercase tracking-widest text-white/50 font-semibold";
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#080808]">
-      <div className="relative flex flex-col justify-between p-12 lg:w-1/2 xl:w-[55%] overflow-hidden min-h-[420px] lg:min-h-screen">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_60%_at_25%_65%,rgba(59,130,246,0.13)_0%,transparent_70%)]" />
+    <div className="relative min-h-screen overflow-hidden bg-[#070707] flex flex-col items-center justify-center px-4 py-12">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_45%_at_50%_0%,rgba(59,130,246,0.22)_0%,transparent_70%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_40%_35%_at_50%_100%,rgba(59,130,246,0.08)_0%,transparent_70%)]" />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40 [mask-image:radial-gradient(ellipse_70%_60%_at_50%_40%,black,transparent)]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)," +
+            "linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)",
+          backgroundSize: "44px 44px",
+        }}
+      />
 
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            backgroundImage:
-              "linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)," +
-              "linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
-
-        <div className="absolute right-0 inset-y-0 w-px bg-gradient-to-b from-transparent via-white/10 to-transparent" />
-
-        <div className="relative flex items-center gap-3">
+      <div className="relative w-full max-w-[400px] animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="mb-8 flex flex-col items-center gap-4 text-center">
           <div className="relative">
-            <div className="absolute inset-0 rounded-2xl bg-blue-500/30 blur-md scale-110" />
-            <MidsamLogo size={46} className="relative rounded-2xl ring-1 ring-blue-500/30" />
+            <div className="absolute inset-0 rounded-3xl bg-blue-500/30 blur-xl scale-125" />
+            <MidsamLogo
+              size={76}
+              className="relative rounded-3xl ring-1 ring-blue-500/40 shadow-[0_0_32px_rgba(59,130,246,0.3)]"
+            />
           </div>
-          <div className="flex flex-col leading-none gap-0.5">
-            <span className="text-white font-extrabold text-[17px] tracking-tight">
-              Midsam <span className="text-blue-400">Business</span>
-            </span>
-            <span className="text-[10px] tracking-[0.22em] uppercase font-semibold text-blue-500/60">
-              Manager
-            </span>
+          <div className="flex flex-col items-center gap-1.5 leading-none">
+            <span className="text-[26px] font-extrabold tracking-tight text-white">Midsam</span>
+            <span className="text-[11px] font-medium uppercase tracking-[0.3em] text-blue-500/80">Business</span>
           </div>
+          <div className="h-px w-40 bg-gradient-to-r from-transparent via-blue-500/40 to-transparent" />
         </div>
 
-        <div className="relative space-y-6">
-          <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5">
-            <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-            <span className="text-[11px] text-blue-400 font-semibold tracking-wide">
-              Meta Ads Manager Profissional
-            </span>
-          </div>
-
-          <h1 className="text-[32px] font-extrabold text-white leading-[1.2] tracking-tight">
-            Gerencie suas campanhas
-            <br />
-            Meta Ads
-            <br />
-            <span className="text-blue-400">como um profissional.</span>
-          </h1>
-
-          <div className="space-y-3">
-            {features.map(({ icon: Icon, text }) => (
-              <div key={text} className="flex items-center gap-3">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 border border-blue-500/20">
-                  <Icon className="h-3.5 w-3.5 text-blue-400" />
-                </div>
-                <span className="text-[13px] text-white/55 font-medium">{text}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <p className="relative text-[11px] text-white/25">© {new Date().getFullYear()} Midsam Business</p>
-      </div>
-
-      <div className="relative flex flex-1 flex-col justify-center items-center p-10 bg-[#0c0c0c]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_50%_40%,rgba(59,130,246,0.05)_0%,transparent_70%)]" />
-
-        <div className="relative w-full max-w-[360px]">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-7 shadow-[0_24px_80px_-20px_rgba(0,0,0,0.8)] backdrop-blur-xl ring-1 ring-inset ring-white/[0.03]">
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2 bg-white/5 border border-white/10 rounded-xl p-1 mb-7 h-10">
               <TabsTrigger
@@ -287,14 +243,15 @@ export default function Auth() {
               </form>
             </TabsContent>
           </Tabs>
-
-          <p className="mt-6 text-center text-xs text-white/40">
-            Ao continuar voce concorda com os{" "}
-            <Link to="/termos" className="underline underline-offset-4 transition-colors hover:text-white/70">Termos de Uso</Link>{" "}
-            e a{" "}
-            <Link to="/privacidade" className="underline underline-offset-4 transition-colors hover:text-white/70">Politica de Privacidade</Link>.
-          </p>
         </div>
+
+        <p className="mt-6 text-center text-xs text-white/40">
+          Ao continuar voce concorda com os{" "}
+          <Link to="/termos" className="underline underline-offset-4 transition-colors hover:text-white/70">Termos de Uso</Link>{" "}
+          e a{" "}
+          <Link to="/privacidade" className="underline underline-offset-4 transition-colors hover:text-white/70">Politica de Privacidade</Link>.
+        </p>
+        <p className="mt-3 text-center text-[11px] text-white/20">© {new Date().getFullYear()} Midsam Business</p>
       </div>
     </div>
   );

@@ -320,10 +320,10 @@ export function AppSidebar() {
             {/* Brand name */}
             <div className="flex flex-col items-center gap-0.5 text-center">
               <span className="text-[17px] font-extrabold tracking-tight text-white leading-none">
-                {empresa ? nomeDaMarca(empresa) : <>Midsam <span className="text-blue-400">Business</span></>}
+                {empresa ? nomeDaMarca(empresa).replace(/\s*business$/i, "") : "Midsam"}
               </span>
               <span className="text-[10px] font-medium tracking-[0.22em] uppercase text-blue-500/80">
-                Manager
+                Business
               </span>
             </div>
 
