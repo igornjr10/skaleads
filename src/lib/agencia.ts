@@ -1,5 +1,6 @@
 import { LOW_BALANCE } from "./client-budget";
 import { estaAberta, estaAtrasada } from "./demandas";
+import { avaliarMeta, temMeta } from "./metas";
 
 export interface ClienteAgencia {
   id: string;
@@ -8,6 +9,8 @@ export interface ClienteAgencia {
   meta_sync_status: string | null;
   meta_ad_account_id: string | null;
   meta_balance_cents: number | null;
+  alvo_resultados_mes?: number | null;
+  alvo_custo_resultado?: number | null;
 }
 
 export interface FaturaAgencia {
@@ -23,6 +26,10 @@ export interface GastoDiario {
   client_id: string;
   date: string;
   spend: number;
+  messages?: number | null;
+  calls?: number | null;
+  directions?: number | null;
+  leads?: number | null;
 }
 
 export interface DemandaAgencia {
@@ -42,7 +49,7 @@ export interface EntradaVisao {
   alertasAbertos: number;
 }
 
-export type MotivoAtencao = "fatura_vencida" | "saldo_baixo" | "meta_desconectada" | "sem_relatorio";
+export type MotivoAtencao = "fatura_vencida" | "saldo_baixo" | "meta_desconectada" | "sem_relatorio" | "abaixo_da_meta" | "custo_acima";
 
 export interface ClienteEmAtencao {
   id: string;
@@ -55,6 +62,8 @@ export const MOTIVO_LABEL: Record<MotivoAtencao, string> = {
   saldo_baixo: "Saldo Meta baixo",
   meta_desconectada: "Meta com problema",
   sem_relatorio: "Sem relatório há 7 dias",
+  abaixo_da_meta: "Abaixo da meta",
+  custo_acima: "Custo acima da meta",
 };
 
 const META_COM_PROBLEMA = ["error", "expired", "warning"];
@@ -99,6 +108,19 @@ export function montarVisaoAgencia(e: EntradaVisao) {
     carga.set(d.assigned_to, atual);
   }
 
+  const gastosPorCliente = new Map<string, GastoDiario[]>();
+  for (const g of e.gastos) {
+    const lista = gastosPorCliente.get(g.client_id) ?? [];
+    lista.push(g);
+    gastosPorCliente.set(g.client_id, lista);
+  }
+  const comMeta = ativos.filter(c => temMeta({ alvo_resultados_mes: c.alvo_resultados_mes ?? null, alvo_custo_resultado: c.alvo_custo_resultado ?? null }));
+  const avaliacoes = new Map(comMeta.map(c => [c.id, avaliarMeta(
+    { alvo_resultados_mes: c.alvo_resultados_mes ?? null, alvo_custo_resultado: c.alvo_custo_resultado ?? null },
+    gastosPorCliente.get(c.id) ?? [],
+    e.hoje,
+  )]));
+
   const comRelatorio = new Set(e.relatoriosRecentes);
   const clientesComVencida = new Set(vencidas.map(f => f.client_id));
   const atencao: ClienteEmAtencao[] = [];
@@ -110,6 +132,9 @@ export function montarVisaoAgencia(e: EntradaVisao) {
       if (c.meta_balance_cents !== null && c.meta_balance_cents < LOW_BALANCE * 100) motivos.push("saldo_baixo");
       if (c.meta_ad_account_id && c.meta_sync_status && META_COM_PROBLEMA.includes(c.meta_sync_status)) motivos.push("meta_desconectada");
       if (c.meta_ad_account_id && !comRelatorio.has(c.id)) motivos.push("sem_relatorio");
+      const meta = avaliacoes.get(c.id);
+      if (meta?.resultadosAbaixo) motivos.push("abaixo_da_meta");
+      if (meta?.custoAcima) motivos.push("custo_acima");
     }
     if (motivos.length) atencao.push({ id: c.id, name: c.name, motivos });
   }
@@ -138,6 +163,10 @@ export function montarVisaoAgencia(e: EntradaVisao) {
       carga: [...carga.entries()]
         .map(([pessoa, n]) => ({ pessoa, ...n }))
         .sort((a, b) => b.atrasadas - a.atrasadas || b.abertas - a.abertas),
+    },
+    metas: {
+      comMeta: comMeta.length,
+      abaixo: [...avaliacoes.values()].filter(a => a.situacao === "abaixo").length,
     },
     alertasAbertos: e.alertasAbertos,
     atencao,

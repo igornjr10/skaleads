@@ -17,6 +17,7 @@ import { ClientAvatar } from "@/components/ClientAvatar";
 import { ClientFundingPanel } from "@/components/clients/ClientFundingPanel";
 import { ClientBriefingCard } from "@/components/clients/ClientBriefingCard";
 import { HistoricoComercialCard } from "@/components/clients/HistoricoComercialCard";
+import { ClientMetasCard } from "@/components/clients/ClientMetasCard";
 import { supabase } from "@/integrations/supabase/client";
 import { loadLatestAudit } from "@/lib/audit/runner";
 import type { AuditReport } from "@/lib/audit/types";
@@ -39,6 +40,8 @@ interface ClientRow {
   cnpj: string | null;
   email: string | null;
   responsavel_nome: string | null;
+  alvo_resultados_mes: number | null;
+  alvo_custo_resultado: number | null;
 }
 
 interface Performance {
@@ -324,6 +327,12 @@ export default function ClientHub() {
           </CardContent>
         </Card>
       </div>
+
+      <ClientMetasCard
+        clientId={client.id}
+        alvos={{ alvo_resultados_mes: client.alvo_resultados_mes, alvo_custo_resultado: client.alvo_custo_resultado }}
+        onSalvo={alvos => setClient(c => (c ? { ...c, ...alvos } : c))}
+      />
 
       <ClientBriefingCard
         clientId={client.id}

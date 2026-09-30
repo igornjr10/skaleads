@@ -40,6 +40,11 @@ RLS habilitado em todas. Funcoes SECURITY DEFINER: `get_my_role()`, `has_role()`
 - Modulos: catalogo e padrao por papel em `src/lib/permissoes.ts`; `user_companies.modulos` null = padrao. Rota nova precisa entrar em `MODULOS` para ser guardada
 - Equipe (convite, papel, modulos, clientes) passa pela Edge Function `company-members`
 
+## Metas e Cerebro (IA)
+- Meta do cliente: `clients.alvo_resultados_mes` / `alvo_custo_resultado` (prefixo `alvo_` porque `meta_*` e a conta Meta). Gestor grava por `definir_metas_cliente()`; a regra de ritmo vive em `src/lib/metas.ts` e na gemea `_shared/metas.ts`
+- Resultado = mensagens + ligacoes + rotas + leads, em todo lugar
+- `chat-assistant` le o contexto com o JWT de quem pergunta (RLS decide), nunca com service role
+
 ## Demandas
 - `tasks` e a fila unica (substituiu Tarefas, Producao, Esteira e Time). Status: a_fazer, fazendo, revisao, aprovado, concluida
 - ADM ve tudo da empresa; os demais veem o que esta com eles ou o que pediram. Quem pediu edita tudo; o responsavel so status e checklist (`guard_task_update`)
@@ -53,6 +58,7 @@ RLS habilitado em todas. Funcoes SECURITY DEFINER: `get_my_role()`, `has_role()`
 - `crm_atividades` tipo `etapa` e `convertido` so o banco escreve. Lead vira cliente por `converter_lead_em_cliente()` (so ADM)
 
 ## WhatsApp (uazapi, numero unico da agencia)
+- Instancia: o 1o "Gerar QR Code" cria a instancia com `UAZAPI_ADMIN_TOKEN` (`/instance/create`), guarda o token em `wa_instancia` (sem grant para `authenticated`) e liga o webhook. `UAZAPI_TOKEN` so vale se `wa_instancia` estiver vazia. Doc: https://docs.uazapi.com/llms-full.txt
 - Entrada: uazapi -> Edge Function `wa-webhook` (sem JWT; autentica pelo `token` da instancia no corpo). Liga-se em WhatsApp > Configuracao (`whatsapp-instance-admin`, action `webhook`)
 - Mensagem casa com lead pela chave de telefone (pais + DDD + 8 ultimos digitos): `public.wa_chave`, `_shared/wa-crm.ts` e `src/lib/whatsapp.ts` precisam andar juntas
 - Resposta manual: `wa-enviar` (le o lead com o JWT do usuario, a RLS decide). Disparo e sequencia so enfileiram em `wa_fila`; quem envia e o cron `wa-processar-fila` (1/min), respeitando `wa_config` (teto diario, intervalo, horario)

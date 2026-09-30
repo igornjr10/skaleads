@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, startOfMonth, subDays, subMonths } from "date-fns";
-import { AlertTriangle, Bell, Building2, CircleDollarSign, Inbox, TrendingDown, TrendingUp, Users, Wallet } from "lucide-react";
+import { AlertTriangle, Bell, Building2, CircleDollarSign, Crosshair, Inbox, TrendingDown, TrendingUp, Users, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,7 @@ const brl = (v: number) => v.toLocaleString("pt-BR", { style: "currency", curren
 
 function todosOsGastos(desde: string): Promise<GastoDiario[]> {
   return buscarTudo<GastoDiario>((de, ate) =>
-    supabase.from("campaign_daily_metrics").select("client_id, date, spend").gte("date", desde).order("date").range(de, ate)
+    supabase.from("campaign_daily_metrics").select("client_id, date, spend, messages, calls, directions, leads").gte("date", desde).order("date").range(de, ate)
   );
 }
 
@@ -58,7 +58,7 @@ export default function Agencia() {
       const seteDias = subDays(agora, 7).toISOString();
       try {
         const [clientes, faturas, gastos, demandas, relatorios, alertas, perfis] = await Promise.all([
-          supabase.from("clients").select("id, name, status, meta_sync_status, meta_ad_account_id, meta_balance_cents"),
+          supabase.from("clients").select("id, name, status, meta_sync_status, meta_ad_account_id, meta_balance_cents, alvo_resultados_mes, alvo_custo_resultado"),
           supabase
             .from("invoices")
             .select("client_id, due_date, amount, status, paid_at, paid_amount")
@@ -98,7 +98,7 @@ export default function Agencia() {
     );
   }
 
-  const { clientes, investimento, financeiro, demandas, atencao, alertasAbertos } = visao;
+  const { clientes, investimento, financeiro, demandas, metas, atencao, alertasAbertos } = visao;
   const subiu = (investimento.variacao ?? 0) >= 0;
 
   return (
@@ -113,7 +113,7 @@ export default function Agencia() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Kpi
           icon={Users}
           titulo="Clientes ativos"
@@ -147,6 +147,15 @@ export default function Agencia() {
           valor={String(demandas.abertas)}
           detalhe={`${demandas.atrasadas} atrasada${demandas.atrasadas === 1 ? "" : "s"} · ${demandas.emRevisao} em revisão`}
           alerta={demandas.atrasadas > 0}
+        />
+        <Kpi
+          icon={Crosshair}
+          titulo="Abaixo da meta"
+          valor={metas.comMeta > 0 ? String(metas.abaixo) : "—"}
+          detalhe={metas.comMeta > 0
+            ? `de ${metas.comMeta} cliente${metas.comMeta === 1 ? "" : "s"} com meta no mês`
+            : "Defina a meta na página do cliente"}
+          alerta={metas.abaixo > 0}
         />
       </div>
 

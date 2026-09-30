@@ -21,10 +21,10 @@ interface Client {
 }
 
 const SUGGESTIONS = [
-  "Como estão as campanhas ativas?",
-  "Qual campanha está gastando mais?",
-  "Tem algum problema crítico para resolver?",
-  "Me dá um resumo do desempenho geral",
+  "Quais clientes estão abaixo da meta?",
+  "Quais campanhas tiveram aumento de custo por resultado?",
+  "O que precisa ser acompanhado essa semana?",
+  "Monte um resumo semanal deste cliente",
 ];
 
 export default function Chat() {

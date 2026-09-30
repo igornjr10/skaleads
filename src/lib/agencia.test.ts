@@ -102,4 +102,17 @@ describe("montarVisaoAgencia", () => {
     }));
     expect(v.financeiro.recebido).toBe(450);
   });
+
+  it("conta quem esta abaixo da meta e poe na lista de atencao", () => {
+    const gastos = Array.from({ length: 15 }, (_, i) => ({
+      client_id: "a", date: `2026-09-${String(i + 1).padStart(2, "0")}`, spend: 30, leads: 1,
+    }));
+    const v = montarVisaoAgencia(entrada({
+      clientes: [cliente("a", { alvo_resultados_mes: 100 }), cliente("b")],
+      gastos,
+      relatoriosRecentes: ["a", "b"],
+    }));
+    expect(v.metas).toEqual({ comMeta: 1, abaixo: 1 });
+    expect(v.atencao.find(c => c.id === "a")?.motivos).toContain("abaixo_da_meta");
+  });
 });

@@ -400,6 +400,8 @@ export type Database = {
       }
       clients: {
           Row: {
+          alvo_custo_resultado: number | null
+          alvo_resultados_mes: number | null
             address: string | null
             business_segment: string | null
             city: string | null
@@ -446,6 +448,8 @@ export type Database = {
             updated_at: string
         }
         Insert: {
+          alvo_custo_resultado?: number | null
+          alvo_resultados_mes?: number | null
           address?: string | null
           business_segment?: string | null
           city?: string | null
@@ -492,6 +496,8 @@ export type Database = {
             updated_at?: string
         }
         Update: {
+          alvo_custo_resultado?: number | null
+          alvo_resultados_mes?: number | null
           address?: string | null
           business_segment?: string | null
           city?: string | null
@@ -1671,6 +1677,10 @@ export type Database = {
       garantir_funil_prospeccao: { Args: Record<string, never>; Returns: string }
       criar_funil_de_cliente: { Args: { _client_id: string; _nome?: string }; Returns: string }
       converter_lead_em_cliente: { Args: { _lead_id: string }; Returns: string }
+      definir_metas_cliente: {
+        Args: { p_client_id: string; p_resultados_mes: number | null; p_custo_resultado: number | null }
+        Returns: undefined
+      }
       is_comercial: { Args: { _user_id: string }; Returns: boolean }
       clientes_das_minhas_demandas: {
         Args: Record<string, never>

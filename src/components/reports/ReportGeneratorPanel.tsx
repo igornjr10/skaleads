@@ -6,7 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Download, FileText, Loader2, X } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Download, FileText, ImagePlus, Loader2, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
@@ -16,6 +18,21 @@ import { MetricPreferencesBuilder } from "./MetricPreferencesBuilder";
 import { errorMessage } from "@/lib/utils";
 import { META_GRAPH_VERSION } from "@/lib/meta-insights";
 import { metaGet, metaGetAll, type MetaFetchOptions } from "@/lib/meta-fetch";
+import { comprimirImagem, escolherCriativoDestaque, lerSugestaoDaIA } from "@/lib/report-analise";
+import { sendChatMessage } from "@/lib/ai-service";
+import { useAuth } from "@/hooks/useAuth";
+import { nomeDaMarca } from "@/components/MarcaEmpresa";
+
+const MAX_PRINTS = 6;
+
+const CAMPOS_ANALISE = [
+  { key: "highlights", label: "Destaques da semana", placeholder: "Um por linha. Ex.: Custo por conversa caiu 18%" },
+  { key: "attention", label: "Pontos de atenção", placeholder: "Um por linha. Ex.: Saldo da conta acaba em 4 dias" },
+  { key: "nextSteps", label: "Próximos passos", placeholder: "Um por linha. Ex.: Subir novo criativo em vídeo" },
+  { key: "notes", label: "Observações do gestor", placeholder: "Texto livre para o cliente" },
+] as const;
+
+type Analise = Record<(typeof CAMPOS_ANALISE)[number]["key"], string>;
 
 interface ReportGeneratorPanelProps {
   isOpen: boolean;
@@ -206,7 +223,12 @@ export function ReportGeneratorPanel({
   clientName,
   onReportCreated,
 }: ReportGeneratorPanelProps) {
+  const { empresa } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [analise, setAnalise] = useState<Analise>({ highlights: "", attention: "", nextSteps: "", notes: "" });
+  const [sugerindo, setSugerindo] = useState(false);
+  const [prints, setPrints] = useState<Array<{ src: string; caption: string }>>([]);
+  const [incluirDestaque, setIncluirDestaque] = useState(true);
   const [preset, setPreset] = useState("30");
   const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -707,6 +729,45 @@ export function ReportGeneratorPanel({
     };
   }
 
+  async function sugerirComIA() {
+    setSugerindo(true);
+    try {
+      const { reply } = await sendChatMessage([{
+        role: "user",
+        content:
+          `Vou montar o relatório do cliente ${clientName} para o período de ${startDate} a ${endDate}. ` +
+          "Com base nos dados, responda SOMENTE um JSON, sem texto antes ou depois, no formato " +
+          '{"destaques": ["..."], "atencao": ["..."], "proximos_passos": ["..."]}. ' +
+          "Cada lista com 2 a 4 itens curtos, escritos para o cliente ler, com números concretos quando houver.",
+      }], clientId);
+      const sugestao = lerSugestaoDaIA(reply);
+      if (!sugestao) {
+        setAnalise(a => ({ ...a, notes: a.notes || reply.trim() }));
+        return toast.info("A IA não devolveu no formato esperado; coloquei a resposta em Observações para você editar");
+      }
+      setAnalise(a => ({ ...a, ...sugestao }));
+      toast.success("Sugestão preenchida — revise antes de gerar");
+    } catch (err) {
+      toast.error(errorMessage(err, "Não foi possível falar com a IA"));
+    } finally {
+      setSugerindo(false);
+    }
+  }
+
+  async function adicionarPrints(arquivos: FileList | null) {
+    if (!arquivos?.length) return;
+    const vagas = MAX_PRINTS - prints.length;
+    if (vagas <= 0) return toast.error(`No máximo ${MAX_PRINTS} prints por relatório`);
+    const lista = [...arquivos].filter(f => f.type.startsWith("image/")).slice(0, vagas);
+    try {
+      const novos = await Promise.all(lista.map(async f => ({ src: await comprimirImagem(f), caption: "" })));
+      setPrints(p => [...p, ...novos]);
+      if (arquivos.length > vagas) toast.info(`Só couberam ${vagas}: o limite é ${MAX_PRINTS} prints`);
+    } catch (err) {
+      toast.error(errorMessage(err, "Não foi possível ler a imagem"));
+    }
+  }
+
   async function buildReportData(): Promise<ReportData> {
     const { data: clientRaw, error: clientError } = await supabase
       .from("clients")
@@ -849,7 +910,10 @@ export function ReportGeneratorPanel({
       topCampaigns,
       topAds,
       metricPreferences,
-      branding: { primaryColor: "#2563eb", agencyName: "Midsam Business" },
+      branding: { primaryColor: empresa?.cor_primaria || "#2563eb", agencyName: nomeDaMarca(empresa) },
+      analysis: analise,
+      featuredAd: incluirDestaque ? escolherCriativoDestaque(topAds) ?? undefined : undefined,
+      screenshots: prints.map(p => ({ src: p.src, caption: p.caption.trim() || undefined })),
     };
   }
 
@@ -974,6 +1038,86 @@ export function ReportGeneratorPanel({
               value={metricPreferences}
               onChange={(next) => setMetricPreferences(next as ReportMetricPreference[])}
             />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0 pb-3">
+            <div>
+              <CardTitle className="text-sm">Análise do gestor</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">Entra numa página própria do PDF. Um item por linha.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={sugerirComIA} disabled={sugerindo || loading}>
+              {sugerindo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              Sugerir com IA
+            </Button>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            {CAMPOS_ANALISE.map(campo => (
+              <div key={campo.key} className="space-y-1">
+                <Label className="text-xs">{campo.label}</Label>
+                <Textarea
+                  rows={4}
+                  value={analise[campo.key]}
+                  placeholder={campo.placeholder}
+                  onChange={e => setAnalise(a => ({ ...a, [campo.key]: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
+            ))}
+            <label className="flex items-center gap-3 text-sm md:col-span-2">
+              <Switch checked={incluirDestaque} onCheckedChange={setIncluirDestaque} />
+              Destacar o criativo que mais performou (maior CTR entre os anúncios com verba relevante)
+            </label>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm">Prints de campanhas e criativos</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">Até {MAX_PRINTS} imagens, duas por página do PDF. Legenda opcional.</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {prints.length > 0 && (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {prints.map((p, i) => (
+                  <div key={i} className="space-y-2 rounded-lg border p-2">
+                    <div className="relative">
+                      <img src={p.src} alt={`Print ${i + 1}`} className="h-32 w-full rounded object-cover" />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="icon"
+                        className="absolute right-1 top-1 h-7 w-7"
+                        aria-label="Remover print"
+                        onClick={() => setPrints(lista => lista.filter((_, j) => j !== i))}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <Input
+                      value={p.caption}
+                      placeholder="Legenda"
+                      className="h-8 text-xs"
+                      onChange={e => setPrints(lista => lista.map((x, j) => (j === i ? { ...x, caption: e.target.value } : x)))}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            {prints.length < MAX_PRINTS && (
+              <Label className="flex h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-xs text-muted-foreground transition-colors hover:bg-muted/40">
+                <ImagePlus className="h-5 w-5" />
+                Adicionar prints
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={e => { adicionarPrints(e.target.files); e.target.value = ""; }}
+                />
+              </Label>
+            )}
           </CardContent>
         </Card>
 

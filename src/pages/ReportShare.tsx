@@ -7,6 +7,14 @@ import { AlertCircle, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
+import { itensDoTexto } from "@/lib/report-analise";
+
+const BLOCOS_ANALISE = [
+  { key: "highlights", title: "Destaques do período", cor: "text-emerald-600" },
+  { key: "attention", title: "Pontos de atenção", cor: "text-amber-600" },
+  { key: "nextSteps", title: "Próximos passos", cor: "text-blue-600" },
+  { key: "notes", title: "Observações do gestor", cor: "text-slate-600" },
+] as const;
 
 interface SharedReport {
   id: string;
@@ -302,6 +310,65 @@ export default function ReportShare() {
                     </tbody>
                   </table>
                 </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {data?.featuredAd && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Criativo que mais performou</h2>
+            <Card>
+              <CardContent className="flex flex-col gap-4 pt-5 sm:flex-row">
+                {data.featuredAd.previewUrl && (
+                  <img src={data.featuredAd.previewUrl} alt={data.featuredAd.name} className="h-40 w-full rounded-lg object-cover sm:w-40" />
+                )}
+                <div className="min-w-0 space-y-2">
+                  <p className="font-medium">{data.featuredAd.name}</p>
+                  <p className="text-sm text-muted-foreground">{data.featuredAd.reason}</p>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <KpiCard label="CTR" value={`${data.featuredAd.ctr.toFixed(2)}%`} />
+                    <KpiCard label="CPC" value={fmtCurrency(data.featuredAd.cpc)} />
+                    <KpiCard label="Cliques" value={fmtNum(data.featuredAd.clicks)} />
+                    <KpiCard label="Investido" value={fmtCurrency(data.featuredAd.spend)} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {data?.screenshots && data.screenshots.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Prints do período</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {data.screenshots.map((print, i) => (
+                <figure key={i} className="space-y-2">
+                  <img src={print.src} alt={print.caption || `Print ${i + 1}`} className="w-full rounded-lg border" />
+                  {print.caption && <figcaption className="text-center text-xs text-muted-foreground">{print.caption}</figcaption>}
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {BLOCOS_ANALISE.some(b => itensDoTexto(data?.analysis?.[b.key]).length > 0) && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Análise e próximos passos</h2>
+            <Card>
+              <CardContent className="grid gap-5 pt-5 sm:grid-cols-2">
+                {BLOCOS_ANALISE.map(bloco => {
+                  const itens = itensDoTexto(data.analysis?.[bloco.key]);
+                  if (!itens.length) return null;
+                  return (
+                    <div key={bloco.key} className="space-y-2">
+                      <h3 className={`text-sm font-semibold ${bloco.cor}`}>{bloco.title}</h3>
+                      <ul className="list-disc space-y-1 pl-5 text-sm">
+                        {itens.map((item, i) => <li key={i}>{item}</li>)}
+                      </ul>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           </section>
