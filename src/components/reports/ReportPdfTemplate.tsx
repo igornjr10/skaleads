@@ -1,12 +1,6 @@
-import {
-  Document,
-  Image,
-  Page,
-  Text,
-  View,
-  StyleSheet,
-} from "@react-pdf/renderer";
+import { Document, Image, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
 import type { ReportData } from "@/lib/report-types";
+import { itensDoTexto, temAnalise } from "@/lib/report-analise";
 
 function sanitizePdfText(value?: string | null) {
   if (!value) return "";
@@ -19,7 +13,7 @@ function sanitizePdfText(value?: string | null) {
     .replace(/[‘’]/g, "'")
     .replace(/[✅✔]/g, "OK ")
     .replace(/[❌✖]/g, "X ")
-    .replace(/[🔥🚀⭐✨💥🎯📈📊💬📣]/g, " ")
+    .replace(/[🔥🚀⭐✨💥🎯📈📊💬📣]/gu, " ")
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^\x20-\x7E]/g, "")
     .replace(/\s+/g, " ")
@@ -60,7 +54,6 @@ function getPreferredMetrics(data: ReportData) {
   const visiblePreferences = preferences.includes("instagramProfileVisits")
     ? preferences
     : [...preferences, "instagramProfileVisits"];
-  const socialProfileViews = data.socialPresence?.metrics.find((metric) => metric.key === "profileViews")?.value ?? 0;
 
   const registry: Record<string, { label: string; value: string; note: string }> = {
     spend: {
@@ -84,9 +77,9 @@ function getPreferredMetrics(data: ReportData) {
       note: "Conversas abertas no periodo",
     },
     instagramProfileVisits: {
-      label: "Visitas no perfil",
-      value: fmtNum(data.summary.instagramProfileVisits || socialProfileViews || 0),
-      note: "Visitas ao perfil do Instagram",
+      label: "Visitas pelo anuncio",
+      value: fmtNum(data.summary.instagramProfileVisits || 0),
+      note: "Visitas ao perfil vindas das campanhas",
     },
     phoneCalls: {
       label: "Ligacoes",
@@ -158,9 +151,29 @@ function getPreferredMetrics(data: ReportData) {
   return visiblePreferences.map((key) => registry[key]).filter(Boolean);
 }
 
+
+// A fonte do design system (`Plus Jakarta Sans`) chega ao PDF so por registro
+// explicito: o react-pdf nao enxerga o CSS da pagina e cai em Helvetica.
+//
+// Servida pelo proprio app, nao pelo Google Fonts. A primeira versao apontava
+// para o gstatic e quebrou com 404 — a URL do CDN carrega o numero da versao
+// da familia (v8, v12...) e muda quando a fonte e atualizada. Fora isso, o PDF
+// passaria a depender de rede no momento de gerar, e falharia offline.
+Font.register({
+  family: "Plus Jakarta Sans",
+  fonts: [
+    { src: "/fonts/PlusJakartaSans-Regular.ttf", fontWeight: 400 },
+    { src: "/fonts/PlusJakartaSans-Bold.ttf", fontWeight: 700 },
+  ],
+});
+
+// Sem isto o react-pdf hifeniza palavra longa no meio, e nome de campanha sai
+// picotado no relatorio do cliente.
+Font.registerHyphenationCallback((palavra) => [palavra]);
+
 const styles = StyleSheet.create({
   page: {
-    fontFamily: "Helvetica",
+    fontFamily: "Plus Jakarta Sans",
     fontSize: 9,
     color: "#0f172a",
     backgroundColor: "#eef4f8",
@@ -208,7 +221,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 13,
     color: "#8b6a3d",
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   coverRule: {
     width: 54,
@@ -219,7 +232,7 @@ const styles = StyleSheet.create({
   },
   coverTitle: {
     fontSize: 24,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
     textAlign: "center",
     marginBottom: 10,
   },
@@ -277,13 +290,13 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     textAlign: "center",
     fontSize: 11,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
     paddingTop: 5,
     marginRight: 10,
   },
   sectionTitle: {
     fontSize: 14.5,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   sectionSub: {
     fontSize: 8,
@@ -318,7 +331,7 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     fontSize: 18,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
     textAlign: "center",
   },
   metricNote: {
@@ -328,7 +341,7 @@ const styles = StyleSheet.create({
   },
   blockTitle: {
     fontSize: 11.5,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
     textAlign: "center",
     marginBottom: 12,
   },
@@ -349,7 +362,7 @@ const styles = StyleSheet.create({
   tableHeaderCell: {
     fontSize: 7,
     color: "#64748b",
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   tableRow: {
     flexDirection: "row",
@@ -386,7 +399,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     fontSize: 8,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   adNameWrap: {
     flex: 1,
@@ -446,11 +459,11 @@ const styles = StyleSheet.create({
   socialLogoFallbackText: {
     fontSize: 11,
     color: "#475569",
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   socialProfileName: {
     fontSize: 11,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   socialProfileMeta: {
     fontSize: 8,
@@ -473,7 +486,7 @@ const styles = StyleSheet.create({
   },
   socialMetricValue: {
     fontSize: 15,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   socialMetricSource: {
     fontSize: 6.5,
@@ -505,12 +518,193 @@ const styles = StyleSheet.create({
   },
 });
 
-function Footer({ agency, page }: { agency: string; page: number }) {
+function Footer({ agency }: { agency: string; page?: number }) {
   return (
-    <View style={styles.footer}>
-      <Text style={styles.footerText}>{agency || "Scale Ads"}  |  Relatorio executivo</Text>
-      <Text style={styles.footerText}>{page}</Text>
+    <View style={styles.footer} fixed>
+      <Text style={styles.footerText}>{sanitizePdfText(agency) || "Midsam Business"}  |  Relatorio executivo</Text>
+      <Text style={styles.footerText} render={({ pageNumber }) => String(pageNumber)} />
     </View>
+  );
+}
+
+const analysisStyles = StyleSheet.create({
+  featured: {
+    flexDirection: "row",
+    borderWidth: 1,
+    borderColor: "#dbe7f3",
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  featuredImage: {
+    width: 150,
+    height: 150,
+    borderRadius: 8,
+    objectFit: "cover",
+    marginRight: 14,
+  },
+  featuredBody: {
+    flex: 1,
+  },
+  featuredKicker: {
+    fontSize: 7.5,
+    color: "#2563eb",
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  featuredName: {
+    fontSize: 11,
+    fontWeight: 700,
+    marginBottom: 6,
+  },
+  featuredReason: {
+    fontSize: 8,
+    color: "#475569",
+    marginBottom: 10,
+  },
+  featuredMetrics: {
+    flexDirection: "row",
+  },
+  featuredMetric: {
+    marginRight: 16,
+  },
+  block: {
+    marginBottom: 14,
+  },
+  blockHeading: {
+    fontSize: 10.5,
+    fontWeight: 700,
+    marginBottom: 6,
+  },
+  item: {
+    flexDirection: "row",
+    marginBottom: 4,
+  },
+  bullet: {
+    width: 10,
+    fontSize: 9,
+    color: "#2563eb",
+  },
+  itemText: {
+    flex: 1,
+    fontSize: 9,
+    lineHeight: 1.45,
+    color: "#1e293b",
+  },
+  shot: {
+    marginBottom: 14,
+    alignItems: "center",
+  },
+  shotImage: {
+    maxWidth: "100%",
+    maxHeight: 330,
+    objectFit: "contain",
+    borderRadius: 8,
+  },
+  shotCaption: {
+    fontSize: 8,
+    color: "#64748b",
+    marginTop: 6,
+    textAlign: "center",
+  },
+});
+
+const BLOCOS_ANALISE = [
+  { key: "highlights", title: "Destaques do periodo", color: "#059669" },
+  { key: "attention", title: "Pontos de atencao", color: "#d97706" },
+  { key: "nextSteps", title: "Proximos passos", color: "#2563eb" },
+  { key: "notes", title: "Observacoes do gestor", color: "#64748b" },
+] as const;
+
+function AnalysisPage({ data }: { data: ReportData }) {
+  const destaque = data.featuredAd;
+  if (!temAnalise(data.analysis) && !destaque) return null;
+
+  return (
+    <Page size="A4" style={styles.page}>
+      <View style={styles.shell}>
+        <View style={styles.reportCard}>
+          <View style={styles.reportCardTop} />
+          <View style={styles.reportCardBody}>
+            <Text style={[styles.sectionTitle, { marginBottom: 14 }]}>Analise e proximos passos</Text>
+
+            {destaque && (
+              <View style={analysisStyles.featured} wrap={false}>
+                {destaque.previewUrl ? (
+                  <Image src={destaque.previewUrl} style={analysisStyles.featuredImage} />
+                ) : (
+                  <View style={[analysisStyles.featuredImage, styles.adThumbFallback]}>
+                    <Text>AD</Text>
+                  </View>
+                )}
+                <View style={analysisStyles.featuredBody}>
+                  <Text style={analysisStyles.featuredKicker}>CRIATIVO QUE MAIS PERFORMOU</Text>
+                  <Text style={analysisStyles.featuredName}>{sanitizePdfText(destaque.name)}</Text>
+                  <Text style={analysisStyles.featuredReason}>{sanitizePdfText(destaque.reason)}</Text>
+                  <View style={analysisStyles.featuredMetrics}>
+                    {[
+                      ["CTR", fmtPct(destaque.ctr)],
+                      ["CPC", fmtCurrency(destaque.cpc)],
+                      ["Cliques", fmtNum(destaque.clicks)],
+                      ["Investido", fmtCurrency(destaque.spend)],
+                    ].map(([label, value]) => (
+                      <View key={label} style={analysisStyles.featuredMetric}>
+                        <Text style={styles.metricLabel}>{label}</Text>
+                        <Text style={{ fontSize: 12, fontWeight: 700 }}>{value}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {BLOCOS_ANALISE.map(bloco => {
+              const itens = itensDoTexto(data.analysis?.[bloco.key]);
+              if (!itens.length) return null;
+              return (
+                <View key={bloco.key} style={analysisStyles.block} wrap={false}>
+                  <Text style={[analysisStyles.blockHeading, { color: bloco.color }]}>{bloco.title}</Text>
+                  {itens.map((item, i) => (
+                    <View key={i} style={analysisStyles.item}>
+                      <Text style={[analysisStyles.bullet, { color: bloco.color }]}>-</Text>
+                      <Text style={analysisStyles.itemText}>{sanitizePdfText(item)}</Text>
+                    </View>
+                  ))}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+      <Footer agency={data.branding.agencyName} />
+    </Page>
+  );
+}
+
+function ScreenshotPages({ data }: { data: ReportData }) {
+  const prints = data.screenshots ?? [];
+  if (!prints.length) return null;
+  const paginas = chunkMetrics(prints, 2);
+
+  return (
+    <>
+      {paginas.map((pagina, indice) => (
+        <Page key={indice} size="A4" style={styles.page}>
+          <View style={styles.shell}>
+            <Text style={[styles.sectionTitle, { marginBottom: 14 }]}>
+              Prints do periodo{paginas.length > 1 ? ` (${indice + 1}/${paginas.length})` : ""}
+            </Text>
+            {pagina.map((print, i) => (
+              <View key={i} style={analysisStyles.shot} wrap={false}>
+                <Image src={print.src} style={analysisStyles.shotImage} />
+                {print.caption && <Text style={analysisStyles.shotCaption}>{sanitizePdfText(print.caption)}</Text>}
+              </View>
+            ))}
+          </View>
+          <Footer agency={data.branding.agencyName} />
+        </Page>
+      ))}
+    </>
   );
 }
 
@@ -635,7 +829,6 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   const introText = `Relatorio gerado dos dados analisados entre ${data.period.label}.`;
   const campaigns = data.topCampaigns.slice(0, 10);
   const ads = data.topAds.slice(0, 10);
-  const summaryPage = ads.length > 0 ? 4 : 3;
   const preferredMetrics = getPreferredMetrics(data);
   const metricRows = chunkMetrics(preferredMetrics, 4);
   const consolidatedMetrics = [
@@ -647,7 +840,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   ];
 
   return (
-    <Document title={`Relatorio - ${sanitizePdfText(data.client.name)}`} author={sanitizePdfText(data.branding.agencyName) || "Scale Ads"}>
+    <Document title={`Relatorio - ${sanitizePdfText(data.client.name)}`} author={sanitizePdfText(data.branding.agencyName) || "Midsam Business"}>
       <Page size="A4" style={styles.page}>
         <View style={styles.shell}>
           <View style={styles.cover}>
@@ -696,7 +889,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
             </View>
           </View>
         </View>
-        <Footer agency={data.branding.agencyName} page={1} />
+        <Footer agency={data.branding.agencyName} />
       </Page>
 
       <Page size="A4" style={styles.page}>
@@ -744,7 +937,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
             </View>
           </View>
         </View>
-        <Footer agency={data.branding.agencyName} page={2} />
+        <Footer agency={data.branding.agencyName} />
       </Page>
 
       <Page size="A4" style={styles.page}>
@@ -793,8 +986,11 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
             </View>
           </View>
         </View>
-        <Footer agency={data.branding.agencyName} page={summaryPage} />
+        <Footer agency={data.branding.agencyName} />
       </Page>
+
+      <ScreenshotPages data={data} />
+      <AnalysisPage data={data} />
     </Document>
   );
 }

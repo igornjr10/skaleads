@@ -1,1 +1,15 @@
-project_id = "npfcxgijwrxrssinpkdw"
+project_id = "ntlcyabztsdddsuobhhi"
+
+# A function valida a sessao e o papel owner por conta propria; com verify_jwt
+# ligado a plataforma barra o JWT antes do codigo rodar quando o projeto nao
+# usa mais o secret legado.
+[functions.delete-user]
+verify_jwt = false
+
+# Mesmo motivo do delete-user: a function checa sessao e papel por conta propria.
+[functions.company-members]
+verify_jwt = false
+
+# Quem chama e o servidor da uazapi, sem JWT; a function confere o token da instancia no corpo.
+[functions.wa-webhook]
+verify_jwt = false

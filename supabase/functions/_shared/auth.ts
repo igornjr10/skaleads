@@ -80,6 +80,54 @@ export async function hasAnyRole(userId: string, roles: string[]): Promise<boole
   return Array.isArray(rows) && rows.some((r: { role?: string }) => roles.includes(r.role ?? ""));
 }
 
+/** Empresas do usuario. */
+export async function companyIdsOf(userId: string): Promise<string[]> {
+  const { supabaseUrl, svcKey } = env();
+  const rows = await fetch(
+    `${supabaseUrl}/rest/v1/user_companies?user_id=eq.${userId}&select=company_id`,
+    { headers: svcHeaders(svcKey) }
+  ).then(r => r.json()).catch(() => null);
+  return Array.isArray(rows) ? rows.map((r: { company_id: string }) => r.company_id).filter(Boolean) : [];
+}
+
+export interface GuardOptions {
+  /** Exige que o cliente esteja numa empresa do usuario. */
+  clientId?: unknown;
+  /** Exige um destes papeis. */
+  roles?: string[];
+}
+
+export type GuardResult =
+  | { ok: true; user: AuthedUser | null; service: boolean }
+  | { ok: false; response: Response };
+
+/**
+ * Porta de entrada das functions chamadas pelo app. A anon key e publica (vai
+ * no bundle) e passa pelo gateway, entao sem isto qualquer pessoa na internet
+ * dispara WhatsApp, e-mail e IA por nossa conta. Chamada interna com a service
+ * role passa direto: quem chamou ja decidiu a posse.
+ */
+export async function guard(
+  req: Request,
+  cors: Record<string, string>,
+  opts: GuardOptions = {}
+): Promise<GuardResult> {
+  if (isServiceRole(req)) return { ok: true, user: null, service: true };
+
+  const user = await getUser(req);
+  if (!user) return { ok: false, response: jsonResponse(cors, { error: "Não autenticado" }, 401) };
+
+  if (opts.roles && !(await hasAnyRole(user.id, opts.roles))) {
+    return { ok: false, response: jsonResponse(cors, { error: "Sem permissão" }, 403) };
+  }
+
+  if ("clientId" in opts && !(await ownsClient(user.id, opts.clientId))) {
+    return { ok: false, response: jsonResponse(cors, { error: "Cliente não encontrado na sua carteira" }, 404) };
+  }
+
+  return { ok: true, user, service: false };
+}
+
 export function jsonResponse(cors: Record<string, string>, body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,

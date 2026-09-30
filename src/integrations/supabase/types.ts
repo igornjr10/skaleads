@@ -21,6 +21,7 @@ export type Database = {
           created_at: string
           id: string
           impressions: number
+          messages: number
           meta_adset_id: string | null
           name: string
           spend: number
@@ -32,6 +33,7 @@ export type Database = {
           created_at?: string
           id?: string
           impressions?: number
+          messages?: number
           meta_adset_id?: string | null
           name: string
           spend?: number
@@ -43,6 +45,7 @@ export type Database = {
           created_at?: string
           id?: string
           impressions?: number
+          messages?: number
           meta_adset_id?: string | null
           name?: string
           spend?: number
@@ -65,6 +68,7 @@ export type Database = {
           created_at: string
           id: string
           impressions: number
+          messages: number
           meta_ad_id: string | null
           name: string
           spend: number
@@ -76,6 +80,7 @@ export type Database = {
           created_at?: string
           id?: string
           impressions?: number
+          messages?: number
           meta_ad_id?: string | null
           name: string
           spend?: number
@@ -87,6 +92,7 @@ export type Database = {
           created_at?: string
           id?: string
           impressions?: number
+          messages?: number
           meta_ad_id?: string | null
           name?: string
           spend?: number
@@ -185,6 +191,53 @@ export type Database = {
           },
         ]
       }
+      client_funding_events: {
+        Row: {
+          amount_cents: number
+          client_id: string
+          created_at: string
+          currency: string | null
+          event_time: string
+          event_type: string
+          extra_data: Json | null
+          id: string
+          network_id: string | null
+          transaction_id: string | null
+        }
+        Insert: {
+          amount_cents: number
+          client_id: string
+          created_at?: string
+          currency?: string | null
+          event_time: string
+          event_type: string
+          extra_data?: Json | null
+          id?: string
+          network_id?: string | null
+          transaction_id?: string | null
+        }
+        Update: {
+          amount_cents?: number
+          client_id?: string
+          created_at?: string
+          currency?: string | null
+          event_time?: string
+          event_type?: string
+          extra_data?: Json | null
+          id?: string
+          network_id?: string | null
+          transaction_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_funding_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       campaign_daily_metrics: {
         Row: {
           calls: number
@@ -246,6 +299,7 @@ export type Database = {
           ctr: number
           id: string
           impressions: number
+          messages: number
           meta_campaign_id: string | null
           name: string
           objective: string | null
@@ -263,6 +317,7 @@ export type Database = {
           ctr?: number
           id?: string
           impressions?: number
+          messages?: number
           meta_campaign_id?: string | null
           name: string
           objective?: string | null
@@ -280,6 +335,7 @@ export type Database = {
           ctr?: number
           id?: string
           impressions?: number
+          messages?: number
           meta_campaign_id?: string | null
           name?: string
           objective?: string | null
@@ -297,232 +353,226 @@ export type Database = {
           },
         ]
       }
-      billing_settings: {
+      cerebro_notas: {
         Row: {
-          team_id: string
-          pix_key: string | null
-          payment_link: string | null
-          regua: number[]
-          template_antes: string
-          template_vencimento: string
-          template_atraso: string
-          modo_teste: boolean
-          teste_numero: string | null
-          updated_at: string
-        }
-        Insert: {
-          team_id: string
-          pix_key?: string | null
-          payment_link?: string | null
-          regua?: number[]
-          template_antes?: string
-          template_vencimento?: string
-          template_atraso?: string
-          modo_teste?: boolean
-          teste_numero?: string | null
-          updated_at?: string
-        }
-        Update: {
-          team_id?: string
-          pix_key?: string | null
-          payment_link?: string | null
-          regua?: number[]
-          template_antes?: string
-          template_vencimento?: string
-          template_atraso?: string
-          modo_teste?: boolean
-          teste_numero?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-        ]
-      }
-      client_billing: {
-        Row: {
-          client_id: string
-          monthly_fee: number
-          billing_day: number
-          enabled: boolean
-          destino: string
-          observacao: string | null
-          updated_at: string
-        }
-        Insert: {
-          client_id: string
-          monthly_fee: number
-          billing_day?: number
-          enabled?: boolean
-          destino?: string
-          observacao?: string | null
-          updated_at?: string
-        }
-        Update: {
-          client_id?: string
-          monthly_fee?: number
-          billing_day?: number
-          enabled?: boolean
-          destino?: string
-          observacao?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "client_billing_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      invoices: {
-        Row: {
+          atualizado: string
+          caminho: string
+          corpo: string
+          criado: string
+          exemplo: boolean
           id: string
-          client_id: string
-          competencia: string
-          due_date: string
-          amount: number
-          status: string
-          paid_at: string | null
-          paid_amount: number | null
-          payment_link: string | null
-          external_id: string | null
-          gateway: string | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          client_id: string
-          competencia: string
-          due_date: string
-          amount: number
-          status?: string
-          paid_at?: string | null
-          paid_amount?: number | null
-          payment_link?: string | null
-          external_id?: string | null
-          gateway?: string | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          client_id?: string
-          competencia?: string
-          due_date?: string
-          amount?: number
-          status?: string
-          paid_at?: string | null
-          paid_amount?: number | null
-          payment_link?: string | null
-          external_id?: string | null
-          gateway?: string | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "invoices_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      invoice_reminders: {
-        Row: {
-          id: string
-          invoice_id: string
-          offset_dias: number
-          canal: string
-          destino: string | null
-          sucesso: boolean
-          erro: string | null
-          sent_at: string
-        }
-        Insert: {
-          id?: string
-          invoice_id: string
-          offset_dias: number
-          canal?: string
-          destino?: string | null
-          sucesso?: boolean
-          erro?: string | null
-          sent_at?: string
-        }
-        Update: {
-          id?: string
-          invoice_id?: string
-          offset_dias?: number
-          canal?: string
-          destino?: string | null
-          sucesso?: boolean
-          erro?: string | null
-          sent_at?: string
-        }
-        Relationships: [
-        ]
-      }
-      creative_tasks: {
-        Row: {
-          id: string
-          client_id: string
+          links: string[]
+          nome: string
+          resumo: string
+          sincronizado_em: string
           tipo: string
           titulo: string
-          briefing: string | null
-          status: string
-          prioridade: string
-          responsavel_id: string | null
-          prazo: string | null
-          link_arquivo: string | null
-          link_referencia: string | null
-          posicao: number
-          created_by: string | null
-          created_at: string
-          updated_at: string
         }
         Insert: {
-          id?: string
-          client_id: string
+          atualizado?: string
+          caminho: string
+          corpo?: string
+          criado?: string
+          exemplo?: boolean
+          id: string
+          links?: string[]
+          nome: string
+          resumo?: string
+          sincronizado_em?: string
           tipo?: string
           titulo: string
-          briefing?: string | null
-          status?: string
-          prioridade?: string
-          responsavel_id?: string | null
-          prazo?: string | null
-          link_arquivo?: string | null
-          link_referencia?: string | null
-          posicao?: number
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
         }
         Update: {
+          atualizado?: string
+          caminho?: string
+          corpo?: string
+          criado?: string
+          exemplo?: boolean
           id?: string
-          client_id?: string
+          links?: string[]
+          nome?: string
+          resumo?: string
+          sincronizado_em?: string
           tipo?: string
           titulo?: string
-          briefing?: string | null
-          status?: string
-          prioridade?: string
-          responsavel_id?: string | null
-          prazo?: string | null
-          link_arquivo?: string | null
-          link_referencia?: string | null
-          posicao?: number
-          created_by?: string | null
-          created_at?: string
-          updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "creative_tasks_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      clients: {
+          Row: {
+          alvo_custo_resultado: number | null
+          alvo_resultados_mes: number | null
+            address: string | null
+            business_segment: string | null
+            city: string | null
+            created_at: string
+            id: string
+            logo_url: string | null
+            company_id: string | null
+            manager_id: string | null
+            meta_access_token: string | null
+            meta_ad_account_id: string | null
+            meta_auto_sync_enabled: boolean
+            meta_auto_sync_frequency_hours: number
+            meta_connected_at: string | null
+            meta_instagram_account_id: string | null
+            meta_instagram_username: string | null
+            meta_last_sync_at: string | null
+            meta_last_sync_error: string | null
+            meta_last_verified_at: string | null
+            meta_balance_at: string | null
+            meta_balance_cents: number | null
+            meta_balance_label: string | null
+            meta_funding_type: number | null
+            meta_page_id: string | null
+            meta_page_access_token: string | null
+            meta_page_name: string | null
+            meta_sync_runs: number
+            meta_sync_status: string
+            name: string
+            primary_goal: string | null
+            report_template: Json | null
+            service_radius_km: number | null
+            state: string | null
+            status: string
+            cnpj: string | null
+            cpf: string | null
+            email: string | null
+            site: string | null
+            responsavel_nome: string | null
+            whatsapp_comercial: string | null
+            whatsapp_pessoal: string | null
+            metodo_pagamento: string | null
+            whatsapp_number: string | null
+            whatsapp_group_jid: string | null
+            updated_at: string
+        }
+        Insert: {
+          alvo_custo_resultado?: number | null
+          alvo_resultados_mes?: number | null
+          address?: string | null
+          business_segment?: string | null
+          city?: string | null
+          created_at?: string
+          id?: string
+            logo_url?: string | null
+            company_id?: string | null
+            manager_id?: string | null
+            meta_access_token?: string | null
+            meta_ad_account_id?: string | null
+            meta_auto_sync_enabled?: boolean
+            meta_auto_sync_frequency_hours?: number
+            meta_connected_at?: string | null
+            meta_instagram_account_id?: string | null
+            meta_instagram_username?: string | null
+            meta_last_sync_at?: string | null
+            meta_last_sync_error?: string | null
+            meta_last_verified_at?: string | null
+            meta_balance_at?: string | null
+            meta_balance_cents?: number | null
+            meta_balance_label?: string | null
+            meta_funding_type?: number | null
+            meta_page_id?: string | null
+            meta_page_access_token?: string | null
+            meta_page_name?: string | null
+            meta_sync_runs?: number
+            meta_sync_status?: string
+            name: string
+            primary_goal?: string | null
+            report_template?: Json | null
+            service_radius_km?: number | null
+            state?: string | null
+            status?: string
+            cnpj?: string | null
+            cpf?: string | null
+            email?: string | null
+            site?: string | null
+            responsavel_nome?: string | null
+            whatsapp_comercial?: string | null
+            whatsapp_pessoal?: string | null
+            metodo_pagamento?: string | null
+            whatsapp_number?: string | null
+            whatsapp_group_jid?: string | null
+            updated_at?: string
+        }
+        Update: {
+          alvo_custo_resultado?: number | null
+          alvo_resultados_mes?: number | null
+          address?: string | null
+          business_segment?: string | null
+          city?: string | null
+          created_at?: string
+          id?: string
+            logo_url?: string | null
+            company_id?: string | null
+            manager_id?: string | null
+            meta_access_token?: string | null
+            meta_ad_account_id?: string | null
+            meta_auto_sync_enabled?: boolean
+            meta_auto_sync_frequency_hours?: number
+            meta_connected_at?: string | null
+            meta_instagram_account_id?: string | null
+            meta_instagram_username?: string | null
+            meta_last_sync_at?: string | null
+            meta_last_sync_error?: string | null
+            meta_last_verified_at?: string | null
+            meta_balance_at?: string | null
+            meta_balance_cents?: number | null
+            meta_balance_label?: string | null
+            meta_funding_type?: number | null
+            meta_page_id?: string | null
+            meta_page_access_token?: string | null
+            meta_page_name?: string | null
+            meta_sync_runs?: number
+            meta_sync_status?: string
+            name?: string
+            primary_goal?: string | null
+            report_template?: Json | null
+            service_radius_km?: number | null
+            state?: string | null
+            status?: string
+            cnpj?: string | null
+            cpf?: string | null
+            email?: string | null
+            site?: string | null
+            responsavel_nome?: string | null
+            whatsapp_comercial?: string | null
+            whatsapp_pessoal?: string | null
+            metodo_pagamento?: string | null
+            whatsapp_number?: string | null
+            whatsapp_group_jid?: string | null
+            updated_at?: string
+        }
+        Relationships: []
+      }
+      client_acessos: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          client_id: string
+          criado_em: string
+          id: string
+          login: string | null
+          observacao: string | null
+          plataforma: string
+          tem_senha: boolean
+        }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      client_acesso_revelacoes: {
+        Row: {
+          acesso_id: string
+          client_id: string
+          id: string
+          plataforma: string
+          revelado_em: string
+          user_id: string | null
+        }
+        Insert: never
+        Update: never
+        Relationships: []
       }
       client_tasks: {
         Row: {
@@ -561,112 +611,873 @@ export type Database = {
           posicao?: number
           titulo?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "client_tasks_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      clients: {
-          Row: {
-            address: string | null
-            business_segment: string | null
-            city: string | null
-            created_at: string
-            id: string
-            logo_url: string | null
-            meta_token_configured: boolean | null
-            whatsapp_number: string | null
-            whatsapp_group_jid: string | null
-            team_id: string | null
-            meta_ad_account_id: string | null
-            meta_auto_sync_enabled: boolean
-            meta_auto_sync_frequency_hours: number
-            meta_connected_at: string | null
-            meta_instagram_account_id: string | null
-            meta_instagram_username: string | null
-            meta_last_sync_at: string | null
-            meta_last_sync_error: string | null
-            meta_last_verified_at: string | null
-            meta_page_id: string | null
-            meta_page_name: string | null
-            meta_sync_runs: number
-            meta_sync_status: string
-            monthly_budget: number | null
-            name: string
-            primary_goal: string | null
-            service_radius_km: number | null
-            state: string | null
-            status: string
-            updated_at: string
+      creative_tasks: {
+        Row: {
+          arquivo_url: string | null
+          assigned_to: string | null
+          briefing: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          formato: string | null
+          id: string
+          prazo: string | null
+          status: string
+          tipo: string
+          titulo: string
+          updated_at: string
         }
         Insert: {
-          address?: string | null
-          business_segment?: string | null
-          city?: string | null
+          arquivo_url?: string | null
+          assigned_to?: string | null
+          briefing?: string | null
+          client_id: string
           created_at?: string
+          created_by?: string | null
+          formato?: string | null
           id?: string
-            logo_url?: string | null
-            meta_token_configured?: boolean | null
-            whatsapp_number?: string | null
-            whatsapp_group_jid?: string | null
-            team_id?: string | null
-            meta_ad_account_id?: string | null
-            meta_auto_sync_enabled?: boolean
-            meta_auto_sync_frequency_hours?: number
-            meta_connected_at?: string | null
-            meta_instagram_account_id?: string | null
-            meta_instagram_username?: string | null
-            meta_last_sync_at?: string | null
-            meta_last_sync_error?: string | null
-            meta_last_verified_at?: string | null
-            meta_page_id?: string | null
-            meta_page_name?: string | null
-            meta_sync_runs?: number
-            meta_sync_status?: string
-            monthly_budget?: number | null
-            name: string
-            primary_goal?: string | null
-            service_radius_km?: number | null
-            state?: string | null
-            status?: string
-            updated_at?: string
+          prazo?: string | null
+          status?: string
+          tipo?: string
+          titulo: string
+          updated_at?: string
         }
         Update: {
-          address?: string | null
-          business_segment?: string | null
-          city?: string | null
+          arquivo_url?: string | null
+          assigned_to?: string | null
+          briefing?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          formato?: string | null
+          id?: string
+          prazo?: string | null
+          status?: string
+          tipo?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      creative_task_comments: {
+        Row: {
+          autor_id: string | null
+          created_at: string
+          id: string
+          task_id: string
+          texto: string
+        }
+        Insert: {
+          autor_id?: string | null
           created_at?: string
           id?: string
-            logo_url?: string | null
-            meta_token_configured?: boolean | null
-            whatsapp_number?: string | null
-            whatsapp_group_jid?: string | null
-            team_id?: string | null
-            meta_ad_account_id?: string | null
-            meta_auto_sync_enabled?: boolean
-            meta_auto_sync_frequency_hours?: number
-            meta_connected_at?: string | null
-            meta_instagram_account_id?: string | null
-            meta_instagram_username?: string | null
-            meta_last_sync_at?: string | null
-            meta_last_sync_error?: string | null
-            meta_last_verified_at?: string | null
-            meta_page_id?: string | null
-            meta_page_name?: string | null
-            meta_sync_runs?: number
-            meta_sync_status?: string
-            monthly_budget?: number | null
-            name?: string
-            primary_goal?: string | null
-            service_radius_km?: number | null
-            state?: string | null
-            status?: string
-            updated_at?: string
+          task_id: string
+          texto: string
+        }
+        Update: {
+          autor_id?: string | null
+          created_at?: string
+          id?: string
+          task_id?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      tasks: {
+        Row: {
+          assigned_to: string | null
+          categoria: string
+          checklist: Json
+          client_id: string | null
+          company_id: string | null
+          concluida_at: string | null
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          id: string
+          prazo: string | null
+          prioridade: string
+          status: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          categoria?: string
+          checklist?: Json
+          client_id?: string | null
+          company_id?: string | null
+          concluida_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          id?: string
+          prazo?: string | null
+          prioridade?: string
+          status?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          categoria?: string
+          checklist?: Json
+          client_id?: string | null
+          company_id?: string | null
+          concluida_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          id?: string
+          prazo?: string | null
+          prioridade?: string
+          status?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      task_events: {
+        Row: {
+          autor_id: string | null
+          created_at: string
+          de: string | null
+          id: string
+          para: string | null
+          task_id: string
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          created_at?: string
+          de?: string | null
+          id?: string
+          para?: string | null
+          task_id: string
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          created_at?: string
+          de?: string | null
+          id?: string
+          para?: string | null
+          task_id?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
+      task_anexos: {
+        Row: {
+          autor_id: string | null
+          caminho: string | null
+          created_at: string
+          id: string
+          nome: string
+          tamanho: number | null
+          task_id: string
+          tipo: string | null
+          url: string | null
+        }
+        Insert: {
+          autor_id?: string | null
+          caminho?: string | null
+          created_at?: string
+          id?: string
+          nome: string
+          tamanho?: number | null
+          task_id: string
+          tipo?: string | null
+          url?: string | null
+        }
+        Update: {
+          autor_id?: string | null
+          caminho?: string | null
+          created_at?: string
+          id?: string
+          nome?: string
+          tamanho?: number | null
+          task_id?: string
+          tipo?: string | null
+          url?: string | null
+        }
+        Relationships: []
+      }
+      invoices: {
+        Row: {
+          amount: number
+          client_id: string
+          competencia: string
+          created_at: string
+          due_date: string
+          external_id: string | null
+          gateway: string | null
+          id: string
+          paid_amount: number | null
+          paid_at: string | null
+          payment_link: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          client_id: string
+          competencia: string
+          created_at?: string
+          due_date: string
+          external_id?: string | null
+          gateway?: string | null
+          id?: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_link?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          client_id?: string
+          competencia?: string
+          created_at?: string
+          due_date?: string
+          external_id?: string | null
+          gateway?: string | null
+          id?: string
+          paid_amount?: number | null
+          paid_at?: string | null
+          payment_link?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          data: Json | null
+          file_url: string | null
+          id: string
+          name: string
+          pdf_base64: string | null
+          period: Json | null
+          schedule_id: string | null
+          sent_at: string | null
+          share_expires_at: string | null
+          share_token: string | null
+          status: string | null
+          template_id: string | null
+          tenant_id: string
+          view_count: number | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          data?: Json | null
+          file_url?: string | null
+          id?: string
+          name: string
+          pdf_base64?: string | null
+          period?: Json | null
+          schedule_id?: string | null
+          sent_at?: string | null
+          share_expires_at?: string | null
+          share_token?: string | null
+          status?: string | null
+          template_id?: string | null
+          tenant_id: string
+          view_count?: number | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          data?: Json | null
+          file_url?: string | null
+          id?: string
+          name?: string
+          pdf_base64?: string | null
+          period?: Json | null
+          schedule_id?: string | null
+          sent_at?: string | null
+          share_expires_at?: string | null
+          share_token?: string | null
+          status?: string | null
+          template_id?: string | null
+          tenant_id?: string
+          view_count?: number | null
+        }
+        Relationships: []
+      }
+      crm_funis: {
+        Row: {
+          client_id: string | null
+          company_id: string
+          created_at: string
+          id: string
+          nome: string
+        }
+        Insert: {
+          client_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          nome: string
+        }
+        Update: {
+          client_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      crm_etapas: {
+        Row: {
+          created_at: string
+          funil_id: string
+          id: string
+          nome: string
+          posicao: number
+          tipo: string
+        }
+        Insert: {
+          created_at?: string
+          funil_id: string
+          id?: string
+          nome: string
+          posicao?: number
+          tipo?: string
+        }
+        Update: {
+          created_at?: string
+          funil_id?: string
+          id?: string
+          nome?: string
+          posicao?: number
+          tipo?: string
+        }
+        Relationships: []
+      }
+      crm_leads: {
+        Row: {
+          wa_chave: string | null
+          canal: string
+          cargo: string | null
+          cidade: string | null
+          client_id: string | null
+          closer_id: string | null
+          company_id: string | null
+          contato_nome: string
+          convertido_client_id: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          empresa: string | null
+          etapa_id: string
+          funil_id: string
+          ganho_em: string | null
+          id: string
+          instagram: string | null
+          motivo_perda: string | null
+          observacoes: string | null
+          origem: string | null
+          perdido_em: string | null
+          posicao: number
+          proximo_contato_em: string | null
+          responsavel_id: string | null
+          reuniao_em: string | null
+          segmento: string | null
+          telefone: string | null
+          updated_at: string
+          valor_estimado: number | null
+          whatsapp: string | null
+        }
+        Insert: {
+          canal?: string
+          cargo?: string | null
+          cidade?: string | null
+          client_id?: string | null
+          closer_id?: string | null
+          company_id?: string | null
+          contato_nome: string
+          convertido_client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          empresa?: string | null
+          etapa_id: string
+          funil_id: string
+          ganho_em?: string | null
+          id?: string
+          instagram?: string | null
+          motivo_perda?: string | null
+          observacoes?: string | null
+          origem?: string | null
+          perdido_em?: string | null
+          posicao?: number
+          proximo_contato_em?: string | null
+          responsavel_id?: string | null
+          reuniao_em?: string | null
+          segmento?: string | null
+          telefone?: string | null
+          updated_at?: string
+          valor_estimado?: number | null
+          whatsapp?: string | null
+        }
+        Update: {
+          canal?: string
+          cargo?: string | null
+          cidade?: string | null
+          client_id?: string | null
+          closer_id?: string | null
+          company_id?: string | null
+          contato_nome?: string
+          convertido_client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          empresa?: string | null
+          etapa_id?: string
+          funil_id?: string
+          ganho_em?: string | null
+          id?: string
+          instagram?: string | null
+          motivo_perda?: string | null
+          observacoes?: string | null
+          origem?: string | null
+          perdido_em?: string | null
+          posicao?: number
+          proximo_contato_em?: string | null
+          responsavel_id?: string | null
+          reuniao_em?: string | null
+          segmento?: string | null
+          telefone?: string | null
+          updated_at?: string
+          valor_estimado?: number | null
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
+      crm_atividades: {
+        Row: {
+          autor_id: string | null
+          canal: string | null
+          created_at: string
+          descricao: string | null
+          id: string
+          lead_id: string
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          canal?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          lead_id: string
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          canal?: string | null
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          lead_id?: string
+          tipo?: string
+        }
+        Relationships: []
+      }
+      wa_mensagens: {
+        Row: {
+          autor_id: string | null
+          chatid: string | null
+          chave: string
+          company_id: string
+          created_at: string
+          direcao: string
+          enviada_em: string
+          fila_id: string | null
+          id: string
+          lead_id: string | null
+          lida_em: string | null
+          messageid: string | null
+          nome_contato: string | null
+          origem: string
+          status: string | null
+          telefone: string | null
+          texto: string | null
+          tipo: string | null
+        }
+        Insert: {
+          autor_id?: string | null
+          chatid?: string | null
+          chave: string
+          company_id: string
+          created_at?: string
+          direcao: string
+          enviada_em?: string
+          fila_id?: string | null
+          id?: string
+          lead_id?: string | null
+          lida_em?: string | null
+          messageid?: string | null
+          nome_contato?: string | null
+          origem: string
+          status?: string | null
+          telefone?: string | null
+          texto?: string | null
+          tipo?: string | null
+        }
+        Update: {
+          autor_id?: string | null
+          chatid?: string | null
+          chave?: string
+          company_id?: string
+          created_at?: string
+          direcao?: string
+          enviada_em?: string
+          fila_id?: string | null
+          id?: string
+          lead_id?: string | null
+          lida_em?: string | null
+          messageid?: string | null
+          nome_contato?: string | null
+          origem?: string
+          status?: string | null
+          telefone?: string | null
+          texto?: string | null
+          tipo?: string | null
+        }
+        Relationships: []
+      }
+      wa_config: {
+        Row: {
+          company_id: string
+          hora_fim: number
+          hora_inicio: number
+          intervalo_seg: number
+          limite_diario: number
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          hora_fim?: number
+          hora_inicio?: number
+          intervalo_seg?: number
+          limite_diario?: number
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          hora_fim?: number
+          hora_inicio?: number
+          intervalo_seg?: number
+          limite_diario?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      wa_modelos: {
+        Row: {
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          nome: string
+          texto: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome: string
+          texto: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      wa_sequencias: {
+        Row: {
+          ativa: boolean
+          company_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          nome: string
+          parar_se_responder: boolean
+        }
+        Insert: {
+          ativa?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome: string
+          parar_se_responder?: boolean
+        }
+        Update: {
+          ativa?: boolean
+          company_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          nome?: string
+          parar_se_responder?: boolean
+        }
+        Relationships: []
+      }
+      wa_sequencia_passos: {
+        Row: {
+          espera_dias: number
+          id: string
+          ordem: number
+          sequencia_id: string
+          texto: string
+        }
+        Insert: {
+          espera_dias?: number
+          id?: string
+          ordem: number
+          sequencia_id: string
+          texto: string
+        }
+        Update: {
+          espera_dias?: number
+          id?: string
+          ordem?: number
+          sequencia_id?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      wa_disparos: {
+        Row: {
+          company_id: string
+          created_at: string
+          criado_por: string | null
+          id: string
+          nome: string
+          status: string
+          texto: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          nome: string
+          status?: string
+          texto: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          nome?: string
+          status?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      wa_inscricoes: {
+        Row: {
+          company_id: string
+          created_at: string
+          criado_por: string | null
+          id: string
+          lead_id: string
+          passo_atual: number
+          sequencia_id: string
+          status: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          lead_id: string
+          passo_atual?: number
+          sequencia_id: string
+          status?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          id?: string
+          lead_id?: string
+          passo_atual?: number
+          sequencia_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      wa_fila: {
+        Row: {
+          company_id: string
+          created_at: string
+          criado_por: string | null
+          disparo_id: string | null
+          enviado_em: string | null
+          enviar_apos: string
+          erro: string | null
+          id: string
+          inscricao_id: string | null
+          lead_id: string
+          origem: string
+          passo: number | null
+          status: string
+          texto: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          disparo_id?: string | null
+          enviado_em?: string | null
+          enviar_apos?: string
+          erro?: string | null
+          id?: string
+          inscricao_id?: string | null
+          lead_id: string
+          origem: string
+          passo?: number | null
+          status?: string
+          texto: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          criado_por?: string | null
+          disparo_id?: string | null
+          enviado_em?: string | null
+          enviar_apos?: string
+          erro?: string | null
+          id?: string
+          inscricao_id?: string | null
+          lead_id?: string
+          origem?: string
+          passo?: number | null
+          status?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      task_comments: {
+        Row: {
+          autor_id: string | null
+          created_at: string
+          id: string
+          task_id: string
+          texto: string
+        }
+        Insert: {
+          autor_id?: string | null
+          created_at?: string
+          id?: string
+          task_id: string
+          texto: string
+        }
+        Update: {
+          autor_id?: string | null
+          created_at?: string
+          id?: string
+          task_id?: string
+          texto?: string
+        }
+        Relationships: []
+      }
+      rotinas: {
+        Row: {
+          assigned_to: string | null
+          ativa: boolean
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          descricao: string | null
+          dia_mes: number | null
+          dias_semana: number[] | null
+          horario_limite: string | null
+          id: string
+          periodicidade: string
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          ativa?: boolean
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          dia_mes?: number | null
+          dias_semana?: number[] | null
+          horario_limite?: string | null
+          id?: string
+          periodicidade?: string
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          ativa?: boolean
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          descricao?: string | null
+          dia_mes?: number | null
+          dias_semana?: number[] | null
+          horario_limite?: string | null
+          id?: string
+          periodicidade?: string
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      rotina_execucoes: {
+        Row: {
+          avisado_at: string | null
+          created_at: string
+          data_ref: string
+          done: boolean
+          done_at: string | null
+          done_by: string | null
+          id: string
+          observacao: string | null
+          rotina_id: string
+        }
+        Insert: {
+          avisado_at?: string | null
+          created_at?: string
+          data_ref: string
+          done?: boolean
+          done_at?: string | null
+          done_by?: string | null
+          id?: string
+          observacao?: string | null
+          rotina_id: string
+        }
+        Update: {
+          avisado_at?: string | null
+          created_at?: string
+          data_ref?: string
+          done?: boolean
+          done_at?: string | null
+          done_by?: string | null
+          id?: string
+          observacao?: string | null
+          rotina_id?: string
         }
         Relationships: []
       }
@@ -697,6 +1508,121 @@ export type Database = {
           title?: string
           type?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      companies: {
+        Row: {
+          cor_primaria: string | null
+          created_at: string
+          dominio: string | null
+          id: string
+          is_active: boolean
+          logo_url: string | null
+          name: string
+          nome_exibicao: string | null
+        }
+        Insert: {
+          cor_primaria?: string | null
+          created_at?: string
+          dominio?: string | null
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name: string
+          nome_exibicao?: string | null
+        }
+        Update: {
+          cor_primaria?: string | null
+          created_at?: string
+          dominio?: string | null
+          id?: string
+          is_active?: boolean
+          logo_url?: string | null
+          name?: string
+          nome_exibicao?: string | null
+        }
+        Relationships: []
+      }
+      user_companies: {
+        Row: {
+          company_id: string
+          created_at: string
+          modulos: string[] | null
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          modulos?: string[] | null
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          modulos?: string[] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_companies_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_assignments: {
+        Row: {
+          client_id: string
+          company_id: string | null
+          created_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          company_id?: string | null
+          created_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          company_id?: string | null
+          created_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_assignments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      managers: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+          whatsapp_number: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+          whatsapp_number?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          whatsapp_number?: string | null
         }
         Relationships: []
       }
@@ -747,6 +1673,19 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      inscrever_em_sequencia: { Args: { _sequencia_id: string; _lead_ids: string[] }; Returns: number }
+      garantir_funil_prospeccao: { Args: Record<string, never>; Returns: string }
+      criar_funil_de_cliente: { Args: { _client_id: string; _nome?: string }; Returns: string }
+      converter_lead_em_cliente: { Args: { _lead_id: string }; Returns: string }
+      definir_metas_cliente: {
+        Args: { p_client_id: string; p_resultados_mes: number | null; p_custo_resultado: number | null }
+        Returns: undefined
+      }
+      is_comercial: { Args: { _user_id: string }; Returns: boolean }
+      clientes_das_minhas_demandas: {
+        Args: Record<string, never>
+        Returns: { id: string; name: string; logo_url: string | null }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -755,11 +1694,33 @@ export type Database = {
         Returns: boolean
       }
       is_admin_or_owner: { Args: { _user_id: string }; Returns: boolean }
+      get_my_role: { Args: Record<string, never>; Returns: Database["public"]["Enums"]["app_role"] }
+      is_production_member: { Args: { _user_id: string }; Returns: boolean }
       seed_client_tasks: { Args: { _client_id: string }; Returns: number }
-      my_team_id: { Args: Record<string, never>; Returns: string }
+      salvar_acesso_cliente: {
+        Args: {
+          p_client_id: string
+          p_plataforma: string
+          p_login?: string | null
+          p_senha?: string | null
+          p_observacao?: string | null
+        }
+        Returns: string
+      }
+      apagar_acesso_cliente: { Args: { p_acesso_id: string }; Returns: undefined }
+      revelar_senha_acesso: { Args: { p_acesso_id: string }; Returns: string | null }
     }
     Enums: {
-      app_role: "owner" | "admin" | "analyst" | "viewer"
+      app_role:
+        | "owner"
+        | "admin"
+        | "analyst"
+        | "viewer"
+        | "editor"
+        | "designer"
+        | "sdr"
+        | "closer"
+        | "social_seller"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -887,7 +1848,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["owner", "admin", "analyst", "viewer"],
+      app_role: ["owner", "admin", "analyst", "viewer", "editor", "designer", "sdr", "closer", "social_seller"],
     },
   },
 } as const

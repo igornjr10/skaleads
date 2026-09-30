@@ -60,7 +60,7 @@ serve(async (req) => {
       return json({
         success: true,
         data: {
-          name: "Ad Campaign Hub — Manus Gateway",
+          name: "Midsam Business — Manus Gateway",
           version: "1.0",
           endpoints: [
             "GET /clients",

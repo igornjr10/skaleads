@@ -1,18 +1,29 @@
+import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { NotificationsBell } from "./NotificationsBell";
-import { ScaleAdsLogo } from "./ScaleAdsLogo";
 import { ClientSwitcher } from "./ClientSwitcher";
+import { RotaPermitida } from "./RotaPermitida";
+import { LogoEmpresa, nomeDaMarca } from "./MarcaEmpresa";
+import { useAuth } from "@/hooks/useAuth";
+import { aplicarCorDaMarca } from "@/lib/marca";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard":   { title: "Dashboard",        subtitle: "Visão geral das campanhas" },
   "/clients":     { title: "Clientes",         subtitle: "Gerencie as contas anunciantes" },
-  "/planner":     { title: "Planner",          subtitle: "Onboarding de clientes novos" },
-  "/producao":    { title: "Produção",         subtitle: "Fila de video e design" },
-  "/financeiro":  { title: "Financeiro",       subtitle: "Mensalidades e cobranca automatica" },
   "/campaigns":   { title: "Campanhas",        subtitle: "Performance de campanhas Meta Ads" },
   "/alerts":      { title: "Alertas",          subtitle: "Monitoramento em tempo real" },
+  "/andromeda":   { title: "Andromeda IA",     subtitle: "Motor de inteligência artificial" },
+  "/report-schedules": { title: "Relatórios",  subtitle: "Envio recorrente por cliente" },
+  "/financeiro":  { title: "Financeiro",       subtitle: "Cobranças e recebimentos" },
+  "/agencia":     { title: "Visão da agência", subtitle: "Carteira, mídia, dinheiro e equipe" },
+  "/demandas":    { title: "Demandas",         subtitle: "Fila da equipe" },
+  "/comercial":   { title: "Comercial",        subtitle: "Prospecção, pipeline e CRM" },
+  "/conversas":   { title: "WhatsApp",         subtitle: "Conversas, disparos e sequências" },
+  "/planner":     { title: "Planner",          subtitle: "Calendário e carga por pessoa" },
+  "/onboarding":  { title: "Onboarding",       subtitle: "Checklist de cliente novo" },
+  "/cerebro":     { title: "Cérebro",          subtitle: "Memória da empresa" },
   "/settings":    { title: "Configurações",    subtitle: "Preferências da plataforma" },
 };
 
@@ -20,15 +31,31 @@ function getPageMeta(pathname: string) {
   const key = Object.keys(PAGE_TITLES)
     .sort((a, b) => b.length - a.length)
     .find(k => pathname === k || (k !== "/" && pathname.startsWith(k)));
-  return key ? PAGE_TITLES[key] : { title: "Scale Ads", subtitle: "" };
+  return key ? PAGE_TITLES[key] : { title: "Midsam Business", subtitle: "" };
+}
+
+// O SidebarProvider grava o estado num cookie mas nunca le de volta — ele nasceu
+// para SSR, onde quem le e o servidor. Sem isto, recolher a barra no botao nao
+// sobrevive a um F5. Aberto e o padrao: a barra fica fixa, sem depender de hover.
+function estadoSalvoDaSidebar() {
+  const salvo = document.cookie.match(/(?:^|;\s*)sidebar:state=([^;]*)/)?.[1];
+  return salvo ? salvo === "true" : true;
 }
 
 export function AppLayout() {
   const location = useLocation();
   const meta = getPageMeta(location.pathname);
+  const [sidebarInicial] = useState(estadoSalvoDaSidebar);
+  const { empresa } = useAuth();
+  const corDaMarca = empresa?.cor_primaria ?? null;
+
+  useEffect(() => {
+    aplicarCorDaMarca(corDaMarca);
+    return () => aplicarCorDaMarca(null);
+  }, [corDaMarca]);
 
   return (
-    <SidebarProvider defaultOpen={false}>
+    <SidebarProvider defaultOpen={sidebarInicial}>
       <div className="relative flex min-h-screen w-full bg-background">
         {/* Ambient glow */}
         <div className="pointer-events-none fixed inset-0 bg-gradient-glow" />
@@ -65,20 +92,22 @@ export function AppLayout() {
               <NotificationsBell />
               {/* Brand mark (shown when sidebar collapsed) */}
               <div className="hidden md:flex items-center gap-1.5 opacity-40 hover:opacity-70 transition-opacity">
-                <ScaleAdsLogo size={22} />
+                <LogoEmpresa size={22} className="rounded-md" />
               </div>
             </div>
           </header>
 
           {/* ── Page content ─────────────────────────────────── */}
           <main className="flex-1 px-4 pb-4 pt-4 md:px-6 md:pb-6 md:pt-5 lg:px-8 lg:pb-8 lg:pt-6">
-            <Outlet />
+            <RotaPermitida>
+              <Outlet />
+            </RotaPermitida>
           </main>
 
           {/* ── Footer ───────────────────────────────────────── */}
           <footer className="mx-2 mb-2 flex items-center justify-between rounded-2xl border border-white/[0.05] bg-background/40 px-6 py-2 backdrop-blur-md">
             <span className="text-[10px] text-muted-foreground/40 tracking-wide uppercase">
-              Scale Ads © {new Date().getFullYear()}
+              {nomeDaMarca(empresa)} © {new Date().getFullYear()}
             </span>
             <span className="text-[10px] text-muted-foreground/40">
               Meta Graph API v21.0

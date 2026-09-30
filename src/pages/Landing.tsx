@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScaleAdsLogo } from "@/components/ScaleAdsLogo";
+import { MidsamLogo } from "@/components/MidsamLogo";
 import {
   MockAlertas,
   MockAuditoria,
@@ -67,8 +67,8 @@ const TELAS = [
 
 // Rodape institucional: em venda B2B a ausencia disso pesa na avaliacao do
 // comprador economico. Vazio simplesmente nao renderiza.
-const RAZAO_SOCIAL = "";
-const CNPJ = "";
+const RAZAO_SOCIAL = "SAMUEL DO NASCIMENTO FÉLIX";
+const CNPJ = "58.606.648/0001-96";
 
 const FALAS = [
   "Descobrir no fechamento que o pixel parou de disparar há doze dias — e que você gastou verba do cliente otimizando para um evento que não chegava.",
@@ -151,7 +151,7 @@ const NAO_SUBSTITUI = [
   {
     titulo: "Não tem migração",
     texto:
-      "Suas campanhas continuam onde estão, no Gerenciador da Meta. O Scale Ads lê pela API oficial — não substitui, não move nada.",
+      "Suas campanhas continuam onde estão, no Gerenciador da Meta. O Midsam Business lê pela API oficial — não substitui, não move nada.",
   },
   {
     titulo: "Sua equipe não aprende ferramenta nova",
@@ -183,7 +183,7 @@ const INCLUSO = [
 const FAQ = [
   {
     p: "Vou ter que migrar minhas campanhas?",
-    r: "Não. O Scale Ads lê suas contas pela API oficial da Meta — as campanhas continuam exatamente onde estão, no Gerenciador. Não existe processo de migração.",
+    r: "Não. O Midsam Business lê suas contas pela API oficial da Meta — as campanhas continuam exatamente onde estão, no Gerenciador. Não existe processo de migração.",
   },
   {
     p: "É seguro dar acesso às contas dos meus clientes?",
@@ -195,7 +195,7 @@ const FAQ = [
   },
   {
     p: "Funciona com Business Manager de terceiros?",
-    r: "Sim — é o cenário mais comum entre quem usa o Scale Ads: gerenciar contas de cliente via acesso de parceiro.",
+    r: "Sim — é o cenário mais comum entre quem usa o Midsam Business: gerenciar contas de cliente via acesso de parceiro.",
   },
   {
     p: "E se eu tiver poucos clientes, menos de 5?",
@@ -293,9 +293,9 @@ export default function Landing() {
       <header className="relative z-10">
         <Secao className="flex items-center justify-between py-5">
           <div className="flex items-center gap-2.5">
-            <ScaleAdsLogo size={34} className="rounded-xl" />
+            <MidsamLogo size={34} className="rounded-xl" />
             <span className="text-[17px] font-extrabold tracking-tight">
-              Scale <span className="text-emerald-400">Ads</span>
+              Midsam <span className="text-blue-400">Business</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -321,20 +321,20 @@ export default function Landing() {
       <Secao className="relative z-10 pb-14 pt-12 md:pb-20 md:pt-16">
         <div className="grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr]">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[11px] font-semibold tracking-wide text-emerald-400">
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-500/20 bg-blue-500/10 px-3 py-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
+              <span className="text-[11px] font-semibold tracking-wide text-blue-400">
                 Para agências e gestores com 5 contas ou mais
               </span>
             </div>
 
             <h1 className="mt-6 text-balance text-[32px] font-extrabold leading-[1.1] tracking-tight md:text-[50px]">
               Atenda o dobro de clientes sem contratar mais ninguém
-              <span className="text-emerald-400"> — e sem migrar uma única campanha.</span>
+              <span className="text-blue-400"> — e sem migrar uma única campanha.</span>
             </h1>
 
             <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
-              O Scale Ads sincroniza, audita, avisa e reporta por cima da sua carteira inteira — para você parar de ser
+              O Midsam Business sincroniza, audita, avisa e reporta por cima da sua carteira inteira — para você parar de ser
               a última pessoa a saber que algo quebrou na conta de um cliente.
             </p>
 
@@ -354,7 +354,7 @@ export default function Landing() {
               <MockDashboard />
             </Midia>
             <p className="mt-3 text-center text-[11px] text-muted-foreground/60">
-              Interface do Scale Ads · números ilustrativos
+              Interface do Midsam Business · números ilustrativos
             </p>
           </div>
         </div>
@@ -364,7 +364,7 @@ export default function Landing() {
       <Secao className="relative z-10 py-10 md:py-14">
         <div className="rounded-3xl border border-white/[0.06] bg-card/50 p-7 shadow-card backdrop-blur-sm md:p-10">
           <h2 className="text-balance text-[20px] font-bold tracking-tight md:text-[26px]">
-            Sendo direto: o Scale Ads é novo. Ainda não temos case pra te mostrar.
+            Sendo direto: o Midsam Business é novo. Ainda não temos case pra te mostrar.
           </h2>
           <p className="mt-4 max-w-3xl text-[14px] leading-relaxed text-muted-foreground md:text-[15px]">
             O que você vai ver na demonstração não é um vídeo institucional — é a auditoria rodando numa conta real,{" "}
@@ -385,7 +385,7 @@ export default function Landing() {
           {FALAS.map((fala) => (
             <blockquote
               key={fala}
-              className="rounded-2xl border border-white/[0.06] border-l-2 border-l-emerald-500/50 bg-card/60 p-5 shadow-card backdrop-blur-sm"
+              className="rounded-2xl border border-white/[0.06] border-l-2 border-l-blue-500/50 bg-card/60 p-5 shadow-card backdrop-blur-sm"
             >
               <p className="text-[14px] leading-relaxed text-muted-foreground">{fala}</p>
             </blockquote>
@@ -426,7 +426,7 @@ export default function Landing() {
           </div>
 
           <p className="mt-8 max-w-3xl text-[15px] leading-relaxed text-muted-foreground">
-            O ponto em comum: todas dependem de alguém lembrar de olhar. O Scale Ads inverte isso —{" "}
+            O ponto em comum: todas dependem de alguém lembrar de olhar. O Midsam Business inverte isso —{" "}
             <span className="font-semibold text-foreground">quem olha é o sistema</span>, e ele só te chama quando tem
             algo que exige decisão sua.
           </p>
@@ -445,16 +445,16 @@ export default function Landing() {
                 className="flex gap-4 rounded-2xl border border-white/[0.06] bg-card/60 p-5 shadow-card backdrop-blur-sm md:gap-5 md:p-6"
               >
                 <div className="flex flex-col items-center gap-2">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-400">
                     <Icon className="h-5 w-5" />
                   </div>
                   {i < MOTOR.length - 1 && (
-                    <div className="h-full w-px bg-gradient-to-b from-emerald-500/30 to-transparent" />
+                    <div className="h-full w-px bg-gradient-to-b from-blue-500/30 to-transparent" />
                   )}
                 </div>
                 <div>
                   <h3 className="text-[16px] font-bold tracking-tight">
-                    <span className="tabular-nums text-emerald-400">{String(i + 1).padStart(2, "0")}</span> {etapa}
+                    <span className="tabular-nums text-blue-400">{String(i + 1).padStart(2, "0")}</span> {etapa}
                   </h3>
                   <p className="mt-1.5 text-[14px] leading-relaxed text-muted-foreground">{texto}</p>
                 </div>
@@ -473,7 +473,7 @@ export default function Landing() {
                   {mock}
                 </Midia>
                 <figcaption>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">{titulo}</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-400">{titulo}</span>
                   <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">{legenda}</p>
                 </figcaption>
               </figure>
@@ -484,12 +484,12 @@ export default function Landing() {
 
       {/* ── Auditoria como prova ──────────────────────────────────────────── */}
       <Secao className="relative z-10 py-14 md:py-20">
-        <div className="rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.10] via-card/60 to-transparent p-7 shadow-card backdrop-blur-sm md:p-12">
+        <div className="rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.10] via-card/60 to-transparent p-7 shadow-card backdrop-blur-sm md:p-12">
           <h2 className="max-w-3xl text-balance text-[24px] font-bold leading-tight tracking-tight md:text-[32px]">
             Não é um painel que mostra número. É uma auditoria que diz o que fazer com ele.
           </h2>
           <p className="mt-5 max-w-3xl text-[15px] leading-relaxed text-muted-foreground md:text-base">
-            Um dashboard mostra CTR, CPC, CPA — qualquer ferramenta mostra isso. A auditoria do Scale Ads interpreta o
+            Um dashboard mostra CTR, CPC, CPA — qualquer ferramenta mostra isso. A auditoria do Midsam Business interpreta o
             dado com a régua técnica certa: EMQ mínimo, frequência de anúncio, regra dos 20% entre ajustes, meta de
             conversões pra sair da fase de aprendizado. É o conhecimento que um gestor júnior não tem e um gestor
             sênior não tem tempo de aplicar em sete contas todo dia.
@@ -507,7 +507,7 @@ export default function Landing() {
               <MockAuditoria />
             </Midia>
             <p className="mt-3 text-[11px] text-muted-foreground/60">
-              Interface do Scale Ads · achados e nota ilustrativos
+              Interface do Midsam Business · achados e nota ilustrativos
             </p>
           </div>
         </div>
@@ -523,7 +523,7 @@ export default function Landing() {
               key={titulo}
               className="card-hover rounded-2xl border border-white/[0.06] bg-card/70 p-5 shadow-card backdrop-blur-sm"
             >
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-500/20 bg-blue-500/10 text-blue-400">
                 <Icon className="h-5 w-5" />
               </div>
               <h3 className="mt-4 text-[15px] font-semibold tracking-tight">{titulo}</h3>
@@ -536,7 +536,7 @@ export default function Landing() {
       {/* ── Seguranca ─────────────────────────────────────────────────────── */}
       <Secao className="relative z-10 py-14 md:py-20">
         <div className="grid gap-8 rounded-3xl border border-white/[0.06] bg-card/50 p-7 shadow-card backdrop-blur-sm md:grid-cols-[auto_1fr] md:p-12">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-400">
             <Lock className="h-6 w-6" />
           </div>
           <div>
@@ -544,7 +544,7 @@ export default function Landing() {
               O token do seu cliente fica fora do alcance até de quem usa o sistema.
             </h2>
             <p className="mt-5 max-w-3xl text-[15px] leading-relaxed text-muted-foreground">
-              Você está dando acesso a contas que não são suas — são dos seus clientes. O Scale Ads guarda o token de
+              Você está dando acesso a contas que não são suas — são dos seus clientes. O Midsam Business guarda o token de
               acesso numa camada isolada, sem acesso direto de usuário nenhum, e toda chamada à API da Meta passa por
               um intermediário que nunca expõe a credencial no navegador. Cada equipe só enxerga a própria carteira.
             </p>
@@ -555,13 +555,13 @@ export default function Landing() {
 
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
               <div className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-background/40 p-4">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
                 <span className="text-[13px] leading-relaxed text-muted-foreground">
                   Credencial guardada no servidor, fora do alcance do navegador
                 </span>
               </div>
               <div className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-background/40 p-4">
-                <Users className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <Users className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
                 <span className="text-[13px] leading-relaxed text-muted-foreground">
                   Cada equipe enxerga apenas a própria carteira
                 </span>
@@ -574,7 +574,7 @@ export default function Landing() {
       {/* ── Nao substitui o Gerenciador ───────────────────────────────────── */}
       <Secao className="relative z-10 py-14 md:py-20">
         <h2 className="text-[26px] font-bold tracking-tight md:text-[34px]">
-          O Scale Ads não substitui seu Gerenciador
+          O Midsam Business não substitui seu Gerenciador
         </h2>
         <p className="mt-3 max-w-2xl text-sm text-muted-foreground md:text-base">
           Três coisas que costumam travar decisão antes mesmo de você conhecer o produto.
@@ -583,7 +583,7 @@ export default function Landing() {
         <div className="mt-10 grid gap-4 md:grid-cols-3">
           {NAO_SUBSTITUI.map(({ titulo, texto }) => (
             <div key={titulo} className="rounded-2xl border border-white/[0.06] bg-background/40 p-5 backdrop-blur-sm">
-              <Check className="h-5 w-5 text-emerald-400" />
+              <Check className="h-5 w-5 text-blue-400" />
               <h3 className="mt-3 text-[15px] font-semibold tracking-tight">{titulo}</h3>
               <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">{texto}</p>
             </div>
@@ -594,12 +594,12 @@ export default function Landing() {
       {/* ── Pra quem e ────────────────────────────────────────────────────── */}
       <Secao className="relative z-10 py-14 md:py-20">
         <div className="rounded-3xl border border-white/[0.06] bg-card/50 p-7 shadow-card backdrop-blur-sm md:p-12">
-          <h2 className="text-[24px] font-bold tracking-tight md:text-[32px]">O Scale Ads é pra você que...</h2>
+          <h2 className="text-[24px] font-bold tracking-tight md:text-[32px]">O Midsam Business é pra você que...</h2>
 
           <ul className="mt-8 grid gap-4 md:grid-cols-2">
             {PARA_QUEM.map((item) => (
               <li key={item} className="flex items-start gap-3">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
                 <span className="text-[14px] leading-relaxed text-muted-foreground">{item}</span>
               </li>
             ))}
@@ -622,10 +622,10 @@ export default function Landing() {
             <h2 className="text-[26px] font-bold tracking-tight md:text-[34px]">Planos</h2>
 
             <div className="mt-10 grid gap-4 md:grid-cols-[1.15fr_0.85fr]">
-              <div className="rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.12] via-card/60 to-transparent p-7 shadow-card backdrop-blur-sm md:p-10">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-400">Entrada</span>
+              <div className="rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.12] via-card/60 to-transparent p-7 shadow-card backdrop-blur-sm md:p-10">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-blue-400">Entrada</span>
                 <p className="mt-4 text-[15px] text-muted-foreground">A partir de</p>
-                <p className="mt-1 text-[42px] font-extrabold tracking-tight text-emerald-400">{PRECO_ENTRADA}</p>
+                <p className="mt-1 text-[42px] font-extrabold tracking-tight text-blue-400">{PRECO_ENTRADA}</p>
                 <p className="mt-3 max-w-md text-[14px] leading-relaxed text-muted-foreground">
                   O valor escala junto com o tamanho da sua carteira de clientes conectados — carteira maior, mais
                   contas monitoradas, mais valor.
@@ -634,7 +634,7 @@ export default function Landing() {
                 <ul className="mt-7 space-y-3">
                   {INCLUSO.map((item) => (
                     <li key={item} className="flex items-start gap-3 text-[14px] leading-relaxed text-muted-foreground">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
                       {item}
                     </li>
                   ))}
@@ -668,7 +668,7 @@ export default function Landing() {
 
             {GARANTIA && (
               <p className="mt-6 flex items-start gap-3 text-[14px] leading-relaxed text-muted-foreground">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
                 <span>
                   <span className="font-semibold text-foreground">Garantia:</span> {GARANTIA}
                 </span>
@@ -694,8 +694,8 @@ export default function Landing() {
 
       {/* ── Chamada final ─────────────────────────────────────────────────── */}
       <Secao className="relative z-10 pb-20 pt-6 md:pb-28">
-        <div className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.12] via-card/60 to-transparent p-8 text-center shadow-card md:p-14">
-          <div className="pointer-events-none absolute inset-x-10 -top-16 h-40 rounded-full bg-emerald-500/20 blur-3xl" />
+        <div className="relative overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-500/[0.12] via-card/60 to-transparent p-8 text-center shadow-card md:p-14">
+          <div className="pointer-events-none absolute inset-x-10 -top-16 h-40 rounded-full bg-blue-500/20 blur-3xl" />
           <div className="relative">
             <h2 className="mx-auto max-w-2xl text-balance text-[26px] font-bold leading-tight tracking-tight md:text-[36px]">
               Pare de ser a última pessoa a saber que algo quebrou na conta de um cliente.
@@ -718,9 +718,9 @@ export default function Landing() {
       <footer className="relative z-10 border-t border-white/[0.06]">
         <Secao className="flex flex-col gap-4 py-8 md:flex-row md:items-center md:justify-between">
           <div className="flex items-center gap-2.5">
-            <ScaleAdsLogo size={26} className="rounded-lg" />
+            <MidsamLogo size={26} className="rounded-lg" />
             <span className="text-sm font-bold tracking-tight">
-              Scale <span className="text-emerald-400">Ads</span>
+              Midsam <span className="text-blue-400">Business</span>
             </span>
           </div>
 
@@ -748,7 +748,7 @@ export default function Landing() {
           <div className="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-muted-foreground/50 md:text-right">
             {RAZAO_SOCIAL && <span className="normal-case tracking-normal">{RAZAO_SOCIAL}</span>}
             {CNPJ && <span className="normal-case tracking-normal">CNPJ {CNPJ}</span>}
-            <span>Scale Ads © {new Date().getFullYear()}</span>
+            <span>Midsam Business © {new Date().getFullYear()}</span>
           </div>
         </Secao>
       </footer>

@@ -7,13 +7,22 @@ import { AlertCircle, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
-import { ClientAvatar } from "@/components/ClientAvatar";
+import { itensDoTexto } from "@/lib/report-analise";
+
+const BLOCOS_ANALISE = [
+  { key: "highlights", title: "Destaques do período", cor: "text-emerald-600" },
+  { key: "attention", title: "Pontos de atenção", cor: "text-amber-600" },
+  { key: "nextSteps", title: "Próximos passos", cor: "text-blue-600" },
+  { key: "notes", title: "Observações do gestor", cor: "text-slate-600" },
+] as const;
 
 interface SharedReport {
   id: string;
   name: string;
   data: ReportData;
   period: { start: string; end: string; label: string };
+  share_token: string;
+  view_count: number;
 }
 
 function KpiCard({ label, value }: { label: string; value: string }) {
@@ -42,7 +51,6 @@ function getPreferredMetrics(data: ReportData) {
   const visiblePreferences = preferences.includes("instagramProfileVisits")
     ? preferences
     : [...preferences, "instagramProfileVisits"];
-  const socialProfileViews = data.socialPresence?.metrics.find((metric) => metric.key === "profileViews")?.value ?? 0;
 
   const registry: Record<string, { label: string; value: string }> = {
     spend: {
@@ -62,8 +70,8 @@ function getPreferredMetrics(data: ReportData) {
       value: fmtNum(data.summary.messagesStarted || 0),
     },
     instagramProfileVisits: {
-      label: "Visitas no perfil",
-      value: fmtNum(data.summary.instagramProfileVisits || socialProfileViews || 0),
+      label: "Visitas pelo anuncio",
+      value: fmtNum(data.summary.instagramProfileVisits || 0),
     },
     phoneCalls: {
       label: "Ligacoes",
@@ -133,14 +141,14 @@ export default function ReportShare() {
     if (token) fetchReport();
   }, [token]);
 
-  // A tabela reports nao e legivel por anon: quem serve o link publico e a
-  // Edge Function, que valida o token com service role e conta a visita.
   async function fetchReport() {
-    const { data, error } = await supabase.functions.invoke("get-shared-report", {
-      body: { token },
-    });
+    const { data, error } = await supabase
+      .from("reports")
+      .select("id, name, data, period, share_token, view_count")
+      .eq("share_token", token!)
+      .single();
 
-    if (error || !data || data.error) {
+    if (error || !data) {
       setNotFound(true);
       setLoading(false);
       return;
@@ -148,6 +156,8 @@ export default function ReportShare() {
 
     setReport(data as SharedReport);
     setLoading(false);
+
+    supabase.rpc("increment_report_views", { p_share_token: token! }).then(() => {});
   }
 
   async function handleDownload() {
@@ -195,7 +205,7 @@ export default function ReportShare() {
   const { data } = report;
   const generatedAt = data?.generatedAt;
   const primaryColor = data?.branding?.primaryColor || "#6366f1";
-  const agencyName = data?.branding?.agencyName || "Scale Ads";
+  const agencyName = data?.branding?.agencyName || "Midsam Business";
   const preferredMetrics = getPreferredMetrics(data);
 
   return (
@@ -203,7 +213,9 @@ export default function ReportShare() {
       <div style={{ backgroundColor: primaryColor }} className="px-8 py-6 text-white">
         <p className="mb-1 text-sm opacity-75">{agencyName}</p>
         <div className="flex items-center gap-4">
-          <ClientAvatar name={data?.client?.name ?? "Cliente"} logoUrl={data?.client?.logoUrl} className="h-14 w-14" />
+          {data?.client?.logoUrl && (
+            <img src={data.client.logoUrl} alt={data.client.name} className="h-14 w-14 rounded-full border border-white/20 object-cover" />
+          )}
           <div>
             <h1 className="text-2xl font-bold">{data?.client?.name}</h1>
             <p className="mt-1 text-sm opacity-85">Relatorio de Performance - Meta Ads</p>
@@ -298,6 +310,65 @@ export default function ReportShare() {
                     </tbody>
                   </table>
                 </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {data?.featuredAd && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Criativo que mais performou</h2>
+            <Card>
+              <CardContent className="flex flex-col gap-4 pt-5 sm:flex-row">
+                {data.featuredAd.previewUrl && (
+                  <img src={data.featuredAd.previewUrl} alt={data.featuredAd.name} className="h-40 w-full rounded-lg object-cover sm:w-40" />
+                )}
+                <div className="min-w-0 space-y-2">
+                  <p className="font-medium">{data.featuredAd.name}</p>
+                  <p className="text-sm text-muted-foreground">{data.featuredAd.reason}</p>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <KpiCard label="CTR" value={`${data.featuredAd.ctr.toFixed(2)}%`} />
+                    <KpiCard label="CPC" value={fmtCurrency(data.featuredAd.cpc)} />
+                    <KpiCard label="Cliques" value={fmtNum(data.featuredAd.clicks)} />
+                    <KpiCard label="Investido" value={fmtCurrency(data.featuredAd.spend)} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
+
+        {data?.screenshots && data.screenshots.length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Prints do período</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {data.screenshots.map((print, i) => (
+                <figure key={i} className="space-y-2">
+                  <img src={print.src} alt={print.caption || `Print ${i + 1}`} className="w-full rounded-lg border" />
+                  {print.caption && <figcaption className="text-center text-xs text-muted-foreground">{print.caption}</figcaption>}
+                </figure>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {BLOCOS_ANALISE.some(b => itensDoTexto(data?.analysis?.[b.key]).length > 0) && (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold">Análise e próximos passos</h2>
+            <Card>
+              <CardContent className="grid gap-5 pt-5 sm:grid-cols-2">
+                {BLOCOS_ANALISE.map(bloco => {
+                  const itens = itensDoTexto(data.analysis?.[bloco.key]);
+                  if (!itens.length) return null;
+                  return (
+                    <div key={bloco.key} className="space-y-2">
+                      <h3 className={`text-sm font-semibold ${bloco.cor}`}>{bloco.title}</h3>
+                      <ul className="list-disc space-y-1 pl-5 text-sm">
+                        {itens.map((item, i) => <li key={i}>{item}</li>)}
+                      </ul>
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           </section>

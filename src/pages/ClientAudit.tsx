@@ -28,7 +28,7 @@ interface ClientInfo {
   id: string;
   name: string;
   meta_ad_account_id: string | null;
-  meta_token_configured: boolean | null;
+  meta_access_token: string | null;
 }
 
 // ── Score gauge ───────────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ function printReport(report: AuditReport, clientName: string) {
 </head>
 <body>
 <h1>Auditoria Meta Ads — ${clientName}</h1>
-<p class="subtitle">Gerada em ${format(new Date(report.runAt), "d 'de' MMMM 'de' yyyy 'às' HH:mm", { locale: ptBR })} • Scale Ads</p>
+<p class="subtitle">Gerada em ${format(new Date(report.runAt), "d 'de' MMMM 'de' yyyy 'às' HH:mm", { locale: ptBR })} • Midsam Business</p>
 
 <div class="score-row">
   <div class="score-box">
@@ -242,7 +242,7 @@ ${['fail', 'warn', 'pass'].map(status => {
 }).join('')}
 
 <div class="footer">
-  Auditoria gerada por Scale Ads — Score ${report.score}/100 — ${format(new Date(report.runAt), "dd/MM/yyyy HH:mm")}
+  Auditoria gerada por Midsam Business — Score ${report.score}/100 — ${format(new Date(report.runAt), "dd/MM/yyyy HH:mm")}
 </div>
 </body>
 </html>`;
@@ -281,14 +281,14 @@ export default function ClientAudit() {
 
   useEffect(() => {
     if (!clientId) return;
-    supabase.from('clients').select('id,name,meta_ad_account_id,meta_token_configured').eq('id', clientId).single()
+    supabase.from('clients').select('id,name,meta_ad_account_id,meta_access_token').eq('id', clientId).single()
       .then(({ data }) => setClient(data as ClientInfo));
     loadLatestAudit(clientId).then(r => r && setReport(r));
     loadAuditHistory(clientId).then(setHistory);
   }, [clientId]);
 
   async function handleRunAudit() {
-    if (!client?.meta_ad_account_id || !client?.meta_token_configured) {
+    if (!client?.meta_ad_account_id || !client?.meta_access_token) {
       toast.error('Configure a conta Meta Ads antes de auditar');
       return;
     }
@@ -298,6 +298,7 @@ export default function ClientAudit() {
       const r = await runAudit(
         client.id,
         client.meta_ad_account_id,
+        client.meta_access_token,
         (done, total, name) => setProgress({ done, total, name })
       );
       setReport(r);
@@ -465,7 +466,7 @@ export default function ClientAudit() {
                   {report.results
                     .filter(r => r.status === 'fail')
                     .map(r => (
-                      <IssueRow key={r.id} result={r} dismissed={dismissed.has(r.id)} onDismiss={() => setDismissed(prev => { const n = new Set(prev); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })} />
+                      <IssueRow key={r.id} result={r} dismissed={dismissed.has(r.id)} onDismiss={() => setDismissed(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })} />
                     ))
                   }
                 </CardContent>
@@ -501,7 +502,7 @@ export default function ClientAudit() {
                       key={r.id}
                       result={r}
                       dismissed={dismissed.has(r.id)}
-                      onDismiss={() => setDismissed(prev => { const n = new Set(prev); n.has(r.id) ? n.delete(r.id) : n.add(r.id); return n; })}
+                      onDismiss={() => setDismissed(prev => { const n = new Set(prev); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })}
                     />
                   ))
                 }

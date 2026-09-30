@@ -1,12 +1,31 @@
 export type BudgetLevel = "none" | "idle" | "behind" | "onTrack" | "ahead" | "over";
 
+// Abaixo disto a conta para a entrega em horas, nao em dias.
+export const LOW_BALANCE = 50;
+
+export interface BudgetInput {
+  /** Gasto do mes corrente, em reais, vindo de `campaign_daily_metrics`. */
+  spent: number;
+  /** Soma dos aportes do mes que a Meta registrou, em reais. */
+  deposited?: number | null;
+  /** Quantos aportes formaram essa soma. */
+  depositCount?: number;
+  /** Saldo atual da conta Meta, em reais. `null` em conta pos-paga ou sem sync. */
+  balance?: number | null;
+}
+
 export interface ClientBudgetStatus {
-  budget: number | null;
+  balance: number | null;
+  lowBalance: boolean;
+  /** Dias de entrega que o saldo ainda paga, no ritmo atual. */
+  runwayDays: number | null;
+  /** O saldo cobre o resto do mes. */
+  coversMonth: boolean;
+  deposited: number | null;
+  depositCount: number;
   spent: number;
   remaining: number;
   pct: number;
-  expectedPct: number;
-  paceDiff: number;
   dailyAvg: number;
   dailySuggested: number;
   projected: number;
@@ -27,29 +46,43 @@ export const BUDGET_TONES: Record<BudgetLevel, { badge: string; bar: string; tex
   over: { badge: "border-rose-200 bg-rose-50 text-rose-700", bar: "bg-rose-500", text: "text-rose-700" },
 };
 
-// Tolerancia em pontos percentuais antes de acusar desvio de ritmo — abaixo disso
-// a variacao do dia a dia geraria alarme falso todo dia.
-const PACE_TOLERANCE = 10;
+/**
+ * Situacao da verba do mes, feita so de fato.
+ *
+ * Ate 17/09/2026 o teto era `clients.monthly_budget`, digitado a mao. Ele era
+ * uma promessa ("o cliente vai investir R$ 700"), nao um fato, e por isso vivia
+ * divergindo do dinheiro que existia na conta — foi o que motivou remove-lo.
+ *
+ * Agora sao duas medidas, as duas vindas da Meta: o saldo (quanto ha na conta
+ * agora) e o aporte (quanto entrou neste mes).
+ *
+ * O ritmo NAO e medido por gasto/aporte. Em 18/09/2026 essa conta acusou a FM
+ * Veiculos com 103% da verba tendo R$ 820 em caixa: ela entrara no mes com
+ * R$ 946 de saldo virado, que o aporte do mes nao enxerga. O que vale e a
+ * autonomia — quantos dias de entrega o saldo ainda paga — porque responde a
+ * unica pergunta que muda a acao do gestor: vai parar antes do fim do mes?
+ */
+export function computeBudgetStatus(input: BudgetInput, now: Date = new Date()): ClientBudgetStatus {
+  const { spent } = input;
+  const deposited = input.deposited ?? null;
+  const balance = input.balance ?? null;
 
-export function computeBudgetStatus(
-  budget: number | null | undefined,
-  spent: number,
-  now: Date = new Date()
-): ClientBudgetStatus {
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const daysElapsed = now.getDate();
   const daysLeft = Math.max(daysInMonth - daysElapsed, 0);
-  const expectedPct = (daysElapsed / daysInMonth) * 100;
   const dailyAvg = spent / daysElapsed;
   const projected = dailyAvg * daysInMonth;
 
   const base: ClientBudgetStatus = {
-    budget: budget ?? null,
+    balance,
+    lowBalance: balance !== null && balance < LOW_BALANCE,
+    runwayDays: null,
+    coversMonth: false,
+    deposited,
+    depositCount: input.depositCount ?? 0,
     spent,
     remaining: 0,
     pct: 0,
-    expectedPct,
-    paceDiff: 0,
     dailyAvg,
     dailySuggested: 0,
     projected,
@@ -57,42 +90,54 @@ export function computeBudgetStatus(
     daysInMonth,
     daysLeft,
     level: "none",
-    label: "Sem verba definida",
-    hint: "Cadastre a verba mensal para acompanhar o consumo",
+    label: "Saldo nao lido",
+    hint: "Sincronize a conta para o saldo aparecer aqui",
   };
 
-  if (!budget || budget <= 0) return base;
+  if (balance === null) return base;
 
-  const remaining = budget - spent;
-  const pct = (spent / budget) * 100;
-  const paceDiff = pct - expectedPct;
-  const dailySuggested = daysLeft > 0 ? Math.max(remaining, 0) / daysLeft : Math.max(remaining, 0);
+  const remaining = balance;
+  const dailySuggested = daysLeft > 0 ? balance / daysLeft : balance;
+
+  if (spent <= 0 || dailyAvg <= 0) {
+    return {
+      ...base,
+      remaining,
+      dailySuggested,
+      level: "idle",
+      label: "Sem gasto no mes",
+      hint: "Nenhuma entrega registrada neste mes",
+    };
+  }
+
+  const runwayDays = balance / dailyAvg;
+  const coversMonth = runwayDays >= daysLeft;
+  // A barra mostra quanto do resto do mes o saldo cobre. Passou de 100%, cobre.
+  const pct = daysLeft > 0 ? Math.min((runwayDays / daysLeft) * 100, 100) : 100;
 
   let level: BudgetLevel;
   let label: string;
   let hint: string;
 
-  if (pct >= 100) {
+  const dias = Math.floor(runwayDays);
+
+  if (runwayDays < daysLeft * 0.6) {
     level = "over";
-    label = "Verba estourada";
-    hint = `Passou ${Math.round(pct - 100)}% do combinado para o mes`;
-  } else if (spent <= 0) {
-    level = "idle";
-    label = "Sem gasto no mes";
-    hint = "Nenhuma entrega registrada neste mes";
-  } else if (paceDiff > PACE_TOLERANCE) {
+    label = "Vai faltar saldo";
+    hint = `No ritmo de hoje o saldo paga ${dias} dia(s), e faltam ${daysLeft} para fechar o mes`;
+  } else if (runwayDays < daysLeft) {
     level = "ahead";
-    label = "Acima do ritmo";
-    hint = `Gastando mais rapido que o mes: ${Math.round(pct)}% da verba no dia ${daysElapsed}/${daysInMonth}`;
-  } else if (paceDiff < -PACE_TOLERANCE) {
+    label = "Aperta no fim do mes";
+    hint = `Saldo para ${dias} dia(s) contra ${daysLeft} que faltam — da para esticar reduzindo o diario`;
+  } else if (runwayDays > daysLeft * 2) {
     level = "behind";
-    label = "Abaixo do ritmo";
-    hint = `Sobrando verba: ${Math.round(pct)}% consumido no dia ${daysElapsed}/${daysInMonth}`;
+    label = "Sobrando saldo";
+    hint = `Saldo pagaria ${dias} dia(s) no ritmo atual; da para investir mais sem risco de parar`;
   } else {
     level = "onTrack";
-    label = "No ritmo";
-    hint = `${Math.round(pct)}% da verba no dia ${daysElapsed}/${daysInMonth}`;
+    label = "Cobre o mes";
+    hint = `Saldo paga ${dias} dia(s) e faltam ${daysLeft} — fecha o mes sem parar`;
   }
 
-  return { ...base, remaining, pct, paceDiff, dailySuggested, level, label, hint };
+  return { ...base, remaining, pct, dailySuggested, runwayDays, coversMonth, level, label, hint };
 }

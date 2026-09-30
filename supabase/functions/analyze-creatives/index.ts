@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { getUser, jsonResponse } from "../_shared/auth.ts";
 import { analyzeCreatives, logTokenUsage } from "../_shared/claude-service.ts";
+import { guard } from "../_shared/auth.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -10,17 +10,18 @@ const cors = {
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
-  try {
-    const { creatives } = await req.json();
+  const acesso = await guard(req, cors);
+  if (!acesso.ok) return acesso.response;
 
-    const user = await getUser(req);
-    if (!user) return jsonResponse(cors, { error: "Não autenticado" }, 401);
-    // tenantId sai do JWT: no corpo, qualquer um se passava por outro
-    // tenant e furava o rate limit do Claude.
-    const tenantId = user.id;
+  try {
+    const { creatives, tenantId } = await req.json();
     
     if (!creatives || !Array.isArray(creatives) || creatives.length === 0) {
       throw new Error("creatives array é obrigatório e deve ter pelo menos 1 criativo");
+    }
+    
+    if (!tenantId) {
+      throw new Error("tenantId é obrigatório");
     }
 
     // Sanitize creatives (prevent injection)

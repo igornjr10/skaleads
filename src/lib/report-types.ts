@@ -33,7 +33,7 @@ export interface ReportData {
     logoUrl?: string | null;
     sourceLabels: string[];
     metrics: Array<{
-      key: "followers" | "profileViews" | "reach" | "engagement";
+      key: "followers" | "followersGained" | "followersNet" | "profileViews" | "reach" | "engagement" | "contentViews";
       label: string;
       value: number | null;
       source: string;
@@ -83,4 +83,16 @@ export interface ReportData {
     | "frequency"
   >;
   branding: { primaryColor: string; agencyName: string };
+  /** Texto do gestor. Uma linha por item: vira lista no PDF. */
+  analysis?: {
+    highlights?: string;
+    attention?: string;
+    nextSteps?: string;
+    notes?: string;
+  };
+  featuredAd?: ReportAd & { reason: string };
+  /** Prints de campanha e criativo, ja reduzidos para JPEG em data URI. */
+  screenshots?: Array<{ src: string; caption?: string }>;
 }
+
+export type ReportAd = ReportData["topAds"][number];

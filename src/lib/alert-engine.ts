@@ -3,7 +3,7 @@ import { subDays, format } from "date-fns";
 
 // ── DSL types ─────────────────────────────────────────────────────────────────
 
-export type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "budget";
+export type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "balance";
 export type Comparator = "gt" | "gte" | "lt" | "lte" | "eq" | "change_pct";
 export type Period = "1d" | "3d" | "7d" | "14d" | "30d";
 export type EntityType = "CLIENT" | "CAMPAIGN";
@@ -20,6 +20,12 @@ export interface AlertRule {
   conditions: AlertCondition[];
   logic: "AND" | "OR";
 }
+
+// Sentinela de destino: "todos os gestores ativos". Resolvido no envio, dentro
+// das Edge Functions — o mesmo literal vive em
+// `supabase/functions/_shared/whatsapp.ts` (ALL_MANAGERS), porque Deno nao
+// importa de `src/`. Os dois precisam andar juntos.
+export const ALL_MANAGERS_TARGET = "all_managers";
 
 export interface AlertChannels {
   dashboard: boolean;
@@ -80,17 +86,6 @@ async function getClientDailyTotals(clientId: string, days: number) {
   );
 }
 
-async function getClientMonthToDateSpend(clientId: string): Promise<number> {
-  const now = new Date();
-  const firstOfMonth = format(new Date(now.getFullYear(), now.getMonth(), 1), "yyyy-MM-dd");
-  const { data } = await supabase
-    .from("campaign_daily_metrics")
-    .select("spend")
-    .eq("client_id", clientId)
-    .gte("date", firstOfMonth);
-  return (data || []).reduce((s: number, r: any) => s + (r.spend || 0), 0);
-}
-
 async function computeClientMetric(
   clientId: string,
   metric: MetricKey,
@@ -98,17 +93,17 @@ async function computeClientMetric(
 ): Promise<number> {
   if (metric === "status") return 0;
 
-  // Percentual da verba mensal ja consumido no mes atual (ignora `days` — sempre o mes corrente)
-  if (metric === "budget") {
+  // Saldo em reais que a conta Meta ainda tem. So existe em conta pre-paga, e
+  // vem do ultimo sync — conta sem saldo lido fica de fora em vez de valer 0,
+  // senao todo cliente pos-pago dispararia o alerta de saldo baixo.
+  if (metric === "balance") {
     const { data: client } = await supabase
       .from("clients")
-      .select("monthly_budget")
+      .select("meta_balance_cents")
       .eq("id", clientId)
       .single();
-    const budget = client?.monthly_budget || 0;
-    if (!budget) return 0;
-    const spent = await getClientMonthToDateSpend(clientId);
-    return (spent / budget) * 100;
+    const cents = client?.meta_balance_cents as number | null | undefined;
+    return cents == null ? Number.NaN : cents / 100;
   }
 
   if (metric === "frequency") {
@@ -161,6 +156,10 @@ interface CampaignRow {
 }
 
 async function getCampaignMetric(campaign: CampaignRow, metric: MetricKey): Promise<number | string> {
+  // Saldo e da conta de anuncio, nao da campanha. No recorte de campanha nao
+  // existe resposta — NaN, que o applyComparator recusa, em vez de 0, que
+  // passaria em qualquer "menor que".
+  if (metric === "balance") return Number.NaN;
   if (metric === "status") return campaign.status;
   if (metric === "spend") return campaign.spend;
   if (metric === "ctr") return campaign.ctr;
@@ -196,6 +195,9 @@ async function evaluateConditionForClient(
   if (condition.comparator === "change_pct") {
     const current = await computeClientMetric(clientId, condition.metric, days);
     const previous = await computeClientMetric(clientId, condition.metric, days * 2);
+    // Metrica sem base (NaN) nao tem variacao: virar 0 aqui faria a conta sem
+    // dado passar em qualquer limite negativo, que e alarme falso garantido.
+    if (Number.isNaN(current) || Number.isNaN(previous)) return { passes: false, value: Number.NaN };
     const delta = previous > 0 ? ((current - previous) / previous) * 100 : 0;
     const threshold = typeof condition.value === "string" ? parseFloat(condition.value) : condition.value;
     // For change_pct, we check if delta is above threshold (positive → increase, negative → decrease)
@@ -421,7 +423,13 @@ const METRIC_LABELS: Record<MetricKey, string> = {
   frequency: "Frequência",
   roas: "ROAS",
   status: "Status",
-  budget: "Verba mensal consumida",
+  balance: "Saldo na conta Meta",
+};
+
+// Metricas com recorte de tempo proprio: o periodo escolhido na tela nao vale
+// para elas, e mostrar "3 dias" numa delas seria mentira.
+export const FIXED_PERIOD_LABELS: Partial<Record<MetricKey, string>> = {
+  balance: "Agora",
 };
 
 const COMPARATOR_LABELS: Record<Comparator, string> = {
@@ -445,9 +453,12 @@ export function ruleToHuman(rule: AlertRule): string {
   if (!rule?.conditions?.length) return "Sem condições";
   return rule.conditions
     .map(c => {
-      const suffix = c.comparator === "change_pct" || c.metric === "budget" ? "%" : "";
-      const period = c.metric === "budget" ? "mês atual" : (PERIOD_LABELS[c.period] || c.period);
-      return `${METRIC_LABELS[c.metric]} ${COMPARATOR_LABELS[c.comparator]} ${c.value}${suffix} (${period})`;
+      const suffix = c.comparator === "change_pct" ? "%" : "";
+      const period = FIXED_PERIOD_LABELS[c.metric]?.toLowerCase() ?? (PERIOD_LABELS[c.period] || c.period);
+      // Metrica aposentada nao pode virar "undefined" na tela: a regra ficaria
+      // ilegivel justamente quando esta quebrada e ninguem entenderia o porque.
+      const label = METRIC_LABELS[c.metric] ?? `Métrica desconhecida (${c.metric})`;
+      return `${label} ${COMPARATOR_LABELS[c.comparator]} ${c.value}${suffix} (${period})`;
     })
     .join(` ${rule.logic} `);
 }

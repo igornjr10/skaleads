@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { loadWhatsappConfig, sendText } from "../_shared/whatsapp.ts";
+import { sendText } from "../_shared/whatsapp.ts";
 import { getUser, hasAnyRole } from "../_shared/auth.ts";
 
 const corsHeaders = {
@@ -73,9 +73,6 @@ serve(async (req) => {
     let falhas = 0;
     const detalhes: Array<{ cliente: string; offset: number; ok: boolean; erro?: string }> = [];
 
-    // So carrega a config do WhatsApp se houver o que mandar: dia sem cobranca
-    // nao deve falhar por causa da Evolution fora do ar.
-    const cfg = lembretes.length > 0 ? await loadWhatsappConfig() : null;
 
     for (const item of lembretes) {
       if (!item.destino) {
@@ -100,7 +97,7 @@ serve(async (req) => {
       let erro: string | null = null;
 
       try {
-        await sendText(cfg!, item.destino, item.mensagem);
+        await sendText(item.destino, item.mensagem);
         enviados++;
       } catch (err) {
         sucesso = false;

@@ -2,12 +2,10 @@ export type CheckSeverity = 'critical' | 'warning' | 'info';
 export type CheckStatus   = 'pass' | 'warn' | 'fail' | 'skip';
 export type AuditCategory = 'pixel' | 'structure' | 'creatives' | 'budget' | 'account' | 'local';
 
-import type { MetaSource } from '@/lib/meta-client';
-
 export interface AuditContext {
   clientId:    string;
   adAccountId: string; // sem prefixo act_
-  source:      MetaSource; // token resolvido no servidor pelo meta-proxy
+  accessToken: string;
 }
 
 export interface AuditResult {

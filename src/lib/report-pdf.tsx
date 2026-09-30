@@ -27,3 +27,23 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   }
   return btoa(binary);
 }
+
+export async function buildContentBriefPdfBlob(params: {
+  pauta: import("@/lib/niche-insights").PautaDeConteudo;
+  segmentLabel: string;
+  contas: number;
+}) {
+  const [{ pdf }, { ContentBriefPdfTemplate }] = await Promise.all([
+    import("@react-pdf/renderer"),
+    import("@/components/reports/ContentBriefPdfTemplate"),
+  ]);
+
+  return pdf(
+    <ContentBriefPdfTemplate
+      pauta={params.pauta}
+      segmentLabel={params.segmentLabel}
+      contas={params.contas}
+      geradoEm={new Date().toLocaleDateString("pt-BR")}
+    />
+  ).toBlob();
+}
