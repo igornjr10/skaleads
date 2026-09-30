@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, instanceStatus } from "../_shared/whatsapp.ts";
+import { corsHeaders, instanceStatus, SemInstancia } from "../_shared/whatsapp.ts";
 import { guard } from "../_shared/auth.ts";
 
 // A tela fala o vocabulario do Baileys (open/connecting/close), herdado da
@@ -61,6 +61,16 @@ serve(async (req) => {
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
+    // Ainda sem instancia nao e erro: a tela mostra "desconectado" e o botao de QR cria.
+    if (err instanceof SemInstancia) {
+      return new Response(
+        JSON.stringify({
+          success: true, instance: "", state: "close", socketAlive: false, staleState: false,
+          connected: false, message: err.message, ownerJid: null, profileName: null,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
     return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { resolveTargets, sendText } from "../_shared/whatsapp.ts";
+import { resolveTargets, sendText, whatsappConfigurado } from "../_shared/whatsapp.ts";
 
 type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "balance";
 type Comparator = "gt" | "gte" | "lt" | "lte" | "eq" | "change_pct";
@@ -337,7 +337,7 @@ serve(async (req) => {
   let runError: string | null = null;
 
   try {
-    const whatsappConfigured = !!(Deno.env.get("UAZAPI_URL") && Deno.env.get("UAZAPI_TOKEN"));
+    const whatsappConfigured = await whatsappConfigurado();
     const managerNumber = Deno.env.get("MANAGER_WHATSAPP_NUMBER") ?? "";
 
     if (!supabaseUrl || !svcKey) throw new Error("SUPABASE_URL / SVC_ROLE_KEY não configurados");

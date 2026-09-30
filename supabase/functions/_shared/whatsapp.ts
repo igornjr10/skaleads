@@ -10,15 +10,85 @@ export const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-export function whatsappConfig() {
-  const baseUrl = Deno.env.get("UAZAPI_URL");
-  const token = Deno.env.get("UAZAPI_TOKEN");
-  if (!baseUrl || !token) throw new Error("UAZAPI_URL / UAZAPI_TOKEN nao configurados");
-  return { baseUrl: baseUrl.replace(/\/$/, ""), token };
+export class SemInstancia extends Error {
+  constructor() {
+    super("Nenhuma instancia do WhatsApp criada ainda. Clique em Gerar QR Code para criar e conectar");
+  }
+}
+
+function baseUrl() {
+  const url = Deno.env.get("UAZAPI_URL");
+  if (!url) throw new Error("UAZAPI_URL nao configurado");
+  return url.replace(/\/$/, "");
+}
+
+function banco() {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SVC_ROLE_KEY");
+  if (!url || !key) throw new Error("SUPABASE_URL / SVC_ROLE_KEY nao configurados");
+  return { url, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" } };
+}
+
+async function tokenSalvo(): Promise<string | null> {
+  const { url, headers } = banco();
+  const res = await fetch(`${url}/rest/v1/wa_instancia?select=token&limit=1`, { headers });
+  if (!res.ok) throw new Error(`Nao consegui ler wa_instancia (${res.status})`);
+  const rows = await res.json();
+  return rows?.[0]?.token ?? null;
+}
+
+// A instancia criada pelo app (wa_instancia) vale mais que o UAZAPI_TOKEN:
+// o secret sobra como caminho para quem ainda cola o token a mao.
+export async function tokenDaInstancia(): Promise<string | null> {
+  return (await tokenSalvo()) ?? Deno.env.get("UAZAPI_TOKEN")?.trim() ?? null;
+}
+
+export async function whatsappConfig() {
+  const token = await tokenDaInstancia();
+  if (!token) throw new SemInstancia();
+  return { baseUrl: baseUrl(), token };
+}
+
+export async function whatsappConfigurado(): Promise<boolean> {
+  if (!Deno.env.get("UAZAPI_URL")) return false;
+  return !!(await tokenDaInstancia().catch(() => null));
+}
+
+/** Cria a instancia com o admintoken na primeira conexao. Devolve true se criou agora. */
+// So olha wa_instancia: um UAZAPI_TOKEN de servidor antigo nao pode impedir a criacao.
+export async function garantirInstancia(): Promise<boolean> {
+  if (await tokenSalvo()) return false;
+
+  const admin = Deno.env.get("UAZAPI_ADMIN_TOKEN")?.trim();
+  if (!admin) throw new Error("UAZAPI_ADMIN_TOKEN nao configurado");
+  const nome = Deno.env.get("UAZAPI_INSTANCIA")?.trim() || "midsam";
+
+  const res = await fetch(`${baseUrl()}/instance/create`, {
+    method: "POST",
+    headers: { admintoken: admin, "Content-Type": "application/json" },
+    body: JSON.stringify({ name: nome }),
+  });
+  const raw = await res.text();
+  let parsed: any = null;
+  try { parsed = JSON.parse(raw); } catch { /* resposta nao-JSON */ }
+  if (!res.ok) {
+    throw new Error(`uazapi recusou criar a instancia (${res.status}): ${parsed?.message ?? parsed?.error ?? raw.slice(0, 300)}`);
+  }
+  const token = parsed?.token ?? parsed?.instance?.token;
+  if (!token) throw new Error(`uazapi criou a instancia mas nao devolveu token: ${raw.slice(0, 300)}`);
+
+  const { url, headers } = banco();
+  const salvo = await fetch(`${url}/rest/v1/wa_instancia`, {
+    method: "POST",
+    headers: { ...headers, Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({ id: true, nome, token }),
+  });
+  if (!salvo.ok) throw new Error(`Instancia criada na uazapi, mas nao consegui salvar o token (${salvo.status})`);
+  return true;
 }
 
 async function call(path: string, init: RequestInit = {}): Promise<any> {
-  const { baseUrl, token } = whatsappConfig();
+  const { baseUrl, token } = await whatsappConfig();
 
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,

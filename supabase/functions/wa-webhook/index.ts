@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { atualizar, chaveTelefone, db, inserir } from "../_shared/wa-crm.ts";
+import { tokenDaInstancia } from "../_shared/whatsapp.ts";
 
 // Recebe os eventos da uazapi (configurados por whatsapp-instance-admin,
 // action "webhook"). Nao ha JWT: quem chama e o servidor da uazapi, e o que
@@ -124,9 +125,20 @@ serve(async (req) => {
   if (req.method !== "POST") return new Response("ok");
 
   const body = await req.json().catch(() => null);
-  const esperado = Deno.env.get("UAZAPI_TOKEN");
-  if (!body || !esperado || body.token !== esperado) {
-    return new Response(JSON.stringify({ error: "token invalido" }), { status: 401 });
+  const esperado = (await tokenDaInstancia().catch(() => null))?.trim();
+  const recebido = typeof body?.token === "string" ? body.token.trim() : "";
+  if (!body || !esperado || recebido !== esperado) {
+    // O painel da uazapi mostra esta resposta: sem ela nao da para saber se o
+    // token veio ausente, em outro campo ou de outra instancia. So o final do
+    // token recebido, nunca o esperado.
+    const diagnostico = {
+      error: "token invalido",
+      campos: body ? Object.keys(body) : null,
+      token_recebido: recebido ? `...${recebido.slice(-4)} (${recebido.length} chars)` : "ausente",
+      secret_configurado: !!esperado,
+    };
+    console.warn("wa-webhook 401", JSON.stringify(diagnostico));
+    return new Response(JSON.stringify(diagnostico), { status: 401 });
   }
 
   try {

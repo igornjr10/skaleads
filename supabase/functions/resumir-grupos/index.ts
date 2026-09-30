@@ -12,7 +12,7 @@
 // palavras. A pergunta do cliente aparece com as palavras dele, ou nao aparece.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders } from "../_shared/whatsapp.ts";
+import { corsHeaders, whatsappConfig } from "../_shared/whatsapp.ts";
 import { companyIdsOf, getUser, ownsClient } from "../_shared/auth.ts";
 
 const FUSO = "-03:00"; // America/Sao_Paulo, sem horario de verao desde 2019
@@ -114,11 +114,9 @@ function ehDaAgencia(m: MensagemBruta, numerosAgencia: Set<string>): boolean {
 }
 
 async function lerMensagens(chatid: string, desde: number): Promise<MensagemBruta[]> {
-  const baseUrl = Deno.env.get("UAZAPI_URL");
-  const token = Deno.env.get("UAZAPI_TOKEN");
-  if (!baseUrl || !token) throw new Error("UAZAPI_URL / UAZAPI_TOKEN nao configurados");
+  const { baseUrl, token } = await whatsappConfig();
 
-  const res = await fetch(`${baseUrl.replace(/\/$/, "")}/message/find`, {
+  const res = await fetch(`${baseUrl}/message/find`, {
     method: "POST",
     headers: { token, "Content-Type": "application/json" },
     body: JSON.stringify({ chatid, limit: 400, messageTimestamp: { gte: desde } }),

@@ -3,7 +3,7 @@
 // run-alerts-cron e run-report-schedules. Sem o Authorization no cron
 // registrado, o gateway rejeita a chamada com 401 antes do handler rodar.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { sendText } from "../_shared/whatsapp.ts";
+import { sendText, whatsappConfigurado } from "../_shared/whatsapp.ts";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 
@@ -777,7 +777,7 @@ serve(async (req) => {
         return aTime - bTime;
       });
     const dueClients = allDueClients.slice(0, MAX_PER_RUN);
-    const whatsappConfigured = !!(Deno.env.get("UAZAPI_URL") && Deno.env.get("UAZAPI_TOKEN"));
+    const whatsappConfigured = await whatsappConfigurado();
     const results: { client: string; ok: boolean; error?: string; campaigns?: number; days?: number; fundingEvents?: number; avisos?: number }[] = [];
 
     for (const client of dueClients) {

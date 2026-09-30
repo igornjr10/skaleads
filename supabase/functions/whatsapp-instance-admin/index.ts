@@ -1,17 +1,26 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { configureWebhook, corsHeaders, getWebhook, instanceConnect, instanceDisconnect } from "../_shared/whatsapp.ts";
+import { configureWebhook, corsHeaders, garantirInstancia, getWebhook, instanceConnect, instanceDisconnect } from "../_shared/whatsapp.ts";
 import { guard } from "../_shared/auth.ts";
 
 // A uazapi nao tem restart: connect e a unica primitiva de religar, e devolve o
 // QR quando a sessao precisa ser pareada de novo. "restart" continua aqui como
 // apelido para nao quebrar a tela de Configuracoes.
+const ligarWebhook = () => configureWebhook(`${Deno.env.get("SUPABASE_URL")}/functions/v1/wa-webhook`);
+
+// Primeira conexao cria a instancia com o admintoken e ja liga a caixa de
+// conversas — sem isso a instancia nova conecta mas nao recebe nada.
+async function conectar() {
+  if (await garantirInstancia()) await ligarWebhook();
+  return instanceConnect();
+}
+
 const ACTIONS = {
-  restart: instanceConnect,
-  connect: instanceConnect,
+  restart: conectar,
+  connect: conectar,
   logout: instanceDisconnect,
   disconnect: instanceDisconnect,
   // Liga a caixa de conversas: a uazapi passa a mandar cada mensagem para wa-webhook.
-  webhook: () => configureWebhook(`${Deno.env.get("SUPABASE_URL")}/functions/v1/wa-webhook`),
+  webhook: ligarWebhook,
   webhook_status: getWebhook,
 } as const;
 
