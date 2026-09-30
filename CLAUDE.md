@@ -26,7 +26,8 @@ supabase/
 ## Convencoes
 - Sem comentarios exceto quando o WHY e nao-obvio
 - Supabase e o unico backend - sem Express/Next.js
-- Meta API calls passam pela Edge Function `meta-proxy`: o token vive em `client_secrets` (sem grant para `authenticated`) e nunca chega no browser. No front use `metaGet`/`metaGetAll` de `@/lib/meta-client`; `clients.meta_token_configured` diz se a conta esta conectada
+- Tokens da Meta (conta e Pagina) vivem em `client_secrets` (sem grant para `authenticated`) e nunca chegam no browser. No front passe `access_token: credencialDoCliente(id)` (ou `credencialDaPagina`) para `metaGet`/`metaGetAll` de `@/lib/meta-fetch`: a chamada sai pela Edge Function `meta-proxy`. Token novo so se grava por `guardarTokensMeta()` (`meta-store-token`). `clients.meta_token_configured` diz se a conta esta conectada; no servidor, leia o token com `_shared/meta-token.ts`
+- Token cru no browser so no fluxo de conexao, logo apos o login do Facebook (ele e do proprio usuario)
 - Imports: usar `@/` como alias para `src/`
 - Toasts: usar `sonner` (`import { toast } from "sonner"`)
 

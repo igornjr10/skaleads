@@ -19,6 +19,7 @@ import {
   type BulkSyncReport,
 } from "@/lib/meta-bulk-sync";
 import { META_APP_ID } from "@/lib/env";
+import { guardarTokensMeta } from "@/lib/meta-client";
 import { errorMessage } from "@/lib/utils";
 
 interface BulkClient {
@@ -207,14 +208,20 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
         inventory?.instagramAccounts.find((item) => item.id === assignment.instagramId) ?? pageInstagram(page);
       const pageIdForLogo = page?.id || client.meta_page_id;
 
+      // Cofre primeiro: se falhar, o cliente nao fica marcado como conectado sem token.
+      try {
+        await guardarTokensMeta(client.id, { token, pageToken: page?.access_token });
+      } catch (err) {
+        failures.push(`${client.name}: ${errorMessage(err, "falha ao guardar o token")}`);
+        continue;
+      }
+
       const { error } = await supabase
         .from("clients")
         .update({
           meta_ad_account_id: assignment.accountId,
-          meta_access_token: token,
           meta_page_id: page?.id ?? client.meta_page_id,
           meta_page_name: page?.name ?? client.meta_page_name,
-          meta_page_access_token: page?.access_token ?? null,
           meta_instagram_account_id: instagram?.id ?? client.meta_instagram_account_id,
           meta_instagram_username: instagram?.username ?? client.meta_instagram_username,
           meta_connected_at: new Date().toISOString(),
@@ -250,7 +257,6 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
         id: client.id,
         name: client.name,
         meta_ad_account_id: assignments[client.id].accountId,
-        meta_access_token: token,
       })),
       {
         onProgress: (name, done, total) => setProgress(name ? `${name} (${done + 1}/${total})` : ""),

@@ -75,6 +75,7 @@ import { ptBR } from "date-fns/locale";
 import { useAuth } from "@/hooks/useAuth";
 import { syncClientData, validateMetaConnection } from "@/lib/meta-api";
 import { metaGet, metaGetAll } from "@/lib/meta-fetch";
+import { credencialDoCliente, guardarTokensMeta } from "@/lib/meta-client";
 import { loadFacebookSDK, facebookLogin, type MetaAdAccount, type MetaInstagramAccount, type MetaPage } from "@/lib/facebook-sdk";
 import { BUSINESS_SEGMENTS, LOCAL_GOALS, segmentLabel } from "@/lib/local-business";
 import { computeBudgetStatus } from "@/lib/client-budget";
@@ -127,7 +128,7 @@ interface Client {
   primary_goal: string | null;
   meta_balance_cents: number | null;
   meta_ad_account_id: string | null;
-  meta_access_token: string | null;
+  meta_token_configured: boolean | null;
   meta_page_id: string | null;
   meta_page_name: string | null;
   meta_instagram_account_id: string | null;
@@ -498,7 +499,7 @@ export default function Clients() {
 
   function openConnectDialog(client: Client) {
     setAdAccountId(client.meta_ad_account_id ?? "");
-    setAccessToken(client.meta_access_token ?? "");
+    setAccessToken("");
     setAutoSyncEnabled(client.meta_auto_sync_enabled ?? false);
     setAutoSyncFrequencyHours(String(client.meta_auto_sync_frequency_hours ?? 24));
     setAdAccounts([]);
@@ -636,7 +637,9 @@ export default function Clients() {
 
   async function handleConnectManual(event: React.FormEvent) {
     event.preventDefault();
-    if (!connectClient || !adAccountId.trim() || !accessToken.trim()) {
+    // Reconectar mudando so a conta nao exige colar o token de novo: sem
+    // token novo, vale o que ja esta no cofre.
+    if (!connectClient || !adAccountId.trim() || (!accessToken.trim() && !connectClient.meta_token_configured)) {
       toast.error("Preencha o ID da conta e o token de acesso");
       return;
     }
@@ -653,6 +656,9 @@ export default function Clients() {
     setSyncingId(client.id);
     setSyncProgress("Salvando configuracoes...");
     try {
+      // Cofre primeiro: se falhar, o cliente nao fica marcado como conectado sem token.
+      await guardarTokensMeta(client.id, { token, pageToken: selectedPage?.access_token });
+
       const instagramFromPage = selectedPage?.instagram_business_account ?? selectedPage?.connected_instagram_account ?? null;
       const instagramFinal = explicitInstagram ?? instagramFromPage;
       const pageIdForLogo = selectedPage?.id || client.meta_page_id;
@@ -660,11 +666,8 @@ export default function Clients() {
         .from("clients")
         .update({
           meta_ad_account_id: accountId.replace("act_", ""),
-          meta_access_token: token.trim(),
           meta_page_id: selectedPage?.id || client.meta_page_id,
           meta_page_name: selectedPage?.name || client.meta_page_name,
-          // Vem do PAGE_FIELDS da descoberta e ate agora era descartado.
-          meta_page_access_token: selectedPage?.access_token ?? null,
           meta_instagram_account_id: instagramFinal?.id || client.meta_instagram_account_id,
           meta_instagram_username: instagramFinal?.username || client.meta_instagram_username,
           meta_auto_sync_enabled: autoSyncEnabled,
@@ -686,7 +689,7 @@ export default function Clients() {
           .catch(() => {});
       }
 
-      const result = await syncClientData(client.id, accountId, token, setSyncProgress);
+      const result = await syncClientData(client.id, accountId, credencialDoCliente(client.id), setSyncProgress);
       toast.success(
         `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anuncios`,
         { duration: 6000 }
@@ -702,13 +705,13 @@ export default function Clients() {
   }
 
   async function handleQuickSync(client: Client) {
-    if (!client.meta_ad_account_id || !client.meta_access_token) {
+    if (!client.meta_ad_account_id || !client.meta_token_configured) {
       toast.error("Configure a conta Meta antes de sincronizar");
       return;
     }
     setSyncingId(client.id);
     try {
-      const result = await syncClientData(client.id, client.meta_ad_account_id, client.meta_access_token, setSyncProgress);
+      const result = await syncClientData(client.id, client.meta_ad_account_id, credencialDoCliente(client.id), setSyncProgress);
       toast.success(
         `Sincronizado! ${result.campaigns} campanhas · ${result.adSets} conjuntos · ${result.ads} anuncios`,
         { duration: 6000 }
@@ -851,14 +854,14 @@ export default function Clients() {
   }
 
   async function handleVerifyConnection(client: Client) {
-    if (!client.meta_ad_account_id || !client.meta_access_token) {
+    if (!client.meta_ad_account_id || !client.meta_token_configured) {
       toast.error("Configure a conta Meta antes de verificar");
       return;
     }
 
     setVerifyingId(client.id);
     try {
-      const result = await validateMetaConnection(client.meta_ad_account_id, client.meta_access_token);
+      const result = await validateMetaConnection(client.meta_ad_account_id, credencialDoCliente(client.id));
       const { error } = await supabase
         .from("clients")
         .update({
@@ -930,7 +933,7 @@ export default function Clients() {
 
   async function runDueSyncs() {
     const dueClients = clients.filter(
-      (client) => client.meta_ad_account_id && client.meta_access_token && isAutoSyncDue(client)
+      (client) => client.meta_ad_account_id && client.meta_token_configured && isAutoSyncDue(client)
     );
 
     if (dueClients.length === 0) {
@@ -941,7 +944,7 @@ export default function Clients() {
     try {
       for (const client of dueClients) {
         setSyncingId(client.id);
-        await syncClientData(client.id, client.meta_ad_account_id!, client.meta_access_token!, setSyncProgress);
+        await syncClientData(client.id, client.meta_ad_account_id!, credencialDoCliente(client.id), setSyncProgress);
       }
       toast.success(`${dueClients.length} cliente(s) sincronizado(s)`);
       load();
@@ -955,7 +958,7 @@ export default function Clients() {
   }
 
   async function verifyConnectedClients() {
-    const connectedClients = clients.filter((client) => client.meta_ad_account_id && client.meta_access_token);
+    const connectedClients = clients.filter((client) => client.meta_ad_account_id && client.meta_token_configured);
     if (connectedClients.length === 0) {
       toast("Nenhum cliente conectado para verificar");
       return;
@@ -965,7 +968,7 @@ export default function Clients() {
       for (const client of connectedClients) {
         setVerifyingId(client.id);
         try {
-          const result = await validateMetaConnection(client.meta_ad_account_id!, client.meta_access_token!);
+          const result = await validateMetaConnection(client.meta_ad_account_id!, credencialDoCliente(client.id));
           await supabase
             .from("clients")
             .update({
@@ -1007,7 +1010,7 @@ export default function Clients() {
   // So 3 acoes primarias visiveis (as mais usadas no dia a dia); o resto fica
   // organizado no menu "..." pra nao poluir o card com 9 botoes de uma vez.
   function renderClientActions(client: Client, compact = false) {
-    const connected = !!(client.meta_ad_account_id && client.meta_access_token);
+    const connected = !!(client.meta_ad_account_id && client.meta_token_configured);
 
     return (
       <div className={`flex ${compact ? "flex-wrap" : "justify-end"} gap-2`}>
@@ -1487,8 +1490,8 @@ export default function Clients() {
                     type="password"
                     value={accessToken}
                     onChange={(event) => setAccessToken(event.target.value)}
-                    placeholder="EAAxxxxxxxx..."
-                    required
+                    placeholder={connectClient?.meta_token_configured ? "Token salvo — deixe em branco para manter" : "EAAxxxxxxxx..."}
+                    required={!connectClient?.meta_token_configured}
                   />
                 </div>
                 <div className="rounded-xl border border-slate-200 p-3 space-y-3">

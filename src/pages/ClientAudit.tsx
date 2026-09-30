@@ -21,6 +21,7 @@ import {
   ChevronDown, ChevronUp, Info, Brain, Loader2, Copy, MapPin,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { credencialDoCliente } from "@/lib/meta-fetch";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -28,7 +29,7 @@ interface ClientInfo {
   id: string;
   name: string;
   meta_ad_account_id: string | null;
-  meta_access_token: string | null;
+  meta_token_configured: boolean | null;
 }
 
 // ── Score gauge ───────────────────────────────────────────────────────────────
@@ -281,14 +282,14 @@ export default function ClientAudit() {
 
   useEffect(() => {
     if (!clientId) return;
-    supabase.from('clients').select('id,name,meta_ad_account_id,meta_access_token').eq('id', clientId).single()
+    supabase.from('clients').select('id,name,meta_ad_account_id,meta_token_configured').eq('id', clientId).single()
       .then(({ data }) => setClient(data as ClientInfo));
     loadLatestAudit(clientId).then(r => r && setReport(r));
     loadAuditHistory(clientId).then(setHistory);
   }, [clientId]);
 
   async function handleRunAudit() {
-    if (!client?.meta_ad_account_id || !client?.meta_access_token) {
+    if (!client?.meta_ad_account_id || !client?.meta_token_configured) {
       toast.error('Configure a conta Meta Ads antes de auditar');
       return;
     }
@@ -298,7 +299,7 @@ export default function ClientAudit() {
       const r = await runAudit(
         client.id,
         client.meta_ad_account_id,
-        client.meta_access_token,
+        credencialDoCliente(client.id),
         (done, total, name) => setProgress({ done, total, name })
       );
       setReport(r);

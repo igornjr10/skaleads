@@ -25,6 +25,7 @@ import {
 } from "@/lib/creative-analysis";
 import { CreativeCard } from "@/components/creatives/CreativeCard";
 import { CreativeDrawer } from "@/components/creatives/CreativeDrawer";
+import { credencialDoCliente } from "@/lib/meta-fetch";
 
 const PERIOD_OPTIONS = [
   { label: "7 dias", value: "7" },
@@ -102,11 +103,11 @@ export default function ClientCreatives() {
     if (!clientId) return;
     const { data: client } = await supabase
       .from("clients")
-      .select("meta_ad_account_id, meta_access_token")
+      .select("meta_ad_account_id, meta_token_configured")
       .eq("id", clientId)
       .single();
 
-    if (!client?.meta_ad_account_id || !client?.meta_access_token) {
+    if (!client?.meta_ad_account_id || !client?.meta_token_configured) {
       toast.error("Cliente sem conta Meta conectada");
       return;
     }
@@ -114,9 +115,9 @@ export default function ClientCreatives() {
     setSyncing(true);
     try {
       const [metrics, breakdowns] = await Promise.all([
-        syncAdDailyMetrics(clientId, client.meta_ad_account_id, client.meta_access_token, "last_30d",
+        syncAdDailyMetrics(clientId, client.meta_ad_account_id, credencialDoCliente(clientId), "last_30d",
           msg => toast.info(msg, { duration: 1500 })),
-        syncAudienceBreakdowns(clientId, client.meta_ad_account_id, client.meta_access_token, "last_30d",
+        syncAudienceBreakdowns(clientId, client.meta_ad_account_id, credencialDoCliente(clientId), "last_30d",
           msg => toast.info(msg, { duration: 1500 })),
       ]);
       toast.success(`Sincronizado: ${metrics} métricas diárias, ${breakdowns} breakdowns`);

@@ -13,7 +13,6 @@ function alvos(quantidade: number) {
     id: `id-${index}`,
     name: `Cliente ${index}`,
     meta_ad_account_id: `100${index}`,
-    meta_access_token: "token",
   }));
 }
 

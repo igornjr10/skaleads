@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard } from "../_shared/auth.ts";
+import { tokensDosClientes } from "../_shared/meta-token.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,7 +14,7 @@ interface ClientRow {
   id: string;
   name: string;
   meta_page_id: string | null;
-  meta_access_token: string | null;
+  token?: string | null;
 }
 
 interface PictureInfo {
@@ -94,7 +95,7 @@ async function syncOne(
 ): Promise<{ id: string; name: string; logo_url: string }> {
   if (!client.meta_page_id) throw new Error("Cliente sem Pagina do Facebook vinculada");
 
-  const picture = await fetchPictureInfo(client.meta_page_id, client.meta_access_token);
+  const picture = await fetchPictureInfo(client.meta_page_id, client.token ?? null);
   if (!picture) throw new Error("A Pagina nao devolveu foto");
   if (picture.isSilhouette) throw new Error("A Pagina esta com a foto padrao do Facebook");
 
@@ -141,7 +142,7 @@ serve(async (req) => {
       : await guard(req, corsHeaders, { roles: ["owner"] });
     if (!acesso.ok) return acesso.response;
 
-    const select = "id,name,meta_page_id,meta_access_token";
+    const select = "id,name,meta_page_id";
     const query = clientId
       ? `clients?id=eq.${clientId}&select=${select}`
       : `clients?meta_page_id=not.is.null&status=neq.archived&select=${select}&order=name`;
@@ -151,6 +152,12 @@ serve(async (req) => {
     const clients = (await listResponse.json()) as ClientRow[];
 
     if (clients.length === 0) throw new Error("Nenhum cliente com Pagina do Facebook vinculada");
+
+    const tokens = await tokensDosClientes(clients.map(c => c.id));
+    for (const c of clients) {
+      const t = tokens.get(c.id);
+      c.token = t?.pagina ?? t?.conta ?? null;
+    }
 
     const updated: Array<{ id: string; name: string; logo_url: string }> = [];
     const failed: Array<{ id: string; name: string; error: string }> = [];

@@ -17,7 +17,7 @@ import { extractPhoneCalls, extractDirections, extractLeads, GOAL_KPIS, type Loc
 import { MetricPreferencesBuilder } from "./MetricPreferencesBuilder";
 import { errorMessage } from "@/lib/utils";
 import { META_GRAPH_VERSION } from "@/lib/meta-insights";
-import { metaGet, metaGetAll, type MetaFetchOptions } from "@/lib/meta-fetch";
+import { credencialDaPagina, credencialDoCliente, metaGet, metaGetAll, type MetaFetchOptions } from "@/lib/meta-fetch";
 import { comprimirImagem, escolherCriativoDestaque, lerSugestaoDaIA } from "@/lib/report-analise";
 import { sendChatMessage } from "@/lib/ai-service";
 import { useAuth } from "@/hooks/useAuth";
@@ -287,19 +287,12 @@ export function ReportGeneratorPanel({
   async function fetchMessagesStarted(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
     if (!metaAdAccountId || !metaAccessToken) return 0;
 
-    const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
+    const json = await fetchMetaJson<{ data?: Array<{ actions?: Array<{ action_type?: string; value?: string }> }> }>(`act_${normalizeAccountId(metaAdAccountId)}/insights`, {
       fields: "actions",
       level: "account",
       time_range: JSON.stringify({ since: startDate, until: endDate }),
       access_token: metaAccessToken.trim(),
-    })}`;
-
-    const response = await fetch(url);
-    const json = await response.json();
-
-    if (!response.ok || json.error) {
-      throw new Error(json.error?.message || "Erro ao buscar mensagens iniciadas na Meta");
-    }
+    });
 
     const rows = Array.isArray(json.data) ? json.data : [];
     return rows.reduce(
@@ -311,22 +304,15 @@ export function ReportGeneratorPanel({
 
   async function fetchAccountConversionMetrics(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
     if (!metaAdAccountId || !metaAccessToken) {
-      return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
+      return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, phoneCalls: 0, directions: 0, leads: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     }
 
-    const url = `${META_BASE}/act_${normalizeAccountId(metaAdAccountId)}/insights?${new URLSearchParams({
+    const json = await fetchMetaJson<{ data?: any[] }>(`act_${normalizeAccountId(metaAdAccountId)}/insights`, {
       fields: "actions,action_values,spend,impressions,inline_link_clicks,reach,frequency",
       level: "account",
       time_range: JSON.stringify({ since: startDate, until: endDate }),
       access_token: metaAccessToken.trim(),
-    })}`;
-
-    const response = await fetch(url);
-    const json = await response.json();
-
-    if (!response.ok || json.error) {
-      throw new Error(json.error?.message || "Erro ao buscar metricas de conversao na Meta");
-    }
+    });
 
     const rows = Array.isArray(json.data) ? json.data : [];
     const purchaseMetric = extractPrimaryActionMetric(rows, "actions", PURCHASE_ACTION_TYPES);
@@ -634,12 +620,11 @@ export function ReportGeneratorPanel({
     meta_page_name?: string | null;
     meta_instagram_account_id?: string | null;
     meta_instagram_username?: string | null;
-    meta_access_token?: string | null;
-    meta_page_access_token?: string | null;
+    meta_token_configured?: boolean | null;
   }): Promise<SocialPresenceSnapshot | undefined> {
     if (!includeSocialPresence) return undefined;
 
-    const token = client.meta_access_token?.trim();
+    const token = client.meta_token_configured ? credencialDoCliente(clientId) : undefined;
 
     // O erro da Graph API precisa chegar ao usuario: engolido, um token sem
     // escopo de Pagina/Instagram vira "nao vinculado" e manda investigar o
@@ -654,7 +639,7 @@ export function ReportGeneratorPanel({
     // usuario a Meta responde (#10) mesmo com a permissao concedida. Cai no
     // token de usuario so para cliente conectado antes de guardarmos o da
     // Pagina — ali o #10 volta, e a mensagem manda reconectar.
-    const pageToken = client.meta_page_access_token?.trim() || token;
+    const pageToken = client.meta_token_configured ? credencialDaPagina(clientId) : undefined;
 
     const pageOutcome = pageToken
       ? await attempt(fetchFacebookPresence(client.meta_page_id, pageToken), "Erro ao ler a Pagina do Facebook")
@@ -771,7 +756,7 @@ export function ReportGeneratorPanel({
   async function buildReportData(): Promise<ReportData> {
     const { data: clientRaw, error: clientError } = await supabase
       .from("clients")
-      .select("name, logo_url, meta_ad_account_id, meta_access_token, meta_page_access_token, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username")
+      .select("name, logo_url, meta_ad_account_id, meta_token_configured, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username")
       .eq("id", clientId)
       .single();
 
@@ -805,10 +790,10 @@ export function ReportGeneratorPanel({
 
     let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, phoneCalls: 0, directions: 0, leads: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     try {
-      conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      conversionMetrics = await fetchAccountConversionMetrics(clientRaw.meta_ad_account_id, clientRaw.meta_token_configured ? credencialDoCliente(clientId) : null);
     } catch {
       try {
-        conversionMetrics.messagesStarted = await fetchMessagesStarted(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+        conversionMetrics.messagesStarted = await fetchMessagesStarted(clientRaw.meta_ad_account_id, clientRaw.meta_token_configured ? credencialDoCliente(clientId) : null);
       } catch {
         conversionMetrics.messagesStarted = 0;
       }
@@ -857,7 +842,7 @@ export function ReportGeneratorPanel({
       .slice(0, 10);
 
     try {
-      const metaCampaigns = await fetchMetaCampaignSummaries(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      const metaCampaigns = await fetchMetaCampaignSummaries(clientRaw.meta_ad_account_id, clientRaw.meta_token_configured ? credencialDoCliente(clientId) : null);
       if (metaCampaigns.length > 0) {
         topCampaigns = metaCampaigns;
       }
@@ -882,7 +867,7 @@ export function ReportGeneratorPanel({
       .slice(0, 12);
 
     try {
-      const metaAds = await fetchMetaAdSummaries(clientRaw.meta_ad_account_id, clientRaw.meta_access_token);
+      const metaAds = await fetchMetaAdSummaries(clientRaw.meta_ad_account_id, clientRaw.meta_token_configured ? credencialDoCliente(clientId) : null);
       if (metaAds.length > 0) {
         topAds = metaAds;
       }

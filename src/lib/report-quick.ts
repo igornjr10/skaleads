@@ -12,6 +12,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { fetchInstagramSocial } from "@/lib/meta-insights";
+import { credencialDaPagina } from "@/lib/meta-fetch";
 
 export type PeriodoRapido = "7d" | "14d" | "30d";
 
@@ -63,7 +64,7 @@ export async function montarReportDataDoBanco(
   const [{ data: cliente }, { data: diarias }, { data: campanhas }] = await Promise.all([
     supabase
       .from("clients")
-      .select("name, logo_url, meta_ad_account_id, meta_instagram_account_id, meta_instagram_username, meta_page_access_token, meta_access_token")
+      .select("name, logo_url, meta_ad_account_id, meta_instagram_account_id, meta_instagram_username, meta_token_configured")
       .eq("id", clientId)
       .single(),
     supabase
@@ -100,7 +101,7 @@ export async function montarReportDataDoBanco(
   const anuncios = await buscarCriativos(clientId);
 
   const igId = cliente?.meta_instagram_account_id as string | null;
-  const tokenDoPerfil = (cliente?.meta_page_access_token as string | null) || (cliente?.meta_access_token as string | null);
+  const tokenDoPerfil = cliente?.meta_token_configured ? credencialDaPagina(clientId) : null;
   const social = igId && tokenDoPerfil
     ? await fetchInstagramSocial(igId, tokenDoPerfil, isoLocal(inicio), isoLocal(fim))
     : { followers: null, followersGained: null, followersNet: null, profileViews: null };

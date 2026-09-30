@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { diagnoseMetaConnection, type MetaDiagnosis, type StepStatus } from "@/lib/meta-diagnostics";
 import { errorMessage } from "@/lib/utils";
+import { credencialDoCliente } from "@/lib/meta-fetch";
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  client: { id: string; name: string; meta_ad_account_id: string | null; meta_access_token: string | null };
+  client: { id: string; name: string; meta_ad_account_id: string | null; meta_token_configured: boolean | null };
 }
 
 const STATUS_ICON: Record<StepStatus, typeof CheckCircle2> = {
@@ -29,20 +30,20 @@ export function MetaDiagnosticsDialog({ open, onClose, client }: Props) {
   const [failure, setFailure] = useState<string | null>(null);
 
   const run = useCallback(async () => {
-    if (!client.meta_ad_account_id || !client.meta_access_token) {
+    if (!client.meta_ad_account_id || !client.meta_token_configured) {
       setFailure("Este cliente ainda nao tem conta Meta configurada.");
       return;
     }
     setLoading(true);
     setFailure(null);
     try {
-      setDiagnosis(await diagnoseMetaConnection(client.meta_ad_account_id, client.meta_access_token));
+      setDiagnosis(await diagnoseMetaConnection(client.meta_ad_account_id, credencialDoCliente(client.id)));
     } catch (error) {
       setFailure(errorMessage(error, "Nao foi possivel rodar o diagnostico"));
     } finally {
       setLoading(false);
     }
-  }, [client.meta_ad_account_id, client.meta_access_token]);
+  }, [client.id, client.meta_ad_account_id, client.meta_token_configured]);
 
   useEffect(() => {
     if (open) {

@@ -13,6 +13,7 @@ import { subDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { GOAL_KPIS, LOCAL_METRIC_LABELS, goalLabel, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
 import { fetchAccountReachFrequency, fetchSocialPresence, type ReachFrequency, type SocialPresence } from "@/lib/meta-insights";
+import { credencialDoCliente } from "@/lib/meta-fetch";
 
 type Period = "7" | "14" | "30";
 
@@ -195,11 +196,11 @@ export default function Dashboard() {
     (async () => {
       const { data: c } = await supabase
         .from("clients")
-        .select("meta_ad_account_id, meta_access_token, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username, logo_url")
+        .select("meta_ad_account_id, meta_token_configured, meta_page_id, meta_page_name, meta_instagram_account_id, meta_instagram_username, logo_url")
         .eq("id", clientId)
         .maybeSingle();
 
-      if (!c?.meta_ad_account_id || !c?.meta_access_token) {
+      if (!c?.meta_ad_account_id || !c?.meta_token_configured) {
         if (active) {
           setReachFreq(null);
           setSocial(null);
@@ -212,13 +213,13 @@ export default function Dashboard() {
       const since = format(subDays(new Date(), periodDays), "yyyy-MM-dd");
       try {
         const [rf, sp] = await Promise.all([
-          fetchAccountReachFrequency(c.meta_ad_account_id, c.meta_access_token, since, until).catch(() => null),
+          fetchAccountReachFrequency(c.meta_ad_account_id, credencialDoCliente(clientId), since, until).catch(() => null),
           fetchSocialPresence({
             pageId: c.meta_page_id,
             pageName: c.meta_page_name,
             instagramAccountId: c.meta_instagram_account_id,
             instagramUsername: c.meta_instagram_username,
-            accessToken: c.meta_access_token,
+            accessToken: credencialDoCliente(clientId),
             logoUrl: c.logo_url,
             since,
             until,
