@@ -410,7 +410,7 @@ export type Database = {
             logo_url: string | null
             company_id: string | null
             manager_id: string | null
-            meta_access_token: string | null
+            meta_token_configured: boolean
             meta_ad_account_id: string | null
             meta_auto_sync_enabled: boolean
             meta_auto_sync_frequency_hours: number
@@ -425,7 +425,6 @@ export type Database = {
             meta_balance_label: string | null
             meta_funding_type: number | null
             meta_page_id: string | null
-            meta_page_access_token: string | null
             meta_page_name: string | null
             meta_sync_runs: number
             meta_sync_status: string
@@ -458,7 +457,7 @@ export type Database = {
             logo_url?: string | null
             company_id?: string | null
             manager_id?: string | null
-            meta_access_token?: string | null
+            meta_token_configured?: boolean
             meta_ad_account_id?: string | null
             meta_auto_sync_enabled?: boolean
             meta_auto_sync_frequency_hours?: number
@@ -473,7 +472,6 @@ export type Database = {
             meta_balance_label?: string | null
             meta_funding_type?: number | null
             meta_page_id?: string | null
-            meta_page_access_token?: string | null
             meta_page_name?: string | null
             meta_sync_runs?: number
             meta_sync_status?: string
@@ -506,7 +504,7 @@ export type Database = {
             logo_url?: string | null
             company_id?: string | null
             manager_id?: string | null
-            meta_access_token?: string | null
+            meta_token_configured?: boolean
             meta_ad_account_id?: string | null
             meta_auto_sync_enabled?: boolean
             meta_auto_sync_frequency_hours?: number
@@ -521,7 +519,6 @@ export type Database = {
             meta_balance_label?: string | null
             meta_funding_type?: number | null
             meta_page_id?: string | null
-            meta_page_access_token?: string | null
             meta_page_name?: string | null
             meta_sync_runs?: number
             meta_sync_status?: string

@@ -32,6 +32,7 @@ import {
   TriangleAlert,
   Wand2,
 } from "lucide-react";
+import { credencialDoCliente } from "@/lib/meta-fetch";
 
 interface Client {
   id: string;
@@ -41,7 +42,7 @@ interface Client {
   meta_auto_sync_enabled: boolean;
   meta_last_sync_at: string | null;
   meta_ad_account_id?: string | null;
-  meta_access_token?: string | null;
+  meta_token_configured?: boolean | null;
 }
 
 interface Ad {
@@ -531,7 +532,7 @@ export default function Andromeda() {
     const [clientsRes, campaignsRes, metricsRes] = await Promise.all([
       supabase
         .from("clients")
-        .select("id, name, status, meta_sync_status, meta_auto_sync_enabled, meta_last_sync_at, meta_ad_account_id, meta_access_token")
+        .select("id, name, status, meta_sync_status, meta_auto_sync_enabled, meta_last_sync_at, meta_ad_account_id, meta_token_configured")
         .eq("status", "active")
         .order("name"),
       supabase
@@ -555,14 +556,14 @@ export default function Andromeda() {
     if (selectedClient === "all") return;
 
     const client = clients.find((item) => item.id === selectedClient);
-    if (!client?.meta_ad_account_id || !client?.meta_access_token) return;
+    if (!client?.meta_ad_account_id || !client?.meta_token_configured) return;
 
     setAdvancedLoading(true);
     try {
       const context: AuditContext = {
         clientId: client.id,
         adAccountId: normalizeAdAccountId(client.meta_ad_account_id),
-        accessToken: client.meta_access_token.trim(),
+        accessToken: credencialDoCliente(client.id),
       };
 
       const checks = ALL_CHECKS.filter((check) => ADVANCED_CHECK_IDS.includes(check.id as (typeof ADVANCED_CHECK_IDS)[number]));
@@ -702,7 +703,7 @@ export default function Andromeda() {
   const scoreTone = getScoreTone(score.overall);
   const scoreClasses = getToneClasses(scoreTone);
   const selectedClientRecord = selectedClient === "all" ? null : clients.find((client) => client.id === selectedClient) || null;
-  const canRunAdvancedDiagnostics = !!selectedClientRecord?.meta_ad_account_id && !!selectedClientRecord?.meta_access_token;
+  const canRunAdvancedDiagnostics = !!selectedClientRecord?.meta_ad_account_id && !!selectedClientRecord?.meta_token_configured;
   const advancedSummary = useMemo(() => {
     return advancedResults.reduce(
       (acc, result) => {

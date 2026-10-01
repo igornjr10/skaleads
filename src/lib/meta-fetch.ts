@@ -1,3 +1,5 @@
+import { supabase } from "@/integrations/supabase/client";
+
 // A Graph API responde `code: 1` ("Please reduce the amount of data you're
 // asking for, then retry your request") quando a query custa caro demais pra
 // ser resolvida de forma sincrona — nao e token invalido nem falta de
@@ -48,6 +50,47 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// O token do cliente mora no cofre (client_secrets) e nao chega no browser.
+// Quem chama passa `access_token: credencialDoCliente(id)` e a chamada sai pela
+// Edge Function meta-proxy. Token cru so no fluxo de conexao, logo apos o login
+// do Facebook, quando ele e do proprio usuario e ainda nao foi guardado.
+const REFERENCIA_RE = /^(cliente|pagina):([0-9a-f-]{36})$/i;
+
+export function credencialDoCliente(clientId: string) {
+  return `cliente:${clientId}`;
+}
+
+/** Token da Pagina do Facebook; no servidor cai para o da conta quando nao ha. */
+export function credencialDaPagina(clientId: string) {
+  return `pagina:${clientId}`;
+}
+
+function referencia(params: Record<string, string>) {
+  const m = REFERENCIA_RE.exec(params.access_token ?? "");
+  return m ? { tipo: m[1].toLowerCase() === "pagina" ? "pagina" : "conta", clientId: m[2] } : null;
+}
+
+async function viaProxy<T>(base: string, path: string, params: Record<string, string>, mode: "object" | "list"): Promise<T> {
+  const ref = referencia(params)!;
+  const { access_token: _descartado, ...resto } = params;
+  const versao = /\/(v\d+\.\d)$/.exec(base)?.[1] ?? "v21.0";
+  const { data, error } = await supabase.functions.invoke("meta-proxy", {
+    body: { clientId: ref.clientId, tipo: ref.tipo, versao, path: path.replace(/^\//, ""), params: resto, mode },
+  });
+  if (error) {
+    // A mensagem util (inclusive "token expirado", que o app usa para marcar a
+    // integracao) vem no corpo da resposta, nao no error.message.
+    let payload: { error?: string; metaError?: MetaApiError | null } | null = null;
+    try {
+      payload = await (error as { context?: Response }).context?.json();
+    } catch {
+      /* corpo nao-JSON */
+    }
+    throw new MetaRequestError(payload?.metaError ?? { message: payload?.error ?? error.message }, "Erro ao buscar dados na Meta");
+  }
+  return data as T;
+}
+
 function buildUrl(base: string, path: string, params: Record<string, string>) {
   return `${base}/${path}?${new URLSearchParams(params)}`;
 }
@@ -69,6 +112,8 @@ interface PagedResponse<T> {
 }
 
 async function collectPages<T>(base: string, path: string, params: Record<string, string>): Promise<T[]> {
+  if (referencia(params)) return (await viaProxy<{ data?: T[] }>(base, path, params, "list")).data ?? [];
+
   let url: string | undefined = buildUrl(base, path, params);
   const items: T[] = [];
   let pages = 0;
@@ -102,6 +147,7 @@ export interface MetaFetchOptions {
 }
 
 export async function metaGet<T>(base: string, path: string, params: Record<string, string>): Promise<T> {
+  if (referencia(params)) return viaProxy<T>(base, path, params, "object");
   return requestJson<T>(buildUrl(base, path, params));
 }
 

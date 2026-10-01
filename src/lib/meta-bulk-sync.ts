@@ -1,12 +1,11 @@
 import { syncClientData } from "@/lib/meta-api";
-import { MetaRequestError } from "@/lib/meta-fetch";
+import { MetaRequestError, credencialDoCliente } from "@/lib/meta-fetch";
 import { errorMessage } from "@/lib/utils";
 
 export interface BulkSyncTarget {
   id: string;
   name: string;
   meta_ad_account_id: string;
-  meta_access_token: string;
 }
 
 export interface BulkSyncOutcome {
@@ -44,7 +43,7 @@ export async function syncClientsSequentially(
     options.onProgress?.(target.name, index, targets.length);
 
     try {
-      await syncClientData(target.id, target.meta_ad_account_id, target.meta_access_token);
+      await syncClientData(target.id, target.meta_ad_account_id, credencialDoCliente(target.id));
       outcomes.push({ id: target.id, name: target.name, ok: true });
       consecutive = 0;
     } catch (error) {
