@@ -16,6 +16,7 @@ import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert, QrC
 import { EquipeCard } from "@/components/settings/EquipeCard";
 import { EmpresaCard } from "@/components/settings/EmpresaCard";
 import { PAPEIS, rotuloPapel } from "@/lib/permissoes";
+import { META_APP_ID } from "@/lib/env";
 
 interface Member {
   user_id: string;
@@ -466,7 +467,7 @@ export default function Settings() {
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle>Integração Meta Ads — App configurado</CardTitle>
-          <CardDescription>App ID: 2156684861751630</CardDescription>
+          <CardDescription>App ID: {META_APP_ID || "VITE_META_APP_ID nao definida no build"}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-5 text-sm text-muted-foreground">
 
@@ -475,12 +476,12 @@ export default function Settings() {
             <ol className="list-decimal space-y-1 pl-5">
               <li>
                 Acesse{" "}
-                <a href="https://developers.facebook.com/apps/2156684861751630/settings/basic/" target="_blank" rel="noreferrer" className="text-primary underline">
+                <a href={`https://developers.facebook.com/apps/${META_APP_ID}/settings/basic/`} target="_blank" rel="noreferrer" className="text-primary underline">
                   developers.facebook.com → seu App
                 </a>
               </li>
               <li>Em <strong className="text-foreground">Configurações → Básico</strong>, adicione em <em>Domínios do App</em> o domínio onde o app estará hospedado (ex: <code className="rounded bg-muted px-1 font-mono text-xs">localhost</code> para dev)</li>
-              <li>Em <strong className="text-foreground">Facebook Login → Configurações</strong>, adicione nas <em>URIs de redirecionamento OAuth válidas</em>: <code className="rounded bg-muted px-1 font-mono text-xs">https://manager.marketprosystem.com/</code> e <code className="rounded bg-muted px-1 font-mono text-xs">http://localhost:8080</code></li>
+              <li>Em <strong className="text-foreground">Facebook Login → Configurações</strong>, adicione nas <em>URIs de redirecionamento OAuth válidas</em>: <code className="rounded bg-muted px-1 font-mono text-xs">{`${window.location.origin}/`}</code> e <code className="rounded bg-muted px-1 font-mono text-xs">http://localhost:8080</code></li>
               <li>Certifique-se de que o produto <strong className="text-foreground">Marketing API</strong> está adicionado ao App</li>
             </ol>
           </div>
@@ -504,7 +505,7 @@ export default function Settings() {
                 </a>
                 , adicione as variáveis:
                 <br />
-                <code className="rounded bg-muted px-1 font-mono text-xs">META_APP_ID</code> = <code className="rounded bg-muted px-1 font-mono text-xs">2156684861751630</code>
+                <code className="rounded bg-muted px-1 font-mono text-xs">META_APP_ID</code> = <code className="rounded bg-muted px-1 font-mono text-xs">{META_APP_ID}</code>
                 <br />
                 <code className="rounded bg-muted px-1 font-mono text-xs">META_APP_SECRET</code> = (sua chave secreta)
               </li>
