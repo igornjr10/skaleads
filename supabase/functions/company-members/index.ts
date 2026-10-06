@@ -55,6 +55,21 @@ async function db(path: string, init: RequestInit = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+async function authAdmin(path: string, init: RequestInit = {}) {
+  const { supabaseUrl, svcKey } = env();
+  const res = await fetch(`${supabaseUrl}/auth/v1/admin/${path}`, {
+    ...init,
+    headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}`, "Content-Type": "application/json" },
+  });
+  return { ok: res.ok, status: res.status, body: await res.json().catch(() => null) };
+}
+
+/** Quem nunca entrou ainda depende do link do convite. */
+async function nuncaEntrou(userId: string): Promise<boolean> {
+  const { ok, body } = await authAdmin(`users/${userId}`);
+  return ok && !body?.last_sign_in_at;
+}
+
 async function papelDe(userId: string): Promise<string | null> {
   const rows = await db(`user_roles?user_id=eq.${userId}&select=role`);
   return papelMaisForte((rows ?? []).map((r: { role: string }) => r.role));
@@ -132,6 +147,7 @@ serve(async (req) => {
         db(`client_assignments?company_id=eq.${companyId}&user_id=in.(${lista})&select=user_id,client_id`),
       ]);
 
+      const pendentes = await Promise.all(ids.map(nuncaEntrou));
       const members = (links ?? []).map((l: { user_id: string; modulos: string[] | null }) => {
         const perfil = (perfis ?? []).find((p: { id: string }) => p.id === l.user_id);
         const dele = (papeis ?? []).filter((r: { user_id: string }) => r.user_id === l.user_id).map((r: { role: string }) => r.role);
@@ -141,6 +157,7 @@ serve(async (req) => {
           full_name: perfil?.full_name ?? null,
           role: papelMaisForte(dele),
           modulos: l.modulos,
+          pendente: pendentes[ids.indexOf(l.user_id)],
           client_ids: (atribuicoes ?? [])
             .filter((a: { user_id: string }) => a.user_id === l.user_id)
             .map((a: { client_id: string }) => a.client_id),
@@ -173,11 +190,9 @@ serve(async (req) => {
         // Link em vez de e-mail: o SMTP padrao do Supabase so entrega para
         // quem e da organizacao do projeto, entao o convite por e-mail nao
         // chegaria. O ADM manda o link por onde preferir.
-        const { supabaseUrl, svcKey } = env();
         const redirectTo = typeof body.redirect_to === "string" ? body.redirect_to : undefined;
-        const res = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
+        const { ok, status, body: gerado } = await authAdmin("generate_link", {
           method: "POST",
-          headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "invite",
             email,
@@ -185,9 +200,8 @@ serve(async (req) => {
             redirect_to: redirectTo,
           }),
         });
-        const gerado = await res.json().catch(() => null);
-        if (!res.ok) {
-          return json({ error: `Não consegui criar o convite: ${gerado?.msg ?? gerado?.message ?? res.status}` }, 502);
+        if (!ok) {
+          return json({ error: `Não consegui criar o convite: ${gerado?.msg ?? gerado?.message ?? status}` }, 502);
         }
         userId = gerado?.id ?? gerado?.user?.id;
         linkDeAcesso = gerado?.action_link ?? gerado?.properties?.action_link ?? null;
@@ -203,6 +217,31 @@ serve(async (req) => {
       await definirClientes(companyId, userId, clientIds);
 
       return json({ success: true, user_id: userId, link: linkDeAcesso, conta_existente: !linkDeAcesso });
+    }
+
+    // Link vencido ou perdido. So para quem nunca entrou: para quem ja tem
+    // senha, um link de acesso deixaria o ADM entrar como a pessoa.
+    if (action === "novo_link") {
+      const userId = body.user_id;
+      if (!isUuid(userId)) return json({ error: "user_id inválido" }, 400);
+      if (!(await vinculo(companyId, userId))) return json({ error: "Essa pessoa não é da sua equipe" }, 404);
+      if ((await papelDe(userId)) === "owner") return json({ error: "O dono da plataforma não é alterado por aqui" }, 403);
+      if (!(await nuncaEntrou(userId))) {
+        return json({ error: "Essa pessoa já acessou. Ela entra com a própria senha ou usa \"Esqueci a senha\"." }, 409);
+      }
+      const perfil = (await db(`profiles?id=eq.${userId}&select=email`))?.[0];
+      if (!perfil?.email) return json({ error: "Essa pessoa está sem e-mail cadastrado" }, 400);
+      const { ok, status, body: gerado } = await authAdmin("generate_link", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "magiclink",
+          email: perfil.email,
+          redirect_to: typeof body.redirect_to === "string" ? body.redirect_to : undefined,
+        }),
+      });
+      const link = gerado?.action_link ?? gerado?.properties?.action_link;
+      if (!ok || !link) return json({ error: `Não consegui gerar o link: ${gerado?.msg ?? gerado?.message ?? status}` }, 502);
+      return json({ link });
     }
 
     if (action === "update" || action === "remove") {
