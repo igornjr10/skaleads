@@ -13,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Copy, Loader2, UserMinus, UserPlus } from "lucide-react";
+import { Copy, Link2, Loader2, UserMinus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -25,6 +25,7 @@ interface Membro {
   full_name: string | null;
   role: string | null;
   modulos: string[] | null;
+  pendente: boolean;
   client_ids: string[];
 }
 
@@ -88,6 +89,7 @@ export function EquipeCard() {
   const [convidando, setConvidando] = useState(false);
   const [convite, setConvite] = useState({ full_name: "", email: "", role: "analyst", client_ids: [] as string[] });
   const [linkGerado, setLinkGerado] = useState<string | null>(null);
+  const [novoLink, setNovoLink] = useState<{ membro: Membro; link: string } | null>(null);
 
   async function carregar() {
     try {
@@ -171,6 +173,22 @@ export function EquipeCard() {
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao convidar");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function gerarNovoLink(membro: Membro) {
+    setOcupado(true);
+    try {
+      const { link } = await chamarEquipe<{ link: string }>({
+        action: "novo_link",
+        user_id: membro.user_id,
+        redirect_to: `${SITE_URL.replace(/\/$/, "")}/definir-senha`,
+      });
+      setNovoLink({ membro, link });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao gerar o link");
     } finally {
       setOcupado(false);
     }
@@ -261,6 +279,14 @@ export function EquipeCard() {
                       <TableCell>
                         <div className="font-medium">{m.full_name || "—"}{euMesmo && <span className="ml-2 text-xs text-muted-foreground">(você)</span>}</div>
                         <div className="text-xs text-muted-foreground">{m.email}</div>
+                        {m.pendente && !euMesmo && (
+                          <div className="mt-1 flex items-center gap-2">
+                            <Badge variant="outline" className="border-amber-500/40 text-amber-500">Ainda não entrou</Badge>
+                            <Button variant="link" size="sm" className="h-auto p-0 text-xs" disabled={ocupado} onClick={() => gerarNovoLink(m)}>
+                              <Link2 className="mr-1 h-3 w-3" /> Novo link
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         {bloqueado ? (
@@ -408,6 +434,27 @@ export function EquipeCard() {
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!novoLink} onOpenChange={open => { if (!open) setNovoLink(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo link de acesso</DialogTitle>
+            <DialogDescription>
+              Mande para {novoLink?.membro.full_name || novoLink?.membro.email}. Ao abrir, a pessoa define a senha e já
+              entra. O link vale para um acesso só e substitui o anterior.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-2">
+            <Input readOnly value={novoLink?.link ?? ""} onFocus={e => e.currentTarget.select()} className="font-mono text-xs" />
+            <Button variant="outline" size="icon" onClick={() => novoLink && copiar(novoLink.link)} title="Copiar link">
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setNovoLink(null)}>Concluir</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

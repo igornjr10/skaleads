@@ -15,6 +15,11 @@ import { MidsamLogo } from "@/components/MidsamLogo";
 const SITE_URL = (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined) || window.location.origin;
 const EMAIL_REDIRECT_TO = `${SITE_URL.replace(/\/$/, "")}/auth`;
 
+// O convite ja cria a conta: quem foi convidado e usa "Criar conta" cai na
+// confirmacao por e-mail em vez de entrar. O caminho certo e o link do ADM.
+const CONVIDADO_USE_O_LINK =
+  "Foi convidado pela sua empresa? Entre pelo link que o ADM te mandou. Se ele venceu, peça um novo em Equipe.";
+
 export default function Auth() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
@@ -40,7 +45,7 @@ export default function Auth() {
       // tratar isso o usuario fica travado sem saber que falta confirmar.
       if (error.message.toLowerCase().includes("email not confirmed")) {
         setUnconfirmedEmail(email);
-        return toast.error("Confirme seu e-mail antes de entrar. Reenvie o link abaixo se precisar.");
+        return toast.error(CONVIDADO_USE_O_LINK);
       }
       return toast.error(error.message);
     }
@@ -83,7 +88,10 @@ export default function Auth() {
       toast.success("Conta criada! Voce ja esta dentro.");
       return navigate("/dashboard");
     }
-    toast.success("Conta criada! Confirme o link enviado para o seu e-mail antes de entrar.");
+    toast.success("Conta criada! Confirme o link enviado para o seu e-mail antes de entrar.", {
+      description: CONVIDADO_USE_O_LINK,
+      duration: 12000,
+    });
   }
 
   const inputCls =
@@ -181,6 +189,7 @@ export default function Auth() {
                   <p className="text-[13px] text-white/70">
                     O e-mail <strong className="text-white">{unconfirmedEmail}</strong> ainda nao foi confirmado.
                   </p>
+                  <p className="text-[12px] text-white/50">{CONVIDADO_USE_O_LINK}</p>
                   <Button
                     type="button"
                     variant="outline"
