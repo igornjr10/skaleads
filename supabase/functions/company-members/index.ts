@@ -146,7 +146,7 @@ serve(async (req) => {
             .map((a: { client_id: string }) => a.client_id),
         };
       });
-      return json({ members });
+      return json({ members: isOwner ? members : members.filter((m) => m.role !== "owner") });
     }
 
     if (action === "invite") {
