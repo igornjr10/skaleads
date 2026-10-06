@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +22,7 @@ import {
 import { META_APP_ID } from "@/lib/env";
 import { guardarTokensMeta } from "@/lib/meta-client";
 import { errorMessage } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
 
 interface BulkClient {
   id: string;
@@ -52,7 +54,22 @@ type Phase = "idle" | "connecting" | "mapping" | "saving" | "syncing" | "report"
 
 const NONE = "__none__";
 
+// account_status da Meta: 1 = ativa. Desativada/encerrada entra na lista, mas
+// desmarcada — virar cliente so faz sentido se ainda roda anuncio.
+const CONTA_ATIVA = 1;
+
+interface Vinculo {
+  accountId: string;
+  page?: MetaPage | null;
+  instagram?: MetaInstagramAccount | null;
+}
+
+function semAct(id: string) {
+  return id.replace("act_", "");
+}
+
 export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props) {
+  const { empresa } = useAuth();
   const [phase, setPhase] = useState<Phase>("idle");
   const [progress, setProgress] = useState("");
   const [token, setToken] = useState("");
@@ -62,6 +79,7 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
   const [onlyPending, setOnlyPending] = useState(true);
   const [syncAfterSave, setSyncAfterSave] = useState(true);
   const [report, setReport] = useState<BulkSyncReport | null>(null);
+  const [criar, setCriar] = useState<Record<string, boolean>>({});
 
   function reset() {
     setPhase("idle");
@@ -73,6 +91,7 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
     setOnlyPending(true);
     setSyncAfterSave(true);
     setReport(null);
+    setCriar({});
   }
 
   async function handleConnect() {
@@ -96,7 +115,16 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
       setInventory(found);
 
       setProgress("Sugerindo vinculos por nome...");
-      setAssignments(buildSuggestions(clients, found));
+      const sugestoes = buildSuggestions(clients, found);
+      setAssignments(sugestoes);
+      const usadas = contasUsadas(clients, sugestoes);
+      setCriar(
+        Object.fromEntries(
+          found.adAccounts
+            .filter((conta) => !usadas.has(semAct(conta.id)))
+            .map((conta) => [semAct(conta.id), conta.account_status === CONTA_ATIVA])
+        )
+      );
 
       setPhase("mapping");
       toast.success(
@@ -137,6 +165,14 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
     }
 
     return next;
+  }
+
+  function contasUsadas(list: BulkClient[], atribuicoes: Record<string, Assignment>) {
+    return new Set(
+      [...list.map((c) => c.meta_ad_account_id), ...Object.values(atribuicoes).map((a) => a.accountId)].filter(
+        (id): id is string => Boolean(id)
+      )
+    );
   }
 
   function pageInstagram(page?: MetaPage | null): MetaInstagramAccount | null {
@@ -194,54 +230,105 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
 
   const pending = useMemo(() => selecionarParaGravar(clients, assignments), [clients, assignments]);
 
+  // Conta escolhida para um cliente existente sai daqui na hora: senao viraria
+  // cliente duplicado.
+  const contasSemCliente = useMemo(() => {
+    if (!inventory) return [];
+    const usadas = contasUsadas(clients, assignments);
+    return inventory.adAccounts.filter((conta) => !usadas.has(semAct(conta.id)));
+  },[inventory, clients, assignments]);
+
+  const novos = contasSemCliente.filter((conta) => criar[semAct(conta.id)]);
+  const totalASalvar = pending.length + novos.length;
+
+  async function vincular(clientId: string, nome: string, v: Vinculo, atual?: BulkClient): Promise<string | null> {
+    const instagram = v.instagram ?? pageInstagram(v.page);
+    const pageIdForLogo = v.page?.id || atual?.meta_page_id;
+
+    // Cofre primeiro: se falhar, o cliente nao fica marcado como conectado sem token.
+    try {
+      await guardarTokensMeta(clientId, { token, pageToken: v.page?.access_token });
+    } catch (err) {
+      return `${nome}: ${errorMessage(err, "falha ao guardar o token")}`;
+    }
+
+    const { error } = await supabase
+      .from("clients")
+      .update({
+        meta_ad_account_id: v.accountId,
+        meta_page_id: v.page?.id ?? atual?.meta_page_id ?? null,
+        meta_page_name: v.page?.name ?? atual?.meta_page_name ?? null,
+        meta_instagram_account_id: instagram?.id ?? atual?.meta_instagram_account_id ?? null,
+        meta_instagram_username: instagram?.username ?? atual?.meta_instagram_username ?? null,
+        meta_connected_at: new Date().toISOString(),
+        meta_last_sync_error: null,
+        meta_sync_status: "connected",
+        logo_url: pageIdForLogo ? metaPageLogoUrl(pageIdForLogo) : atual?.logo_url ?? null,
+      })
+      .eq("id", clientId);
+    return error ? `${nome}: ${error.message}` : null;
+  }
+
   async function handleSave() {
-    if (pending.length === 0 || !token) return;
+    if (totalASalvar === 0 || !token) return;
 
     setPhase("saving");
     let ok = 0;
     const failures: string[] = [];
+    const salvos: { id: string; name: string; meta_ad_account_id: string }[] = [];
 
     for (const client of pending) {
       const assignment = assignments[client.id];
-      const page = inventory?.pages.find((item) => item.id === assignment.pageId);
-      const instagram =
-        inventory?.instagramAccounts.find((item) => item.id === assignment.instagramId) ?? pageInstagram(page);
-      const pageIdForLogo = page?.id || client.meta_page_id;
-
-      // Cofre primeiro: se falhar, o cliente nao fica marcado como conectado sem token.
-      try {
-        await guardarTokensMeta(client.id, { token, pageToken: page?.access_token });
-      } catch (err) {
-        failures.push(`${client.name}: ${errorMessage(err, "falha ao guardar o token")}`);
-        continue;
+      const falha = await vincular(
+        client.id,
+        client.name,
+        {
+          accountId: assignment.accountId,
+          page: inventory?.pages.find((item) => item.id === assignment.pageId),
+          instagram: inventory?.instagramAccounts.find((item) => item.id === assignment.instagramId),
+        },
+        client
+      );
+      if (falha) failures.push(falha);
+      else {
+        ok += 1;
+        salvos.push({ id: client.id, name: client.name, meta_ad_account_id: assignment.accountId });
       }
-
-      const { error } = await supabase
-        .from("clients")
-        .update({
-          meta_ad_account_id: assignment.accountId,
-          meta_page_id: page?.id ?? client.meta_page_id,
-          meta_page_name: page?.name ?? client.meta_page_name,
-          meta_instagram_account_id: instagram?.id ?? client.meta_instagram_account_id,
-          meta_instagram_username: instagram?.username ?? client.meta_instagram_username,
-          meta_connected_at: new Date().toISOString(),
-          meta_last_sync_error: null,
-          meta_sync_status: "connected",
-          logo_url: pageIdForLogo ? metaPageLogoUrl(pageIdForLogo) : client.logo_url,
-        })
-        .eq("id", client.id);
-
-      if (error) failures.push(`${client.name}: ${error.message}`);
-      else ok += 1;
     }
 
+    let criados = 0;
+    for (const conta of novos) {
+      const nome = (conta.name || conta.id).trim();
+      setProgress(`Criando ${nome}...`);
+      const { data: novo, error } = await supabase
+        .from("clients")
+        .insert({ name: nome, status: "active", ...(empresa ? { company_id: empresa.id } : {}) })
+        .select("id")
+        .single();
+      if (error || !novo) {
+        failures.push(`${nome}: ${error?.message ?? "nao consegui criar o cliente"}`);
+        continue;
+      }
+      const page = inventory ? suggestByName(nome, inventory.pages, (item) => item.name) : null;
+      const instagram =
+        pageInstagram(page) ??
+        (inventory ? suggestByName(nome, inventory.instagramAccounts, (item) => item.username ?? item.id) : null);
+      const falha = await vincular(novo.id, nome, { accountId: semAct(conta.id), page, instagram });
+      if (falha) failures.push(falha);
+      else {
+        criados += 1;
+        salvos.push({ id: novo.id, name: nome, meta_ad_account_id: semAct(conta.id) });
+      }
+    }
+    setProgress("");
+
     if (ok > 0) toast.success(`${ok} cliente(s) vinculado(s) a Meta`);
+    if (criados > 0) toast.success(`${criados} cliente(s) criado(s) a partir das contas de anuncio`);
     if (failures.length > 0) {
       toast.error(`${failures.length} falharam ao salvar. ${failures[0]}`, { duration: 12000 });
     }
     onSaved();
 
-    const salvos = pending.filter((client) => !failures.some((f) => f.startsWith(`${client.name}:`)));
     if (!syncAfterSave || salvos.length === 0) {
       setPhase("mapping");
       if (failures.length === 0) {
@@ -252,16 +339,9 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
     }
 
     setPhase("syncing");
-    const resultado = await syncClientsSequentially(
-      salvos.map((client) => ({
-        id: client.id,
-        name: client.name,
-        meta_ad_account_id: assignments[client.id].accountId,
-      })),
-      {
-        onProgress: (name, done, total) => setProgress(name ? `${name} (${done + 1}/${total})` : ""),
-      }
-    );
+    const resultado = await syncClientsSequentially(salvos, {
+      onProgress: (name, done, total) => setProgress(name ? `${name} (${done + 1}/${total})` : ""),
+    });
 
     setReport(resultado);
     setPhase("report");
@@ -286,7 +366,8 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
         <DialogHeader className="shrink-0">
           <DialogTitle>Conectar Meta para varios clientes</DialogTitle>
           <DialogDescription>
-            Um login, uma varredura. Depois voce so escolhe qual conta pertence a qual cliente.
+            Um login, uma varredura. Voce escolhe qual conta pertence a qual cliente, e as contas que ainda nao tem
+            cliente viram cliente novo.
           </DialogDescription>
         </DialogHeader>
 
@@ -353,6 +434,54 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
             </div>
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              {contasSemCliente.length > 0 && (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">{contasSemCliente.length} conta(s) de anuncio sem cliente</p>
+                      <p className="text-xs text-muted-foreground">
+                        As marcadas viram cliente novo com o nome da conta, ja conectado. Pagina e Instagram vem pelo
+                        nome quando a Meta acha.
+                      </p>
+                    </div>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setCriar(Object.fromEntries(contasSemCliente.map((c) => [semAct(c.id), true])))}
+                      >
+                        Marcar todas
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => setCriar({})}>
+                        Nenhuma
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="grid gap-1 sm:grid-cols-2">
+                    {contasSemCliente.map((conta) => {
+                      const id = semAct(conta.id);
+                      return (
+                        <label
+                          key={id}
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-muted/50"
+                        >
+                          <Checkbox
+                            checked={Boolean(criar[id])}
+                            onCheckedChange={(v) => setCriar((prev) => ({ ...prev, [id]: Boolean(v) }))}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-sm">{conta.name || conta.id}</span>
+                          {conta.account_status !== CONTA_ATIVA && (
+                            <Badge variant="outline" className="shrink-0 text-[10px] text-muted-foreground">
+                              inativa
+                            </Badge>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {visibleClients.length === 0 && (
                 <p className="py-8 text-center text-sm text-muted-foreground">Nenhum cliente nesse filtro.</p>
               )}
@@ -417,10 +546,11 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-3">
               <div className="space-y-1">
                 <p className="text-xs text-muted-foreground">
-                  {pending.length === 0
+                  {totalASalvar === 0
                     ? "Nada para salvar ainda."
                     : [
-                        `${pending.length} cliente(s) a salvar`,
+                        pending.length > 0 ? `${pending.length} cliente(s) a salvar` : "",
+                        novos.length > 0 ? `${novos.length} cliente(s) novo(s)` : "",
                         reconectando > 0 ? `${reconectando} reconectando por token vencido` : "",
                       ]
                         .filter(Boolean)
@@ -437,8 +567,8 @@ export function BulkMetaConnectDialog({ open, onClose, clients, onSaved }: Props
                 <Button variant="outline" onClick={() => { reset(); onClose(); }}>
                   Cancelar
                 </Button>
-                <Button onClick={handleSave} disabled={pending.length === 0}>
-                  Salvar {pending.length > 0 ? `${pending.length} vinculo(s)` : ""}
+                <Button onClick={handleSave} disabled={totalASalvar === 0}>
+                  Salvar {totalASalvar > 0 ? `(${totalASalvar})` : ""}
                 </Button>
               </div>
             </div>
