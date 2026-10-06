@@ -1,5 +1,7 @@
 // Shared Claude Service for all AI Edge Functions
 // Features: retry, caching, rate limiting, token logging
+// Com OPENAI_API_KEY configurada, as chamadas vao para a OpenAI.
+import { limiteDeTokens, provedorLLM } from "./llm.ts";
 
 interface CacheEntry {
   data: string;
@@ -59,6 +61,35 @@ export interface ClaudeResponse {
   cached: boolean;
 }
 
+async function callOpenAI(
+  prompt: string,
+  systemPrompt?: string,
+  messages?: ClaudeMessage[]
+): Promise<{ content: string; tokens: { input: number; output: number } }> {
+  const ia = provedorLLM();
+  const response = await fetch(ia.url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${ia.key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: ia.model,
+      ...limiteDeTokens(ia, 4096),
+      messages: [
+        ...(systemPrompt ? [{ role: "system", content: systemPrompt }] : []),
+        ...(messages ?? []),
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(`${ia.nome} API error: ${data?.error?.message ?? response.statusText}`);
+  const content = data?.choices?.[0]?.message?.content;
+  if (typeof content !== "string" || !content.trim()) throw new Error(`${ia.nome} respondeu sem texto`);
+  return {
+    content,
+    tokens: { input: data.usage?.prompt_tokens ?? 0, output: data.usage?.completion_tokens ?? 0 },
+  };
+}
+
 async function callClaudeWithRetry(
   prompt: string,
   systemPrompt?: string,
@@ -66,6 +97,8 @@ async function callClaudeWithRetry(
   maxRetries = 3,
   retryDelay = 1000
 ): Promise<{ content: string; tokens: { input: number; output: number } }> {
+  if (Deno.env.get("OPENAI_API_KEY")) return callOpenAI(prompt, systemPrompt, messages);
+
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY não configurado");
 

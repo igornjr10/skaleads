@@ -1,15 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getUser, jsonResponse, ownsClient } from "../_shared/auth.ts";
 import { avaliarMeta, type MetricaDiaria, resultadosDoDia } from "../_shared/metas.ts";
+import { limiteDeTokens, provedorLLM } from "../_shared/llm.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-// A Groq desliga modelo com data marcada (o llama-3.3-70b-versatile morreu em
-// 16/08/2026). Como secret, trocar o modelo nao exige redeploy da function.
-const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
 
 interface Message {
   role: "user" | "assistant";
@@ -371,18 +368,16 @@ Como responder:
 - Se a pergunta pedir algo que não está nos dados, diga que não tem essa informação.
 - Use markdown (negrito, listas, tabelas curtas) em respostas longas.`;
 
-    const groqKey = Deno.env.get("GROQ_API_KEY");
-    if (!groqKey) throw new Error("GROQ_API_KEY não configurado");
-
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const ia = provedorLLM();
+    const response = await fetch(ia.url, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${groqKey}`,
+        "Authorization": `Bearer ${ia.key}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: GROQ_MODEL,
-        max_tokens: 4096,
+        model: ia.model,
+        ...limiteDeTokens(ia, 4096),
         messages: [
           { role: "system", content: systemPrompt },
           ...messages.map((m) => ({ role: m.role, content: m.content })),
@@ -392,7 +387,7 @@ Como responder:
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      throw new Error(`Groq API error: ${err.error?.message ?? response.statusText}`);
+      throw new Error(`${ia.nome} API error: ${err.error?.message ?? response.statusText}`);
     }
 
     const data = await response.json();
