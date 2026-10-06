@@ -173,18 +173,43 @@ export interface WhatsappGroup {
   pictureUrl: string | null;
 }
 
+// /group/list e paginado: so a primeira pagina cortava a lista de quem tem
+// muitos grupos. O teto de paginas protege contra hasMore que nunca desliga.
+const GRUPOS_POR_PAGINA = 100;
+const MAX_PAGINAS = 50;
+
 export async function listGroups(): Promise<WhatsappGroup[]> {
-  const result = await call("/group/list", { method: "POST", body: JSON.stringify({}) });
-  const list = Array.isArray(result) ? result : result?.groups;
-  if (!Array.isArray(list)) {
-    throw new Error(`uazapi respondeu 200 mas sem lista de grupos: ${JSON.stringify(result).slice(0, 400)}`);
+  const porId = new Map<string, WhatsappGroup>();
+  let offset = 0;
+
+  for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
+    const result = await call("/group/list", {
+      method: "POST",
+      body: JSON.stringify({ limit: GRUPOS_POR_PAGINA, offset, noParticipants: true }),
+    });
+    const list = Array.isArray(result) ? result : result?.groups;
+    if (!Array.isArray(list)) {
+      throw new Error(`uazapi respondeu 200 mas sem lista de grupos: ${JSON.stringify(result).slice(0, 400)}`);
+    }
+
+    // Grupo novo chegando no meio da paginacao desloca a lista e repete item.
+    for (const g of list) {
+      const id = g.id ?? g.JID ?? g.jid;
+      if (!id || porId.has(id)) continue;
+      porId.set(id, {
+        id,
+        subject: g.subject ?? g.name ?? g.Name ?? "(sem nome)",
+        size: g.size ?? g.participantsCount ?? 0,
+        pictureUrl: g.pictureUrl ?? g.profilePicUrl ?? null,
+      });
+    }
+
+    const paginacao = Array.isArray(result) ? null : result?.pagination;
+    if (!paginacao?.hasMore || list.length === 0) break;
+    offset = paginacao.nextOffset ?? offset + list.length;
   }
-  return list.map((g: any) => ({
-    id: g.id ?? g.JID ?? g.jid,
-    subject: g.subject ?? g.name ?? g.Name ?? "(sem nome)",
-    size: g.size ?? g.participantsCount ?? 0,
-    pictureUrl: g.pictureUrl ?? g.profilePicUrl ?? null,
-  }));
+
+  return [...porId.values()];
 }
 
 export function instanceStatus() {
