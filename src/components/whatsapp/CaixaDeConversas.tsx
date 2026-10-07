@@ -11,6 +11,16 @@ import type { Conversa } from "@/hooks/useConversas";
 import { errorMessage } from "@/lib/utils";
 import { formatarTelefone } from "@/lib/whatsapp";
 import { ChatThread } from "./ChatThread";
+import { ehMarcadorDeMidia, tipoDeMidia, type TipoMidia } from "@/lib/whatsapp-midia";
+
+const PREVIA_MIDIA: Record<TipoMidia, string> = {
+  audio: "Áudio", imagem: "Imagem", video: "Vídeo", documento: "Documento", figurinha: "Figurinha",
+};
+
+function previa(texto: string | null, tipo: string | null) {
+  const midia = tipoDeMidia(tipo);
+  return midia && ehMarcadorDeMidia(texto) ? PREVIA_MIDIA[midia] : texto;
+}
 
 interface LeadResumo { id: string; contato_nome: string; empresa: string | null; cidade: string | null; segmento: string | null }
 
@@ -121,7 +131,7 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                    {c.ultima.direcao === "saida" ? "Você: " : c.ultima.remetente ? `${c.ultima.remetente}: ` : ""}{c.ultima.texto}
+                    {c.ultima.direcao === "saida" ? "Você: " : c.ultima.remetente ? `${c.ultima.remetente}: ` : ""}{previa(c.ultima.texto, c.ultima.tipo)}
                   </span>
                   {c.grupo
                     ? <Badge variant="outline" className="shrink-0 text-[9px]">grupo</Badge>

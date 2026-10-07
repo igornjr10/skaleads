@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { enviarWhatsapp, type MensagemWa } from "@/hooks/useConversas";
 import { type DadosDoLead, preencherModelo } from "@/lib/whatsapp";
+import { ehMarcadorDeMidia, tipoDeMidia } from "@/lib/whatsapp-midia";
+import { MidiaWa } from "./MidiaWa";
 
 const ORIGEM: Record<string, string> = {
   disparo: "disparo",
@@ -97,6 +99,7 @@ export function ChatThread({ chave, leadId, lead, onEnviada, altura = "h-[420px]
               const dia = parseISO(m.enviada_em);
               const novoDia = i === 0 || !isSameDay(parseISO(mensagens[i - 1].enviada_em), dia);
               const minha = m.direcao === "saida";
+              const midia = m.messageid ? tipoDeMidia(m.tipo) : null;
               return (
                 <div key={m.id}>
                   {novoDia && (
@@ -111,7 +114,10 @@ export function ChatThread({ chave, leadId, lead, onEnviada, altura = "h-[420px]
                       {!minha && m.remetente && (
                         <p className="mb-0.5 text-[11px] font-semibold text-primary">{m.remetente}</p>
                       )}
-                      <p className="whitespace-pre-wrap break-words">{m.texto}</p>
+                      {midia && <MidiaWa mensagemId={m.id} tipo={midia} />}
+                      {!(midia && ehMarcadorDeMidia(m.texto)) && (
+                        <p className={`whitespace-pre-wrap break-words ${midia ? "mt-1" : ""}`}>{m.texto}</p>
+                      )}
                       <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
                         {ORIGEM[m.origem] && <span>{ORIGEM[m.origem]} ·</span>}
                         {format(dia, "HH:mm")}
