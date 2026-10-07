@@ -136,7 +136,7 @@ serve(async (req) => {
     if (!companyId) return json({ error: "Você não está vinculado a nenhuma empresa" }, 400);
 
     if (action === "list") {
-      const links = await db(`user_companies?company_id=eq.${companyId}&select=user_id,modulos`);
+      const links = await db(`user_companies?company_id=eq.${companyId}&select=user_id,modulos,whatsapp`);
       const ids: string[] = (links ?? []).map((l: { user_id: string }) => l.user_id);
       if (ids.length === 0) return json({ members: [] });
 
@@ -148,7 +148,7 @@ serve(async (req) => {
       ]);
 
       const pendentes = await Promise.all(ids.map(nuncaEntrou));
-      const members = (links ?? []).map((l: { user_id: string; modulos: string[] | null }) => {
+      const members = (links ?? []).map((l: { user_id: string; modulos: string[] | null; whatsapp: string | null }) => {
         const perfil = (perfis ?? []).find((p: { id: string }) => p.id === l.user_id);
         const dele = (papeis ?? []).filter((r: { user_id: string }) => r.user_id === l.user_id).map((r: { role: string }) => r.role);
         return {
@@ -157,6 +157,7 @@ serve(async (req) => {
           full_name: perfil?.full_name ?? null,
           role: papelMaisForte(dele),
           modulos: l.modulos,
+          whatsapp: l.whatsapp,
           pendente: pendentes[ids.indexOf(l.user_id)],
           client_ids: (atribuicoes ?? [])
             .filter((a: { user_id: string }) => a.user_id === l.user_id)
@@ -247,9 +248,11 @@ serve(async (req) => {
     if (action === "update" || action === "remove") {
       const userId = body.user_id;
       if (!isUuid(userId)) return json({ error: "user_id inválido" }, 400);
-      if (userId === caller.id) return json({ error: "Você não pode alterar o próprio acesso" }, 400);
+      // So o WhatsApp nao mexe em acesso: o ADM cadastra o proprio e o do dono.
+      const soWhatsapp = action === "update" && Object.keys(body).every(k => ["action", "user_id", "company_id", "whatsapp"].includes(k));
+      if (userId === caller.id && !soWhatsapp) return json({ error: "Você não pode alterar o próprio acesso" }, 400);
       if (!(await vinculo(companyId, userId))) return json({ error: "Essa pessoa não é da sua equipe" }, 404);
-      if ((await papelDe(userId)) === "owner") return json({ error: "O dono da plataforma não é alterado por aqui" }, 403);
+      if (!soWhatsapp && (await papelDe(userId)) === "owner") return json({ error: "O dono da plataforma não é alterado por aqui" }, 403);
 
       if (action === "remove") {
         await definirClientes(companyId, userId, []);
@@ -270,6 +273,15 @@ serve(async (req) => {
           method: "PATCH",
           headers: { Prefer: "return=minimal" },
           body: JSON.stringify({ modulos }),
+        });
+      }
+      if ("whatsapp" in body) {
+        const digitos = String(body.whatsapp ?? "").replace(/\D/g, "");
+        if (digitos && (digitos.length < 10 || digitos.length > 13)) return json({ error: "WhatsApp inválido" }, 400);
+        await db(`user_companies?company_id=eq.${companyId}&user_id=eq.${userId}`, {
+          method: "PATCH",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ whatsapp: digitos || null }),
         });
       }
       if ("client_ids" in body) {

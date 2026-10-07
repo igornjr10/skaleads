@@ -4,6 +4,7 @@ import { ptBR } from "date-fns/locale";
 import {
   CalendarCheck,
   CalendarDays,
+  Columns3,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -13,6 +14,7 @@ import {
   Pencil,
   Plus,
   Repeat,
+  Settings2,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -39,39 +41,38 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { ClientAvatar } from "@/components/ClientAvatar";
 import { ReuniaoRelatorio } from "@/components/rotina/ReuniaoRelatorio";
+import {
+  SemanaPipeline,
+  chaveOcorrencia,
+  type ExecucaoRow,
+  type Ocorrencia,
+  type RotinaRow,
+} from "@/components/rotina/SemanaPipeline";
 import { useAuth } from "@/hooks/useAuth";
 import { errorMessage } from "@/lib/utils";
 import {
   DIAS_SEMANA,
+  PRIORIDADES,
   descreverRegra,
+  inicioDaSemana,
   isoLocal,
   ocorrenciasNoIntervalo,
+  prioridadeDe,
   somarDias,
   venceEm,
+  type StatusOcorrencia,
 } from "@/lib/rotinas";
 
-interface Rotina {
+type Rotina = RotinaRow;
+type Execucao = ExecucaoRow;
+
+interface Equipe {
   id: string;
-  titulo: string;
-  descricao: string | null;
-  client_id: string | null;
-  assigned_to: string | null;
-  periodicidade: string;
-  dias_semana: number[] | null;
-  dia_mes: number | null;
-  horario_limite: string | null;
-  ativa: boolean;
+  nome: string;
+  ordem: number;
 }
 
-interface Execucao {
-  id: string;
-  rotina_id: string;
-  data_ref: string;
-  done: boolean;
-  done_at: string | null;
-  done_by: string | null;
-  observacao: string | null;
-}
+const COLUNAS_EXECUCAO = "id, rotina_id, data_ref, done, status, mover_para, lembrete_wa_at, done_at, done_by, observacao";
 
 interface ClienteResumo {
   id: string;
@@ -88,6 +89,8 @@ interface Pessoa {
 
 const SEM_RESPONSAVEL = "sem-responsavel";
 const SEM_CLIENTE = "sem-cliente";
+const SEM_EQUIPE = "sem-equipe";
+const TODAS_EQUIPES = "todas";
 const JANELA_ADERENCIA = 7;
 
 const FORM_VAZIO = {
@@ -95,9 +98,12 @@ const FORM_VAZIO = {
   descricao: "",
   client_id: SEM_CLIENTE,
   assigned_to: SEM_RESPONSAVEL,
-  periodicidade: "diaria",
+  equipe_id: SEM_EQUIPE,
+  prioridade: "moderada",
+  periodicidade: "semanal",
   dias_semana: [1] as number[],
   dia_mes: "1",
+  data_pontual: "",
   horario_limite: "",
   ativa: true,
 };
@@ -113,8 +119,14 @@ export default function Rotina() {
   const [loading, setLoading] = useState(true);
   const [semTabela, setSemTabela] = useState(false);
 
-  const [modo, setModo] = useState<"dia" | "cadastro" | "compromissos">("dia");
+  const [modo, setModo] = useState<"semana" | "dia" | "cadastro" | "compromissos">("semana");
   const [dataSel, setDataSel] = useState(() => new Date());
+  const [inicioSemana, setInicioSemana] = useState(() => inicioDaSemana(new Date()));
+  const [equipes, setEquipes] = useState<Equipe[]>([]);
+  const [equipeSel, setEquipeSel] = useState(TODAS_EQUIPES);
+  const [gerindoEquipes, setGerindoEquipes] = useState(false);
+  const [novaEquipe, setNovaEquipe] = useState("");
+  const [lembreteEnviando, setLembreteEnviando] = useState<string | null>(null);
   const [soMinhas, setSoMinhas] = useState(false);
 
   const [editando, setEditando] = useState<Rotina | null>(null);
@@ -127,19 +139,20 @@ export default function Rotina() {
   const dataSelISO = isoLocal(dataSel);
   const hojeISO = isoLocal(hoje);
 
-  // A janela precisa cobrir os 7 dias da aderencia E a data que o usuario
-  // escolheu, que pode estar fora deles se ele navegou para tras ou para frente.
+  // A janela precisa cobrir os 7 dias da aderencia, a data e a semana que o
+  // usuario escolheu, que podem estar fora deles se ele navegou.
   const janela = useMemo(() => {
-    const inicioAderencia = somarDias(hoje, -(JANELA_ADERENCIA - 1));
-    const inicio = dataSel < inicioAderencia ? dataSel : inicioAderencia;
-    const fim = dataSel > hoje ? dataSel : hoje;
+    const fimSemana = somarDias(inicioSemana, 6);
+    const datas = [somarDias(hoje, -(JANELA_ADERENCIA - 1)), hoje, dataSel, inicioSemana, fimSemana];
+    const inicio = new Date(Math.min(...datas.map((d) => d.getTime())));
+    const fim = new Date(Math.max(...datas.map((d) => d.getTime())));
     return { inicio: isoLocal(inicio), fim: isoLocal(fim) };
-  }, [dataSel, hoje]);
+  }, [dataSel, hoje, inicioSemana]);
 
   const carregarExecucoes = useCallback(async (inicio: string, fim: string) => {
     const { data, error } = await supabase
       .from("rotina_execucoes")
-      .select("id, rotina_id, data_ref, done, done_at, done_by, observacao")
+      .select(COLUNAS_EXECUCAO)
       .gte("data_ref", inicio)
       .lte("data_ref", fim);
 
@@ -194,7 +207,46 @@ export default function Rotina() {
     setRotinas((rotinasRes.data as Rotina[]) ?? []);
     setClientes((clientesRes.data as ClienteResumo[]) ?? []);
     setPessoas(time);
+    await carregarEquipes();
     setLoading(false);
+  }
+
+  async function carregarEquipes(garantir = true) {
+    const { data, error } = await supabase.from("rotina_equipes").select("id, nome, ordem").order("ordem").order("nome");
+    if (error) return toast.error(errorMessage(error, "Nao foi possivel carregar as equipes"));
+    if ((data ?? []).length === 0 && garantir && podeGerenciar) {
+      await supabase.rpc("garantir_equipes_rotina");
+      return carregarEquipes(false);
+    }
+    setEquipes((data as Equipe[]) ?? []);
+  }
+
+  async function criarEquipe() {
+    const nome = novaEquipe.trim();
+    if (!nome) return;
+    const ordem = Math.max(0, ...equipes.map((e) => e.ordem)) + 1;
+    const { data, error } = await supabase.from("rotina_equipes").insert({ nome, ordem }).select("id, nome, ordem").single();
+    if (error) return toast.error(errorMessage(error, "Nao foi possivel criar a equipe"));
+    setEquipes((atual) => [...atual, data as Equipe]);
+    setNovaEquipe("");
+    toast.success(`Equipe ${nome} criada`);
+  }
+
+  async function renomearEquipe(equipe: Equipe, nome: string) {
+    nome = nome.trim();
+    if (!nome || nome === equipe.nome) return;
+    const { error } = await supabase.from("rotina_equipes").update({ nome }).eq("id", equipe.id);
+    if (error) return toast.error(errorMessage(error, "Nao foi possivel renomear"));
+    setEquipes((atual) => atual.map((e) => (e.id === equipe.id ? { ...e, nome } : e)));
+  }
+
+  async function excluirEquipe(equipe: Equipe) {
+    if (!window.confirm(`Excluir a equipe ${equipe.nome}? As demandas dela ficam sem equipe.`)) return;
+    const { error } = await supabase.from("rotina_equipes").delete().eq("id", equipe.id);
+    if (error) return toast.error(errorMessage(error, "Nao foi possivel excluir a equipe"));
+    setEquipes((atual) => atual.filter((e) => e.id !== equipe.id));
+    setRotinas((atual) => atual.map((r) => (r.equipe_id === equipe.id ? { ...r, equipe_id: null } : r)));
+    if (equipeSel === equipe.id) setEquipeSel(TODAS_EQUIPES);
   }
 
   const clientePorId = useMemo(() => new Map(clientes.map((c) => [c.id, c])), [clientes]);
@@ -208,11 +260,17 @@ export default function Rotina() {
 
   const ativas = useMemo(() => rotinas.filter((r) => r.ativa), [rotinas]);
 
+  const daEquipe = useCallback(
+    (r: Rotina) => equipeSel === TODAS_EQUIPES || r.equipe_id === equipeSel,
+    [equipeSel]
+  );
+
   const doDia = useMemo(() => {
     return ativas
+      .filter(daEquipe)
       .filter((r) => venceEm(r, dataSel))
       .filter((r) => (soMinhas ? r.assigned_to === user?.id : true));
-  }, [ativas, dataSel, soMinhas, user?.id]);
+  }, [ativas, daEquipe, dataSel, soMinhas, user?.id]);
 
   function casaRotina(r: Rotina) {
     return casaBusca(
@@ -225,7 +283,19 @@ export default function Rotina() {
   }
 
   const doDiaVisiveis = doDia.filter(casaRotina);
-  const rotinasVisiveis = rotinas.filter(casaRotina);
+  const rotinasVisiveis = rotinas.filter(daEquipe).filter(casaRotina);
+  const daSemana = ativas
+    .filter(daEquipe)
+    .filter((r) => (soMinhas ? r.assigned_to === user?.id : true))
+    .filter(casaRotina);
+
+  const resumoSemana = { pendente: 0, andamento: 0, concluida: 0 };
+  for (let i = 0; i < 7; i++) {
+    const dia = somarDias(inicioSemana, i);
+    for (const r of daSemana) {
+      if (venceEm(r, dia)) resumoSemana[execPorChave.get(`${r.id}|${isoLocal(dia)}`)?.status ?? "pendente"] += 1;
+    }
+  }
 
   function baixaDe(rotina: Rotina, dataISO = dataSelISO) {
     return execPorChave.get(`${rotina.id}|${dataISO}`);
@@ -298,6 +368,9 @@ export default function Rotina() {
       rotina_id: rotina.id,
       data_ref: dataSelISO,
       done,
+      status: done ? "concluida" : "pendente",
+      mover_para: anterior?.mover_para ?? null,
+      lembrete_wa_at: anterior?.lembrete_wa_at ?? null,
       done_at: done ? new Date().toISOString() : null,
       done_by: done ? user?.id ?? null : null,
       observacao: anterior?.observacao ?? null,
@@ -310,7 +383,7 @@ export default function Rotina() {
         { rotina_id: rotina.id, data_ref: dataSelISO, done, observacao: anterior?.observacao ?? null },
         { onConflict: "rotina_id,data_ref" }
       )
-      .select("id, rotina_id, data_ref, done, done_at, done_by, observacao")
+      .select(COLUNAS_EXECUCAO)
       .single();
 
     if (error) {
@@ -338,7 +411,7 @@ export default function Rotina() {
         { rotina_id: rotina.id, data_ref: dataSelISO, done: anterior?.done ?? false, observacao: texto || null },
         { onConflict: "rotina_id,data_ref" }
       )
-      .select("id, rotina_id, data_ref, done, done_at, done_by, observacao")
+      .select(COLUNAS_EXECUCAO)
       .single();
 
     if (error) return toast.error(errorMessage(error, "Nao foi possivel salvar a observacao"));
@@ -349,8 +422,111 @@ export default function Rotina() {
     ]);
   }
 
-  function abrirNova() {
-    setForm(FORM_VAZIO);
+  function trocarExecucao(nova: Execucao) {
+    setExecucoes((atual) => [
+      ...atual.filter((e) => !(e.rotina_id === nova.rotina_id && e.data_ref === nova.data_ref)),
+      nova,
+    ]);
+  }
+
+  function execucaoBase(oc: Ocorrencia): Execucao {
+    return {
+      id: `tmp-${chaveOcorrencia(oc)}`,
+      rotina_id: oc.rotina.id,
+      data_ref: oc.dataRef,
+      done: false,
+      status: "pendente",
+      mover_para: null,
+      lembrete_wa_at: null,
+      done_at: null,
+      done_by: null,
+      observacao: null,
+      ...oc.execucao,
+    };
+  }
+
+  // Grava so os campos da mudanca: o upsert do PostgREST atualiza apenas as
+  // colunas enviadas, e o trigger mantem done e status em acordo.
+  async function gravarOcorrencia(oc: Ocorrencia, mudanca: Partial<Execucao>, erro: string) {
+    const anterior = oc.execucao;
+    trocarExecucao({
+      ...execucaoBase(oc),
+      ...mudanca,
+      ...(mudanca.status ? { done: mudanca.status === "concluida" } : {}),
+    });
+
+    const { data, error } = await supabase
+      .from("rotina_execucoes")
+      .upsert({ rotina_id: oc.rotina.id, data_ref: oc.dataRef, ...mudanca }, { onConflict: "rotina_id,data_ref" })
+      .select(COLUNAS_EXECUCAO)
+      .single();
+
+    if (error) {
+      setExecucoes((atual) => [
+        ...atual.filter((e) => !(e.rotina_id === oc.rotina.id && e.data_ref === oc.dataRef)),
+        ...(anterior ? [anterior] : []),
+      ]);
+      toast.error(errorMessage(error, erro));
+      return false;
+    }
+    trocarExecucao(data as Execucao);
+    return true;
+  }
+
+  function mudarStatus(oc: Ocorrencia, status: StatusOcorrencia) {
+    if (!podeDarBaixa(oc.rotina)) return toast.error("Esta demanda nao esta atribuida a voce");
+    gravarOcorrencia(oc, { status }, "Nao foi possivel mudar o status");
+  }
+
+  async function moverOcorrencia(oc: Ocorrencia, novaData: string) {
+    if (oc.rotina.periodicidade === "pontual") {
+      const backup = rotinas;
+      setRotinas((atual) => atual.map((r) => (r.id === oc.rotina.id ? { ...r, data_pontual: novaData } : r)));
+      const { error } = await supabase.from("rotinas").update({ data_pontual: novaData }).eq("id", oc.rotina.id);
+      if (error) {
+        setRotinas(backup);
+        toast.error(errorMessage(error, "Nao foi possivel mover a demanda"));
+      }
+      return;
+    }
+    // Recorrente: so esta ocorrencia muda de dia; a regra continua a mesma.
+    const ok = await gravarOcorrencia(
+      oc,
+      { mover_para: novaData === oc.dataRef ? null : novaData },
+      "Nao foi possivel mover a demanda"
+    );
+    if (ok) toast.success("Movida só nesta semana. A repetição continua a mesma.", { id: "movida-recorrente" });
+  }
+
+  async function enviarLembrete(oc: Ocorrencia) {
+    setLembreteEnviando(chaveOcorrencia(oc));
+    try {
+      const { data, error } = await supabase.functions.invoke("rotina-lembrete", {
+        body: { rotina_id: oc.rotina.id, data_ref: oc.dataRef },
+      });
+      if (error) {
+        // FunctionsHttpError esconde o corpo, e e nele que vem o motivo.
+        const detalhe = await (error as { context?: { json?: () => Promise<{ error?: string }> } })
+          .context?.json?.().catch(() => null);
+        throw new Error(detalhe?.error || error.message);
+      }
+      if (data?.error) throw new Error(data.error);
+      toast.success(`Lembrete enviado no WhatsApp de ${data?.responsavel || "responsável"}`);
+      trocarExecucao({ ...execucaoBase(oc), lembrete_wa_at: data?.enviado_em ?? new Date().toISOString() });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao enviar o lembrete", { duration: 8000 });
+    } finally {
+      setLembreteEnviando(null);
+    }
+  }
+
+  function abrirNova(dataISO?: string) {
+    const equipe = equipeSel === TODAS_EQUIPES ? SEM_EQUIPE : equipeSel;
+    setForm(
+      dataISO
+        ? { ...FORM_VAZIO, equipe_id: equipe, periodicidade: "pontual", data_pontual: dataISO }
+        : { ...FORM_VAZIO, equipe_id: equipe }
+    );
     setEditando(null);
     setCriando(true);
   }
@@ -361,9 +537,12 @@ export default function Rotina() {
       descricao: rotina.descricao ?? "",
       client_id: rotina.client_id ?? SEM_CLIENTE,
       assigned_to: rotina.assigned_to ?? SEM_RESPONSAVEL,
+      equipe_id: rotina.equipe_id ?? SEM_EQUIPE,
+      prioridade: rotina.prioridade ?? "moderada",
       periodicidade: rotina.periodicidade,
       dias_semana: rotina.dias_semana ?? [1],
       dia_mes: String(rotina.dia_mes ?? 1),
+      data_pontual: rotina.data_pontual ?? "",
       horario_limite: rotina.horario_limite?.slice(0, 5) ?? "",
       ativa: rotina.ativa,
     });
@@ -372,7 +551,8 @@ export default function Rotina() {
   }
 
   async function salvarRotina() {
-    if (!form.titulo.trim()) return toast.error("A rotina precisa de um titulo");
+    if (!form.titulo.trim()) return toast.error("A demanda precisa de um titulo");
+    if (form.periodicidade === "pontual" && !form.data_pontual) return toast.error("Escolha a data da demanda");
     // O CHECK do banco tambem barra, mas o erro que voltaria fala de constraint
     // em vez de dizer o que fazer.
     if (form.periodicidade === "semanal" && form.dias_semana.length === 0) {
@@ -387,7 +567,10 @@ export default function Rotina() {
       descricao: form.descricao.trim() || null,
       client_id: form.client_id === SEM_CLIENTE ? null : form.client_id,
       assigned_to: form.assigned_to === SEM_RESPONSAVEL ? null : form.assigned_to,
+      equipe_id: form.equipe_id === SEM_EQUIPE ? null : form.equipe_id,
+      prioridade: form.prioridade,
       periodicidade: form.periodicidade,
+      data_pontual: form.periodicidade === "pontual" ? form.data_pontual : null,
       dias_semana: form.periodicidade === "semanal" ? [...form.dias_semana].sort((a, b) => a - b) : null,
       dia_mes: form.periodicidade === "mensal" ? Number(form.dia_mes) : null,
       horario_limite: form.horario_limite || null,
@@ -409,10 +592,12 @@ export default function Rotina() {
     setRotinas((atual) => (editando ? atual.map((r) => (r.id === salva.id ? salva : r)) : [...atual, salva]));
     setCriando(false);
     setEditando(null);
-    toast.success(editando ? "Rotina atualizada" : "Rotina criada");
+    toast.success(editando ? "Demanda atualizada" : "Demanda criada");
   }
 
   async function excluirRotina(rotina: Rotina) {
+    const repete = rotina.periodicidade !== "pontual";
+    if (!window.confirm(`Excluir "${rotina.titulo}"${repete ? " e todas as repetições" : ""}?`)) return false;
     const backup = rotinas;
     setRotinas((atual) => atual.filter((r) => r.id !== rotina.id));
 
@@ -420,7 +605,9 @@ export default function Rotina() {
     if (error) {
       setRotinas(backup);
       toast.error(errorMessage(error, "Nao foi possivel excluir"));
+      return false;
     }
+    return true;
   }
 
   if (semTabela) {
@@ -449,18 +636,25 @@ export default function Rotina() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Rotina</h1>
             <p className="text-sm text-muted-foreground">
-              O que se repete todo dia, toda semana e todo mês — e quem está cumprindo. Aviso no sino às 8h.
+              A semana de cada equipe: demandas pontuais e recorrentes, quem cuida e em que pé está. Aviso no sino às 8h.
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className={`grid grid-cols-3 gap-3 ${modo === "compromissos" ? "hidden" : ""}`}>
-            {[
-              { label: "Feitas", valor: resumoDia.feitas, destaque: false },
-              { label: "Pendentes", valor: resumoDia.pendentes, destaque: false },
-              { label: "Atrasadas", valor: resumoDia.atrasadas, destaque: resumoDia.atrasadas > 0 },
-            ].map(({ label, valor, destaque }) => (
+          <div className={`grid grid-cols-3 gap-3 ${modo === "compromissos" || modo === "cadastro" ? "hidden" : ""}`}>
+            {(modo === "semana"
+              ? [
+                  { label: "Pendentes", valor: resumoSemana.pendente, destaque: false },
+                  { label: "Em andamento", valor: resumoSemana.andamento, destaque: false },
+                  { label: "Concluídas", valor: resumoSemana.concluida, destaque: false },
+                ]
+              : [
+                  { label: "Feitas", valor: resumoDia.feitas, destaque: false },
+                  { label: "Pendentes", valor: resumoDia.pendentes, destaque: false },
+                  { label: "Atrasadas", valor: resumoDia.atrasadas, destaque: resumoDia.atrasadas > 0 },
+                ]
+            ).map(({ label, valor, destaque }) => (
               <div
                 key={label}
                 className={`rounded-2xl border px-4 py-3 text-center ${
@@ -476,9 +670,9 @@ export default function Rotina() {
           </div>
 
           {podeGerenciar && (
-            <Button onClick={abrirNova} className="shrink-0">
+            <Button onClick={() => abrirNova()} className="shrink-0">
               <Plus className="mr-1.5 h-4 w-4" />
-              Nova rotina
+              Nova demanda
             </Button>
           )}
         </div>
@@ -487,14 +681,18 @@ export default function Rotina() {
       {!podeGerenciar && (
         <div className="flex items-center gap-2 rounded-2xl border border-border/60 bg-card/40 px-4 py-3 text-xs text-muted-foreground">
           <Lock className="h-3.5 w-3.5 shrink-0" />
-          Seu perfil ({role ?? "sem role"}) dá baixa nas rotinas atribuídas a você. Cadastrar e distribuir rotinas é de
-          owner/admin.
+          Seu perfil ({role ?? "sem role"}) muda o status, remaneja e pede lembrete das demandas atribuídas a você.
+          Cadastrar e distribuir demandas é de owner/admin.
         </div>
       )}
 
       {/* ── Controles ───────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="flex shrink-0 rounded-xl border border-border/60 p-0.5">
+        <div className="flex shrink-0 flex-wrap rounded-xl border border-border/60 p-0.5">
+          <Button variant={modo === "semana" ? "secondary" : "ghost"} size="sm" onClick={() => setModo("semana")}>
+            <Columns3 className="mr-1.5 h-4 w-4" />
+            Semana
+          </Button>
           <Button variant={modo === "dia" ? "secondary" : "ghost"} size="sm" onClick={() => setModo("dia")}>
             <CalendarDays className="mr-1.5 h-4 w-4" />
             Do dia
@@ -514,6 +712,37 @@ export default function Rotina() {
             </Button>
           )}
         </div>
+
+        {modo === "semana" && (
+          <>
+            <div className="flex items-center gap-1 rounded-xl border border-border/60 px-1 py-0.5">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setInicioSemana((d) => somarDias(d, -7))}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="min-w-[9.5rem] text-center text-sm font-medium">
+                {format(inicioSemana, "dd/MM")} a {format(somarDias(inicioSemana, 6), "dd/MM")}
+              </span>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setInicioSemana((d) => somarDias(d, 7))}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {isoLocal(inicioSemana) !== isoLocal(inicioDaSemana(hoje)) && (
+              <Button variant="outline" size="sm" onClick={() => setInicioSemana(inicioDaSemana(new Date()))}>
+                Esta semana
+              </Button>
+            )}
+
+            <Button
+              variant={soMinhas ? "default" : "outline"}
+              size="sm"
+              onClick={() => setSoMinhas((v) => !v)}
+              className="shrink-0"
+            >
+              Minhas demandas
+            </Button>
+          </>
+        )}
 
         {modo === "dia" && (
           <>
@@ -550,11 +779,45 @@ export default function Rotina() {
           <CampoBusca
             value={busca}
             onChange={setBusca}
-            placeholder="Buscar rotina, cliente ou responsável"
+            placeholder="Buscar demanda, cliente ou responsável"
             className="w-full lg:ml-auto lg:w-72"
           />
         )}
       </div>
+
+      {/* ── Equipes (abas) ──────────────────────────────────────────────── */}
+      {modo !== "compromissos" && (
+        <div className="flex items-center gap-1 overflow-x-auto border-b border-border/60">
+          {[{ id: TODAS_EQUIPES, nome: "Todas" }, ...equipes].map((e) => {
+            const ativa = equipeSel === e.id;
+            return (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => setEquipeSel(e.id)}
+                className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                  ativa
+                    ? "border-emerald-500 text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {e.nome}
+              </button>
+            );
+          })}
+          {podeGerenciar && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="ml-1 shrink-0 text-muted-foreground"
+              onClick={() => setGerindoEquipes(true)}
+            >
+              <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+              Equipes
+            </Button>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">
@@ -562,6 +825,23 @@ export default function Rotina() {
             <Skeleton key={i} className="h-16 rounded-2xl" />
           ))}
         </div>
+      ) : modo === "semana" ? (
+        <SemanaPipeline
+          inicioSemana={inicioSemana}
+          hojeISO={hojeISO}
+          rotinas={daSemana}
+          execPorChave={execPorChave}
+          nomeDaPessoa={(id) => pessoaPorId.get(id)?.nome}
+          clientePorId={clientePorId}
+          podeGerenciar={podeGerenciar}
+          podeDarBaixa={podeDarBaixa}
+          lembreteEnviando={lembreteEnviando}
+          onStatus={mudarStatus}
+          onMover={moverOcorrencia}
+          onEditar={abrirEdicao}
+          onNova={abrirNova}
+          onLembrete={enviarLembrete}
+        />
       ) : modo === "dia" ? (
         <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
           {/* ── Rotinas do dia ──────────────────────────────────────── */}
@@ -705,6 +985,10 @@ export default function Rotina() {
               className="grid grid-cols-1 gap-2 border-b border-border/40 px-4 py-3 last:border-0 lg:grid-cols-[2fr_1fr_1fr_1fr_auto] lg:items-center lg:gap-3"
             >
               <div className="flex items-center gap-2">
+                <span
+                  className={`h-2 w-2 shrink-0 rounded-full ${prioridadeDe(rotina.prioridade).ponto}`}
+                  title={`Prioridade ${prioridadeDe(rotina.prioridade).label.toLowerCase()}`}
+                />
                 <span className={`truncate text-sm font-medium ${rotina.ativa ? "" : "text-muted-foreground"}`}>
                   {rotina.titulo}
                 </span>
@@ -715,7 +999,12 @@ export default function Rotina() {
                 )}
               </div>
 
-              <span className="text-xs text-muted-foreground">{descreverRegra(rotina)}</span>
+              <span className="text-xs text-muted-foreground">
+                {descreverRegra(rotina)}
+                {equipeSel === TODAS_EQUIPES && rotina.equipe_id && (
+                  <span className="block text-[11px]">{equipes.find((e) => e.id === rotina.equipe_id)?.nome}</span>
+                )}
+              </span>
               <span className="truncate text-xs text-muted-foreground">
                 {rotina.assigned_to ? pessoaPorId.get(rotina.assigned_to)?.nome ?? "—" : "Sem responsável"}
               </span>
@@ -762,10 +1051,10 @@ export default function Rotina() {
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editando ? "Editar rotina" : "Nova rotina"}</DialogTitle>
+            <DialogTitle>{editando ? "Editar demanda" : "Nova demanda"}</DialogTitle>
             <DialogDescription>
-              Algo que se repete. O responsável é avisado no sino ao ser atribuído e toda manhã, às 8h, se a rotina
-              vencer no dia e ainda estiver pendente.
+              Pontual ou recorrente. O responsável é avisado no sino ao ser atribuído e às 8h do dia em que a demanda
+              vence, se ainda estiver pendente.
             </DialogDescription>
           </DialogHeader>
 
@@ -781,14 +1070,62 @@ export default function Rotina() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <Label>Periodicidade</Label>
-                <Select value={form.periodicidade} onValueChange={(v) => setForm({ ...form, periodicidade: v })}>
+                <Label>Equipe</Label>
+                <Select value={form.equipe_id} onValueChange={(v) => setForm({ ...form, equipe_id: v })}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value={SEM_EQUIPE}>Sem equipe</SelectItem>
+                    {equipes.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Prioridade</Label>
+                <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                  {PRIORIDADES.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      aria-pressed={form.prioridade === p.id}
+                      onClick={() => setForm({ ...form, prioridade: p.id })}
+                      className={`flex h-9 items-center justify-center gap-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                        form.prioridade === p.id ? p.badge : "border-input text-muted-foreground hover:bg-accent"
+                      }`}
+                    >
+                      <span className={`h-2 w-2 rounded-full ${p.ponto}`} />
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label>Quando</Label>
+                <Select
+                  value={form.periodicidade}
+                  onValueChange={(v) =>
+                    setForm({
+                      ...form,
+                      periodicidade: v,
+                      data_pontual: v === "pontual" && !form.data_pontual ? isoLocal(new Date()) : form.data_pontual,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pontual">Uma vez (pontual)</SelectItem>
                     <SelectItem value="diaria">Todo dia</SelectItem>
-                    <SelectItem value="semanal">Toda semana</SelectItem>
+                    <SelectItem value="semanal">Dias da semana</SelectItem>
                     <SelectItem value="mensal">Todo mês</SelectItem>
                   </SelectContent>
                 </Select>
@@ -832,6 +1169,17 @@ export default function Rotina() {
                       Marque pelo menos um dia, senao a rotina nunca vence.
                     </p>
                   )}
+                </div>
+              )}
+
+              {form.periodicidade === "pontual" && (
+                <div>
+                  <Label>Data</Label>
+                  <Input
+                    type="date"
+                    value={form.data_pontual}
+                    onChange={(e) => setForm({ ...form, data_pontual: e.target.value })}
+                  />
                 </div>
               )}
 
@@ -922,25 +1270,91 @@ export default function Rotina() {
                 checked={form.ativa}
                 onCheckedChange={(v) => setForm({ ...form, ativa: v === true })}
               />
-              Rotina ativa
+              Demanda ativa
             </label>
           </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setCriando(false);
-                setEditando(null);
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={salvarRotina} disabled={salvando}>
-              {salvando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
-              {editando ? "Salvar" : "Criar rotina"}
-            </Button>
+          <DialogFooter className="gap-2 sm:justify-between">
+            {editando ? (
+              <Button
+                variant="ghost"
+                className="text-destructive hover:text-destructive"
+                onClick={async () => {
+                  if (await excluirRotina(editando)) {
+                    setCriando(false);
+                    setEditando(null);
+                  }
+                }}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                Excluir
+              </Button>
+            ) : (
+              <span />
+            )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setCriando(false);
+                  setEditando(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={salvarRotina} disabled={salvando}>
+                {salvando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                {editando ? "Salvar" : "Criar demanda"}
+              </Button>
+            </div>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Equipes ─────────────────────────────────────────────────────── */}
+      <Dialog open={gerindoEquipes} onOpenChange={setGerindoEquipes}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Equipes da rotina</DialogTitle>
+            <DialogDescription>Cada equipe vira uma aba. Renomeie direto no campo.</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            {equipes.map((e) => (
+              <div key={e.id} className="flex items-center gap-2">
+                <Input
+                  key={`${e.id}|${e.nome}`}
+                  defaultValue={e.nome}
+                  onBlur={(ev) => renomearEquipe(e, ev.target.value)}
+                  className="h-9"
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-9 w-9 shrink-0 text-destructive"
+                  title="Excluir equipe"
+                  onClick={() => excluirEquipe(e)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            ))}
+            {equipes.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma equipe ainda.</p>}
+          </div>
+
+          <form
+            className="flex gap-2 border-t border-border/60 pt-3"
+            onSubmit={(ev) => {
+              ev.preventDefault();
+              criarEquipe();
+            }}
+          >
+            <Input value={novaEquipe} onChange={(ev) => setNovaEquipe(ev.target.value)} placeholder="Nova equipe, ex.: Closer" />
+            <Button type="submit" disabled={!novaEquipe.trim()} className="shrink-0">
+              <Plus className="mr-1 h-4 w-4" />
+              Adicionar
+            </Button>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

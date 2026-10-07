@@ -1,11 +1,33 @@
-export type Periodicidade = "diaria" | "semanal" | "mensal";
+export type Periodicidade = "pontual" | "diaria" | "semanal" | "mensal";
 
 export interface RegraRotina {
   periodicidade: string;
   /** Dias da semana marcados (0=domingo), so em rotina semanal. */
   dias_semana: number[] | null;
   dia_mes: number | null;
+  /** Data (yyyy-MM-dd) da demanda pontual, que acontece uma vez so. */
+  data_pontual?: string | null;
 }
+
+export type Prioridade = "urgente" | "moderada" | "leve";
+
+export const PRIORIDADES: { id: Prioridade; label: string; ponto: string; borda: string; badge: string }[] = [
+  { id: "urgente", label: "Urgente", ponto: "bg-rose-500", borda: "border-l-rose-500", badge: "border-rose-500/40 bg-rose-500/10 text-rose-400" },
+  { id: "moderada", label: "Moderada", ponto: "bg-amber-400", borda: "border-l-amber-400", badge: "border-amber-400/40 bg-amber-400/10 text-amber-400" },
+  { id: "leve", label: "Leve", ponto: "bg-sky-400", borda: "border-l-sky-400", badge: "border-sky-400/40 bg-sky-400/10 text-sky-400" },
+];
+
+export function prioridadeDe(id: string | null | undefined) {
+  return PRIORIDADES.find((p) => p.id === id) ?? PRIORIDADES[1];
+}
+
+export type StatusOcorrencia = "pendente" | "andamento" | "concluida";
+
+export const STATUS_OCORRENCIA: { id: StatusOcorrencia; label: string; classe: string }[] = [
+  { id: "pendente", label: "Pendente", classe: "border-border/60 text-muted-foreground" },
+  { id: "andamento", label: "Em andamento", classe: "border-blue-500/40 bg-blue-500/10 text-blue-400" },
+  { id: "concluida", label: "Concluída", classe: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" },
+];
 
 export const DIAS_SEMANA = [
   { id: 0, curto: "Dom", label: "Domingo" },
@@ -30,7 +52,9 @@ export function diaEfetivoDoMes(diaMes: number, data: Date) {
   return Math.min(diaMes, diasNoMes(data.getFullYear(), data.getMonth()));
 }
 
+// Espelha public.rotina_vence_em. Mexeu aqui, mexa la.
 export function venceEm(regra: RegraRotina, data: Date): boolean {
+  if (regra.periodicidade === "pontual") return regra.data_pontual === isoLocal(data);
   if (regra.periodicidade === "diaria") return true;
   if (regra.periodicidade === "semanal") return regra.dias_semana?.includes(data.getDay()) ?? false;
   if (regra.periodicidade === "mensal") {
@@ -45,6 +69,13 @@ export function isoLocal(data: Date) {
   const mes = String(data.getMonth() + 1).padStart(2, "0");
   const dia = String(data.getDate()).padStart(2, "0");
   return `${data.getFullYear()}-${mes}-${dia}`;
+}
+
+/** Segunda-feira da semana da data, a 0h local. */
+export function inicioDaSemana(data: Date) {
+  const nova = new Date(data.getFullYear(), data.getMonth(), data.getDate());
+  nova.setDate(nova.getDate() - ((nova.getDay() + 6) % 7));
+  return nova;
 }
 
 export function somarDias(data: Date, dias: number) {
@@ -67,6 +98,11 @@ export function ocorrenciasNoIntervalo(regra: RegraRotina, inicio: Date, fim: Da
 }
 
 export function descreverRegra(regra: RegraRotina): string {
+  if (regra.periodicidade === "pontual") {
+    if (!regra.data_pontual) return "Uma vez";
+    const [, mes, dia] = regra.data_pontual.split("-");
+    return `Só em ${dia}/${mes}`;
+  }
   if (regra.periodicidade === "diaria") return "Todo dia";
   if (regra.periodicidade === "semanal") {
     const marcados = DIAS_SEMANA.filter((d) => regra.dias_semana?.includes(d.id));

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   descreverRegra,
   diaEfetivoDoMes,
+  inicioDaSemana,
   isoLocal,
   ocorrenciasNoIntervalo,
   venceEm,
@@ -129,5 +130,28 @@ describe("rotina semanal com varios dias", () => {
     const todos = { periodicidade: "semanal", dias_semana: [0, 1, 2, 3, 4, 5, 6], dia_mes: null };
     expect(descreverRegra(todos)).toBe("Todo dia");
     expect(venceEm(todos, new Date(2026, 8, 20))).toBe(true);
+  });
+});
+
+describe("demanda pontual", () => {
+  const pontual = { periodicidade: "pontual", dias_semana: null, dia_mes: null, data_pontual: "2026-10-07" };
+
+  it("vence so na data marcada", () => {
+    expect(venceEm(pontual, new Date(2026, 9, 7))).toBe(true);
+    expect(venceEm(pontual, new Date(2026, 9, 8))).toBe(false);
+    expect(ocorrenciasNoIntervalo(pontual, new Date(2026, 9, 1), new Date(2026, 9, 31))).toEqual(["2026-10-07"]);
+  });
+
+  it("descreve a data", () => {
+    expect(descreverRegra(pontual)).toBe("Só em 07/10");
+  });
+});
+
+describe("inicioDaSemana", () => {
+  it("volta para a segunda, inclusive do domingo", () => {
+    // 2026-10-07 e uma quarta; 2026-10-11, domingo.
+    expect(isoLocal(inicioDaSemana(new Date(2026, 9, 7, 15)))).toBe("2026-10-05");
+    expect(isoLocal(inicioDaSemana(new Date(2026, 9, 11)))).toBe("2026-10-05");
+    expect(isoLocal(inicioDaSemana(new Date(2026, 9, 5)))).toBe("2026-10-05");
   });
 });

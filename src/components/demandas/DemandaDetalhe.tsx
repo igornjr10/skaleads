@@ -84,6 +84,8 @@ export function DemandaDetalhe({
   const souQuemPediu = demanda.created_by === user?.id;
   const podeEditarTudo = isAdmin || souQuemPediu;
   const podeMover = podeEditarTudo || demanda.assigned_to === user?.id;
+  // Itens de etapa do Onboarding so se criam e apagam la; aqui so se marcam.
+  const checklistDoOnboarding = !!demanda.onboarding_fase;
   const nome = (uid: string | null) => (uid ? pessoaPorId.get(uid)?.nome ?? "Alguém" : "Sistema");
   const cliente = demanda.client_id ? clientePorId.get(demanda.client_id) : null;
 
@@ -341,7 +343,7 @@ export function DemandaDetalhe({
                     onCheckedChange={v => mudarChecklist(rascunho.checklist.map(i => (i.id === item.id ? { ...i, feito: !!v } : i)))}
                   />
                   <span className={`flex-1 text-sm ${item.feito ? "text-muted-foreground line-through" : ""}`}>{item.texto}</span>
-                  {podeMover && (
+                  {podeMover && !checklistDoOnboarding && (
                     <button
                       type="button"
                       aria-label="Tirar item"
@@ -355,7 +357,12 @@ export function DemandaDetalhe({
               ))}
               {rascunho.checklist.length === 0 && <p className="text-xs text-muted-foreground">Nenhum item ainda.</p>}
             </div>
-            {podeMover && (
+            {checklistDoOnboarding && (
+              <p className="text-[11px] text-muted-foreground">
+                Checklist da etapa no Onboarding do cliente: marcar aqui marca lá. Itens novos entram pela tela de Onboarding.
+              </p>
+            )}
+            {podeMover && !checklistDoOnboarding && (
               <form
                 className="flex gap-2"
                 onSubmit={e => {
