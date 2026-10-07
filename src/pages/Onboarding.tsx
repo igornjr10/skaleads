@@ -12,6 +12,7 @@ import {
   Search,
   Target,
   Trash2,
+  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -34,6 +35,17 @@ interface Cliente {
   created_at: string;
 }
 
+interface Pessoa {
+  id: string;
+  nome: string;
+}
+
+interface Responsavel {
+  client_id: string;
+  fase: string;
+  responsavel_id: string | null;
+}
+
 interface Tarefa {
   id: string;
   client_id: string;
@@ -52,12 +64,18 @@ const FASES = [
   { id: "geral", label: "Geral", icon: ClipboardList },
 ] as const;
 
+// Etapas que aparecem mesmo sem item, para ja dar para escolher o responsavel.
+const FASES_FIXAS = new Set<string>(["acessos", "rastreamento", "estrategia", "operacao"]);
+const SEM_RESPONSAVEL = "__ninguem__";
+
 export default function Onboarding() {
   const { role } = useAuth();
   const podeEditar = role === "owner" || role === "admin";
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
+  const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [loading, setLoading] = useState(true);
   const [semTabela, setSemTabela] = useState(false);
   const [busca, setBusca] = useState("");
@@ -73,13 +91,16 @@ export default function Onboarding() {
   async function carregar() {
     setLoading(true);
 
-    const [clientesRes, tarefasRes] = await Promise.all([
+    const [clientesRes, tarefasRes, responsaveisRes, perfisRes] = await Promise.all([
       supabase
         .from("clients")
         .select("id, name, logo_url, status, created_at")
         .neq("status", "archived")
         .order("created_at", { ascending: false }),
       supabase.from("client_tasks").select("id, client_id, fase, titulo, done, done_at, posicao").order("posicao"),
+      supabase.from("client_fase_responsaveis").select("client_id, fase, responsavel_id"),
+      // A RLS de profiles ja devolve so a equipe da empresa.
+      supabase.from("profiles").select("id, full_name, email"),
     ]);
 
     // A migration do planner pode nao ter rodado ainda neste ambiente.
@@ -91,6 +112,12 @@ export default function Onboarding() {
 
     setClientes((clientesRes.data as Cliente[]) ?? []);
     setTarefas((tarefasRes.data as Tarefa[]) ?? []);
+    setResponsaveis((responsaveisRes.data as Responsavel[]) ?? []);
+    setPessoas(
+      ((perfisRes.data ?? []) as { id: string; full_name: string | null; email: string | null }[])
+        .map((p) => ({ id: p.id, nome: p.full_name || p.email || p.id.slice(0, 8) }))
+        .sort((a, b) => a.nome.localeCompare(b.nome)),
+    );
     setLoading(false);
   }
 
@@ -103,6 +130,17 @@ export default function Onboarding() {
     }
     return mapa;
   }, [tarefas]);
+
+  const responsavelDe = useMemo(() => {
+    const mapa = new Map<string, string | null>();
+    for (const r of responsaveis) mapa.set(`${r.client_id}:${r.fase}`, r.responsavel_id);
+    return (clienteId: string, fase: string) => mapa.get(`${clienteId}:${fase}`) ?? null;
+  }, [responsaveis]);
+
+  const nomeDe = useMemo(() => {
+    const mapa = new Map(pessoas.map((p) => [p.id, p.nome]));
+    return (id: string | null) => (id ? mapa.get(id) ?? "Fora da equipe" : null);
+  }, [pessoas]);
 
   const porClienteRef = useRef(porCliente);
   porClienteRef.current = porCliente;
@@ -150,6 +188,26 @@ export default function Onboarding() {
       setTarefas((atual) => atual.map((t) => (t.id === tarefa.id ? { ...t, done: tarefa.done } : t)));
       toast.error(errorMessage(error, "Nao foi possivel atualizar o item"));
     }
+  }
+
+  // O banco cria (ou atualiza) a demanda da etapa e a coloca na fila de quem ficou com ela.
+  async function definirResponsavel(clienteId: string, fase: string, valor: string) {
+    const responsavel_id = valor === SEM_RESPONSAVEL ? null : valor;
+    const anterior = responsaveis;
+    setResponsaveis((atual) => [
+      ...atual.filter((r) => !(r.client_id === clienteId && r.fase === fase)),
+      { client_id: clienteId, fase, responsavel_id },
+    ]);
+    const { error } = await supabase
+      .from("client_fase_responsaveis")
+      .upsert({ client_id: clienteId, fase, responsavel_id }, { onConflict: "client_id,fase" });
+    if (error) {
+      setResponsaveis(anterior);
+      return toast.error(errorMessage(error, "Nao foi possivel trocar o responsavel"));
+    }
+    toast.success(
+      responsavel_id ? `Etapa com ${nomeDe(responsavel_id)}. A demanda já está na fila em Demandas.` : "Etapa sem responsável",
+    );
   }
 
   async function gerarChecklist(clienteId: string) {
@@ -322,6 +380,21 @@ export default function Onboarding() {
                     ) : (
                       <p className="mt-1 text-xs text-muted-foreground">Sem checklist ainda</p>
                     )}
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {FASES.filter((f) => FASES_FIXAS.has(f.id) || responsavelDe(cliente.id, f.id)).map((f) => {
+                        const nome = nomeDe(responsavelDe(cliente.id, f.id));
+                        return (
+                          <span
+                            key={f.id}
+                            className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                              nome ? "border-emerald-500/25 text-foreground/80" : "border-border/60 text-muted-foreground/70"
+                            }`}
+                          >
+                            {f.label}: {nome ?? "sem responsável"}
+                          </span>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {lista.length === 0 ? (
@@ -345,15 +418,16 @@ export default function Onboarding() {
                   )}
                 </button>
 
-                {expandido && lista.length > 0 && (
+                {expandido && (
                   <div className="border-t border-border/60 bg-background/40 p-5">
                     <div className="space-y-5">
-                      {FASES.filter((f) => lista.some((t) => t.fase === f.id)).map((fase) => {
+                      {FASES.filter((f) => FASES_FIXAS.has(f.id) || lista.some((t) => t.fase === f.id)).map((fase) => {
                         const itens = lista.filter((t) => t.fase === fase.id);
                         const Icone = fase.icon;
+                        const responsavel = responsavelDe(cliente.id, fase.id);
                         return (
                           <div key={fase.id}>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <Icone className="h-3.5 w-3.5 text-emerald-400" />
                               <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                                 {fase.label}
@@ -361,7 +435,33 @@ export default function Onboarding() {
                               <span className="text-[11px] tabular-nums text-muted-foreground/60">
                                 {itens.filter((t) => t.done).length}/{itens.length}
                               </span>
+                              <div className="ml-auto flex items-center gap-1.5">
+                                <UserRound className="h-3.5 w-3.5 text-muted-foreground" />
+                                {podeEditar ? (
+                                  <Select
+                                    value={responsavel ?? SEM_RESPONSAVEL}
+                                    onValueChange={(v) => definirResponsavel(cliente.id, fase.id, v)}
+                                  >
+                                    <SelectTrigger className="h-8 w-48 text-xs" aria-label={`Responsável por ${fase.label}`}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value={SEM_RESPONSAVEL}>Sem responsável</SelectItem>
+                                      {pessoas.map((p) => (
+                                        <SelectItem key={p.id} value={p.id}>
+                                          {p.nome}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">{nomeDe(responsavel) ?? "Sem responsável"}</span>
+                                )}
+                              </div>
                             </div>
+                            {itens.length === 0 && (
+                              <p className="mt-2 px-2 text-xs text-muted-foreground/70">Nenhum item nesta etapa.</p>
+                            )}
 
                             <div className="mt-2 space-y-1">
                               {itens.map((tarefa) => (

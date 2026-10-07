@@ -22,6 +22,8 @@ export interface Demanda {
   company_id: string | null;
   concluida_at: string | null;
   created_at: string;
+  /** Demanda de etapa do Onboarding: o checklist e o do Onboarding e anda junto. */
+  onboarding_fase?: string | null;
 }
 
 /** Linha de `tasks` vinda do banco: checklist chega como Json e pode ser qualquer coisa. */

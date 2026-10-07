@@ -682,6 +682,30 @@ export type Database = {
         }
         Relationships: []
       }
+      client_fase_responsaveis: {
+        Row: {
+          client_id: string
+          fase: string
+          responsavel_id: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          client_id: string
+          fase: string
+          responsavel_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          client_id?: string
+          fase?: string
+          responsavel_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           assigned_to: string | null
@@ -694,6 +718,7 @@ export type Database = {
           created_by: string | null
           descricao: string | null
           id: string
+          onboarding_fase: string | null
           prazo: string | null
           prioridade: string
           status: string
@@ -711,6 +736,7 @@ export type Database = {
           created_by?: string | null
           descricao?: string | null
           id?: string
+          onboarding_fase?: string | null
           prazo?: string | null
           prioridade?: string
           status?: string
@@ -728,6 +754,7 @@ export type Database = {
           created_by?: string | null
           descricao?: string | null
           id?: string
+          onboarding_fase?: string | null
           prazo?: string | null
           prioridade?: string
           status?: string
