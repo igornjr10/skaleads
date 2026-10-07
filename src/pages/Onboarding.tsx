@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   ChevronDown,
+  CheckCheck,
   ClipboardList,
   Database,
+  Loader2,
   KeyRound,
   ListChecks,
   Lock,
@@ -23,6 +25,16 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { ClientAvatar } from "@/components/ClientAvatar";
 import { useAuth } from "@/hooks/useAuth";
 import { errorMessage } from "@/lib/utils";
@@ -83,6 +95,9 @@ export default function Onboarding() {
   const [aberto, setAberto] = useState<Set<string>>(new Set());
   const [novoTitulo, setNovoTitulo] = useState<Record<string, string>>({});
   const [novaFase, setNovaFase] = useState<Record<string, string>>({});
+  // Concluir em massa nao tem desfazer de um clique: passa por confirmacao.
+  const [confirmarConclusao, setConfirmarConclusao] = useState<{ ids: string[]; titulo: string } | null>(null);
+  const [concluindo, setConcluindo] = useState(false);
 
   useEffect(() => {
     carregar();
@@ -179,6 +194,12 @@ export default function Onboarding() {
     };
   }, [clientes, porCliente, tarefas]);
 
+  // Respeita a busca e o filtro: "Concluir todas" age sobre o que esta na tela.
+  const comPendencia = useMemo(
+    () => visiveis.filter((c) => (porCliente.get(c.id) ?? []).some((t) => !t.done)),
+    [visiveis, porCliente],
+  );
+
   async function alternar(tarefa: Tarefa) {
     const novo = !tarefa.done;
     setTarefas((atual) => atual.map((t) => (t.id === tarefa.id ? { ...t, done: novo } : t)));
@@ -187,6 +208,34 @@ export default function Onboarding() {
     if (error) {
       setTarefas((atual) => atual.map((t) => (t.id === tarefa.id ? { ...t, done: tarefa.done } : t)));
       toast.error(errorMessage(error, "Nao foi possivel atualizar o item"));
+    }
+  }
+
+  // Um update so por lote: os triggers de client_tasks rodam por linha, entao done_at e a
+  // demanda de cada etapa ficam iguais ao que aconteceria marcando item por item.
+  async function concluirPendencias(clienteIds: string[]) {
+    setConcluindo(true);
+    const alvo = new Set(clienteIds);
+    const backup = tarefas;
+    setTarefas((atual) => atual.map((t) => (alvo.has(t.client_id) && !t.done ? { ...t, done: true } : t)));
+
+    try {
+      for (let i = 0; i < clienteIds.length; i += 100) {
+        const { error } = await supabase
+          .from("client_tasks")
+          .update({ done: true })
+          .in("client_id", clienteIds.slice(i, i + 100))
+          .eq("done", false);
+        if (error) throw error;
+      }
+      toast.success(clienteIds.length === 1 ? "Pendências concluídas" : `Pendências de ${clienteIds.length} clientes concluídas`);
+    } catch (error) {
+      setTarefas(backup);
+      toast.error(errorMessage(error, "Nao foi possivel concluir as pendencias"));
+      carregar();
+    } finally {
+      setConcluindo(false);
+      setConfirmarConclusao(null);
     }
   }
 
@@ -327,7 +376,54 @@ export default function Onboarding() {
             <SelectItem value="todos">Todos os clientes</SelectItem>
           </SelectContent>
         </Select>
+        {podeEditar && comPendencia.length > 0 && (
+          <Button
+            variant="outline"
+            className="shrink-0"
+            disabled={concluindo}
+            onClick={() =>
+              setConfirmarConclusao({
+                ids: comPendencia.map((c) => c.id),
+                titulo:
+                  comPendencia.length === 1
+                    ? `Concluir as pendências de ${comPendencia[0].name}?`
+                    : `Concluir as pendências dos ${comPendencia.length} clientes da lista?`,
+              })
+            }
+          >
+            <CheckCheck className="mr-1.5 h-4 w-4" />
+            Concluir todas
+          </Button>
+        )}
       </div>
+
+      <AlertDialog open={!!confirmarConclusao} onOpenChange={(v) => !v && !concluindo && setConfirmarConclusao(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmarConclusao?.titulo}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {(() => {
+                const ids = new Set(confirmarConclusao?.ids ?? []);
+                const n = tarefas.filter((t) => ids.has(t.client_id) && !t.done).length;
+                return `${n} ${n === 1 ? "item será marcado" : "itens serão marcados"} como feito. As demandas das etapas acompanham, como se cada item fosse marcado à mão.`;
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={concluindo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={concluindo}
+              onClick={(e) => {
+                e.preventDefault();
+                if (confirmarConclusao) concluirPendencias(confirmarConclusao.ids);
+              }}
+            >
+              {concluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Concluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Lista ───────────────────────────────────────────────────────── */}
       {loading ? (
@@ -353,70 +449,91 @@ export default function Onboarding() {
             const feitas = lista.filter((t) => t.done).length;
             const pct = lista.length ? Math.round((feitas / lista.length) * 100) : 0;
             const expandido = aberto.has(cliente.id);
+            const pendentes = lista.length - feitas;
 
             return (
               <Card key={cliente.id} className="overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => alternarAberto(cliente.id)}
-                  className="flex w-full items-center gap-4 p-5 text-left transition-colors hover:bg-white/[0.02]"
-                >
-                  <ClientAvatar name={cliente.name} logoUrl={cliente.logo_url} />
+                <div className="flex items-center gap-2 pr-5 transition-colors hover:bg-white/[0.02]">
+                  <button
+                    type="button"
+                    onClick={() => alternarAberto(cliente.id)}
+                    className="flex min-w-0 flex-1 items-center gap-4 p-5 text-left"
+                  >
+                    <ClientAvatar name={cliente.name} logoUrl={cliente.logo_url} />
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="truncate font-semibold">{cliente.name}</h3>
-                      {lista.length > 0 && pct === 100 && (
-                        <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                      )}
-                    </div>
-                    {lista.length > 0 ? (
-                      <div className="mt-2 flex items-center gap-3">
-                        <Progress value={pct} className="h-1.5 max-w-xs" />
-                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                          {feitas}/{lista.length}
-                        </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="truncate font-semibold">{cliente.name}</h3>
+                        {lista.length > 0 && pct === 100 && (
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                        )}
                       </div>
-                    ) : (
-                      <p className="mt-1 text-xs text-muted-foreground">Sem checklist ainda</p>
-                    )}
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {FASES.filter((f) => FASES_FIXAS.has(f.id) || responsavelDe(cliente.id, f.id)).map((f) => {
-                        const nome = nomeDe(responsavelDe(cliente.id, f.id));
-                        return (
-                          <span
-                            key={f.id}
-                            className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                              nome ? "border-emerald-500/25 text-foreground/80" : "border-border/60 text-muted-foreground/70"
-                            }`}
-                          >
-                            {f.label}: {nome ?? "sem responsável"}
+                      {lista.length > 0 ? (
+                        <div className="mt-2 flex items-center gap-3">
+                          <Progress value={pct} className="h-1.5 max-w-xs" />
+                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                            {feitas}/{lista.length}
                           </span>
-                        );
-                      })}
+                        </div>
+                      ) : (
+                        <p className="mt-1 text-xs text-muted-foreground">Sem checklist ainda</p>
+                      )}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {FASES.filter((f) => FASES_FIXAS.has(f.id) || responsavelDe(cliente.id, f.id)).map((f) => {
+                          const nome = nomeDe(responsavelDe(cliente.id, f.id));
+                          return (
+                            <span
+                              key={f.id}
+                              className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                nome ? "border-emerald-500/25 text-foreground/80" : "border-border/60 text-muted-foreground/70"
+                              }`}
+                            >
+                              {f.label}: {nome ?? "sem responsável"}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  </button>
 
-                  {lista.length === 0 ? (
-                    podeEditar && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          gerarChecklist(cliente.id);
-                        }}
-                      >
-                        Gerar checklist
-                      </Button>
-                    )
-                  ) : (
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expandido ? "rotate-180" : ""}`}
-                    />
-                  )}
-                </button>
+                    {lista.length === 0 ? (
+                      podeEditar && (
+                        <Button size="sm" variant="outline" className="shrink-0" onClick={() => gerarChecklist(cliente.id)}>
+                          Gerar checklist
+                        </Button>
+                      )
+                    ) : (
+                      <>
+                        {podeEditar && pendentes > 0 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0"
+                            disabled={concluindo}
+                            onClick={() =>
+                              setConfirmarConclusao({
+                                ids: [cliente.id],
+                                titulo: `Concluir as ${pendentes} pendências de ${cliente.name}?`,
+                              })
+                            }
+                          >
+                            <CheckCheck className="mr-1.5 h-4 w-4" />
+                            Concluir tudo
+                          </Button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => alternarAberto(cliente.id)}
+                          className="shrink-0 p-1"
+                          aria-label={expandido ? "Recolher" : "Expandir"}
+                        >
+                          <ChevronDown
+                            className={`h-4 w-4 text-muted-foreground transition-transform ${expandido ? "rotate-180" : ""}`}
+                          />
+                        </button>
+                      </>
+                    )}
+                </div>
 
                 {expandido && (
                   <div className="border-t border-border/60 bg-background/40 p-5">
