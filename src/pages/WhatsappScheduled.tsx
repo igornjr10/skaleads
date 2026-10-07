@@ -29,11 +29,33 @@ interface ScheduledMessage {
   send_time: string;
   is_active: boolean;
   last_sent_date: string | null;
+  dias_semana: number[] | null;
 }
 
 interface WaGroup {
   id: string;
   subject: string;
+}
+
+// 0 = domingo, como getDay() e a coluna dias_semana.
+const DIAS = [
+  { n: 0, curto: "D", nome: "Dom" },
+  { n: 1, curto: "S", nome: "Seg" },
+  { n: 2, curto: "T", nome: "Ter" },
+  { n: 3, curto: "Q", nome: "Qua" },
+  { n: 4, curto: "Q", nome: "Qui" },
+  { n: 5, curto: "S", nome: "Sex" },
+  { n: 6, curto: "S", nome: "Sáb" },
+];
+const TODOS_OS_DIAS = [0, 1, 2, 3, 4, 5, 6];
+const DIAS_UTEIS = [1, 2, 3, 4, 5];
+
+function descreverDias(dias: number[] | null): string {
+  const lista = [...(dias ?? TODOS_OS_DIAS)].sort();
+  if (lista.length === 7) return "Todo dia";
+  if (lista.join() === DIAS_UTEIS.join()) return "Seg a Sex";
+  if (lista.join() === "0,6") return "Fim de semana";
+  return lista.map(n => DIAS[n].nome).join(", ");
 }
 
 const DEFAULT_MESSAGE =
@@ -53,6 +75,7 @@ export default function WhatsappScheduled() {
   const [formMessage, setFormMessage] = useState(DEFAULT_MESSAGE);
   const [formTime, setFormTime] = useState("08:00");
   const [formGroups, setFormGroups] = useState<string[]>([]);
+  const [formDias, setFormDias] = useState<number[]>(TODOS_OS_DIAS);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -95,6 +118,7 @@ export default function WhatsappScheduled() {
     setFormMessage(DEFAULT_MESSAGE);
     setFormTime("08:00");
     setFormGroups([]);
+    setFormDias(TODOS_OS_DIAS);
   }
 
   function openCreateDialog() {
@@ -109,6 +133,7 @@ export default function WhatsappScheduled() {
     setFormMessage(item.message);
     setFormTime(item.send_time.slice(0, 5));
     setFormGroups(item.target_group_jids);
+    setFormDias(item.dias_semana ?? TODOS_OS_DIAS);
     setShowDialog(true);
   }
 
@@ -120,6 +145,7 @@ export default function WhatsappScheduled() {
     if (!formName.trim()) return toast.error("Dê um nome para identificar este agendamento");
     if (!formMessage.trim()) return toast.error("A mensagem não pode estar vazia");
     if (formGroups.length === 0) return toast.error("Selecione ao menos um grupo");
+    if (formDias.length === 0) return toast.error("Escolha ao menos um dia de envio");
 
     setSaving(true);
     const { data: session } = await supabase.auth.getSession();
@@ -128,6 +154,7 @@ export default function WhatsappScheduled() {
       message: formMessage.trim(),
       target_group_jids: formGroups,
       send_time: formTime,
+      dias_semana: [...formDias].sort(),
       is_active: true,
       created_by: session.session?.user.id,
     };
@@ -238,7 +265,7 @@ export default function WhatsappScheduled() {
                     <Badge variant={item.is_active ? "default" : "secondary"}>
                       {item.is_active ? "Ativo" : "Pausado"}
                     </Badge>
-                    <Badge variant="outline">Todo dia às {item.send_time.slice(0, 5)}</Badge>
+                    <Badge variant="outline">{descreverDias(item.dias_semana)} às {item.send_time.slice(0, 5)}</Badge>
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2">{item.message}</p>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -282,7 +309,7 @@ export default function WhatsappScheduled() {
         <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? "Editar agendamento" : "Novo agendamento"}</DialogTitle>
-            <DialogDescription>Mensagem recorrente enviada automaticamente todos os dias</DialogDescription>
+            <DialogDescription>Mensagem recorrente enviada automaticamente nos dias escolhidos</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 mt-2">
@@ -303,6 +330,33 @@ export default function WhatsappScheduled() {
             <div className="space-y-1">
               <Label className="text-xs">Horário de envio (America/Sao_Paulo)</Label>
               <Input type="time" value={formTime} onChange={e => setFormTime(e.target.value)} className="w-32" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Dias de envio</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {DIAS.map(d => {
+                  const ativo = formDias.includes(d.n);
+                  return (
+                    <button
+                      key={d.n}
+                      type="button"
+                      title={d.nome}
+                      onClick={() => setFormDias(prev => ativo ? prev.filter(x => x !== d.n) : [...prev, d.n])}
+                      className={`h-9 w-9 rounded-full border text-sm font-semibold transition-colors ${
+                        ativo ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {d.curto}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="flex gap-1">
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setFormDias(TODOS_OS_DIAS)}>Todo dia</Button>
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setFormDias(DIAS_UTEIS)}>Seg a Sex</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">{formDias.length ? descreverDias(formDias) : "Nenhum dia escolhido"}</p>
             </div>
 
             <div className="space-y-1.5">

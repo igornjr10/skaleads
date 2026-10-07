@@ -14,6 +14,7 @@ interface ScheduledMessage {
   send_time: string;
   is_active: boolean;
   last_sent_date: string | null;
+  dias_semana: number[] | null;
 }
 
 function dbGet(supabaseUrl: string, svcKey: string, path: string) {
@@ -52,7 +53,9 @@ function dbInsert(supabaseUrl: string, svcKey: string, table: string, body: obje
   });
 }
 
-function todayInSaoPaulo(): { dateStr: string; minutesOfDay: number } {
+const DIA_DA_SEMANA: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+
+function todayInSaoPaulo(): { dateStr: string; minutesOfDay: number; weekday: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/Sao_Paulo",
     year: "numeric",
@@ -61,12 +64,13 @@ function todayInSaoPaulo(): { dateStr: string; minutesOfDay: number } {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    weekday: "short",
   }).formatToParts(new Date());
 
   const get = (type: string) => parts.find(p => p.type === type)?.value ?? "00";
   const dateStr = `${get("year")}-${get("month")}-${get("day")}`;
   const minutesOfDay = parseInt(get("hour")) * 60 + parseInt(get("minute"));
-  return { dateStr, minutesOfDay };
+  return { dateStr, minutesOfDay, weekday: DIA_DA_SEMANA[get("weekday")] ?? new Date().getDay() };
 }
 
 function timeToMinutes(time: string): number {
@@ -169,7 +173,7 @@ serve(async (req) => {
     }
 
     // ── Modo cron: avalia todas as mensagens ativas ────────────────────────────
-    const { dateStr, minutesOfDay } = todayInSaoPaulo();
+    const { dateStr, minutesOfDay, weekday } = todayInSaoPaulo();
 
     const scheduled: ScheduledMessage[] = await dbGet(
       supabaseUrl, svcKey,
@@ -186,6 +190,7 @@ serve(async (req) => {
     for (const item of (scheduled || [])) {
       try {
         if (item.last_sent_date === dateStr) continue;
+        if (item.dias_semana && !item.dias_semana.includes(weekday)) continue;
         if (timeToMinutes(item.send_time) > minutesOfDay) continue;
         if (!item.target_group_jids || item.target_group_jids.length === 0) continue;
 

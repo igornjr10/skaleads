@@ -45,7 +45,7 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Demandas")).toBeInTheDocument();
     expect(screen.getByText("Envios")).toBeInTheDocument();
     expect(screen.queryByText("Planner")).not.toBeInTheDocument();
-    expect(screen.queryByText("Msgs WhatsApp")).not.toBeInTheDocument();
+    expect(screen.queryByText("WhatsApp")).not.toBeInTheDocument();
   });
 
   it("abre os filhos ao clicar na setinha, sem sair da pagina", () => {
