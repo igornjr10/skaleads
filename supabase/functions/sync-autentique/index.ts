@@ -4,10 +4,12 @@
 // deles. Isto so traz o que ja existe para o time ver a carteira inteira numa
 // tela e saber quem ainda nao assinou.
 //
-// Chamada pelo pg_cron com Authorization: Bearer <anon key> + x-cron-secret,
-// mesmo padrao do sync-meta-cron.
+// O token e por empresa (`autentique_config`, cadastrado pelo ADM na tela).
+// O pg_cron chama com x-cron-secret e varre todas as empresas; o botao
+// Sincronizar chama com o JWT do usuario e varre so a empresa dele.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { graphql, statusDoDocumento, acharCliente, type Documento } from "../_shared/autentique.ts";
+import { graphql, montarLinha, CAMPOS_DO_DOCUMENTO, type Documento } from "../_shared/autentique.ts";
+import { getUser, companyIdsOf } from "../_shared/auth.ts";
 
 const POR_PAGINA = 60;
 // A Autentique corta em 60 requisicoes por minuto. Com 60 documentos por
@@ -18,120 +20,116 @@ const QUERY = `
   query($page: Int!, $limit: Int!) {
     documents(page: $page, limit: $limit) {
       total
-      data {
-        id
-        name
-        created_at
-        signatures {
-          public_id
-          name
-          email
-          viewed { created_at }
-          signed { created_at }
-          rejected { created_at }
-        }
-        files { original signed }
-      }
+      data { ${CAMPOS_DO_DOCUMENTO} }
     }
   }
 `;
 
-function dbGet(url: string, key: string, path: string) {
-  return fetch(`${url}/rest/v1/${path}`, {
-    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-  }).then((r) => r.json());
+const cors = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+};
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 }
 
-async function rpc<T>(url: string, key: string, nome: string, args: object): Promise<T> {
-  const res = await fetch(`${url}/rest/v1/rpc/${nome}`, {
-    method: "POST",
+async function db<T>(url: string, key: string, path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${url}/rest/v1/${path}`, {
+    ...init,
     headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-    body: JSON.stringify(args),
   });
-  if (!res.ok) throw new Error(`${nome} falhou (${res.status}): ${await res.text().catch(() => "")}`);
+  if (!res.ok) throw new Error(`${path.split("?")[0]} falhou (${res.status}): ${await res.text().catch(() => "")}`);
   return (await res.json()) as T;
 }
 
-export function montarLinha(doc: Documento, clientes: Array<{ id: string; name: string }>) {
-  const assinaturas = doc.signatures ?? [];
-  const { status, assinadoEm } = statusDoDocumento(assinaturas);
-  return {
-    autentique_id: doc.id,
-    client_id: acharCliente(doc.name ?? "", clientes),
-    nome: doc.name ?? "(sem nome)",
-    status,
-    criado_em: doc.created_at,
-    assinado_em: assinadoEm,
-    arquivo_original: doc.files?.original ?? null,
-    arquivo_assinado: doc.files?.signed ?? null,
-    signatarios: assinaturas.map((a) => ({
-      nome: a.name,
-      email: a.email,
-      visto_em: a.viewed?.created_at ?? null,
-      assinado_em: a.signed?.created_at ?? null,
-      recusado_em: a.rejected?.created_at ?? null,
-    })),
-  };
+async function sincronizarEmpresa(url: string, key: string, empresa: string, token: string) {
+  const clientes = await db<Array<{ id: string; name: string }>>(
+    url, key, `clients?select=id,name&company_id=eq.${empresa}`
+  );
+
+  let pagina = 1;
+  let total = 0;
+  let gravados = 0;
+  let semCliente = 0;
+
+  while (pagina <= MAX_PAGINAS) {
+    const data = await graphql<{ documents: { total: number; data: Documento[] } }>(
+      token, QUERY, { page: pagina, limit: POR_PAGINA }
+    );
+    const lote = data.documents?.data ?? [];
+    total = data.documents?.total ?? total;
+    if (lote.length === 0) break;
+
+    const linhas = lote.map((doc) => montarLinha(doc, clientes));
+    semCliente += linhas.filter((l) => !l.client_id).length;
+    await db(url, key, "rpc/gravar_contratos", {
+      method: "POST",
+      body: JSON.stringify({ _company_id: empresa, _linhas: linhas }),
+    });
+    gravados += linhas.length;
+
+    if (lote.length < POR_PAGINA) break;
+    pagina += 1;
+  }
+
+  return { totalNaAutentique: total, gravados, semCliente };
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
-      },
-    });
-  }
-
-  const cronSecret = Deno.env.get("CRON_SECRET");
-  const chamadaDeCron = req.headers.get("x-cron-secret");
-  if (cronSecret && chamadaDeCron && chamadaDeCron !== cronSecret) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { "Content-Type": "application/json" } });
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
-  const token = Deno.env.get("AUTENTIQUE_TOKEN");
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  const chamadaDeCron = req.headers.get("x-cron-secret");
 
   try {
-    if (!token) throw new Error("AUTENTIQUE_TOKEN nao configurado nos secrets da function");
     if (!supabaseUrl || !svcKey) throw new Error("SUPABASE_URL / SVC_ROLE_KEY nao configurados");
 
-    const clientes: Array<{ id: string; name: string }> = await dbGet(
-      supabaseUrl, svcKey, "clients?select=id,name"
-    );
-
-    let pagina = 1;
-    let total = 0;
-    let gravados = 0;
-    let semCliente = 0;
-
-    while (pagina <= MAX_PAGINAS) {
-      const data = await graphql<{ documents: { total: number; data: Documento[] } }>(
-        token, QUERY, { page: pagina, limit: POR_PAGINA }
-      );
-      const lote = data.documents?.data ?? [];
-      total = data.documents?.total ?? total;
-      if (lote.length === 0) break;
-
-      const linhas = lote.map((doc) => montarLinha(doc, clientes));
-      semCliente += linhas.filter((l) => !l.client_id).length;
-      await rpc(supabaseUrl, svcKey, "gravar_contratos", { _linhas: linhas });
-      gravados += linhas.length;
-
-      if (lote.length < POR_PAGINA) break;
-      pagina += 1;
+    let filtro = "";
+    if (chamadaDeCron) {
+      if (!cronSecret || chamadaDeCron !== cronSecret) return json({ error: "Unauthorized" }, 401);
+    } else {
+      const user = await getUser(req);
+      if (!user) return json({ error: "Não autenticado" }, 401);
+      const empresas = await companyIdsOf(user.id);
+      if (empresas.length === 0) return json({ ok: false, error: "Usuário sem empresa" }, 403);
+      filtro = `&company_id=in.(${empresas.join(",")})`;
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, totalNaAutentique: total, gravados, semCliente }),
-      { headers: { "Content-Type": "application/json" } }
+    const configs = await db<Array<{ company_id: string; token: string }>>(
+      supabaseUrl, svcKey, `autentique_config?select=company_id,token${filtro}`
     );
+    if (configs.length === 0) {
+      if (chamadaDeCron) return json({ ok: true, empresas: 0 });
+      return json({ ok: false, error: "Token da Autentique não configurado. Use Configurar Autentique na tela de Contratos." });
+    }
+
+    // Uma empresa por vez: o limite de 60/min e por token, mas a function tem
+    // tempo contado e o volume aqui e pequeno.
+    const resultado: Record<string, unknown> = {};
+    let gravados = 0;
+    let semCliente = 0;
+    let totalNaAutentique = 0;
+    const erros: string[] = [];
+    for (const c of configs) {
+      try {
+        const r = await sincronizarEmpresa(supabaseUrl, svcKey, c.company_id, c.token);
+        resultado[c.company_id] = r;
+        gravados += r.gravados;
+        semCliente += r.semCliente;
+        totalNaAutentique += r.totalNaAutentique;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        resultado[c.company_id] = { error: msg };
+        erros.push(msg);
+      }
+    }
+
+    if (erros.length === configs.length) return json({ ok: false, error: erros[0], empresas: resultado }, 500);
+    return json({ ok: true, totalNaAutentique, gravados, semCliente, empresas: resultado });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });

@@ -13,3 +13,11 @@ verify_jwt = false
 # Quem chama e o servidor da uazapi, sem JWT; a function confere o token da instancia no corpo.
 [functions.wa-webhook]
 verify_jwt = false
+
+# Quem chama e a Autentique, sem JWT; a function confere o HMAC com o segredo da empresa.
+[functions.autentique-webhook]
+verify_jwt = false
+
+# Checa por conta propria: x-cron-secret no cron, sessao do usuario no botao Sincronizar.
+[functions.sync-autentique]
+verify_jwt = false
