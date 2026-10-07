@@ -228,7 +228,7 @@ export function instanceDisconnect() {
 /**
  * Liga o webhook da instancia no modo simples (um so, cria ou atualiza).
  * wasSentByApi fica de fora: o que o sistema envia ja e gravado por quem
- * enviou, e voltaria duplicado. Grupo tambem: a caixa e de conversa com lead.
+ * enviou, e voltaria duplicado. Grupo entra: aparece na caixa do Comercial.
  */
 export function configureWebhook(url: string) {
   return call("/webhook", {
@@ -237,7 +237,7 @@ export function configureWebhook(url: string) {
       url,
       enabled: true,
       events: ["messages", "messages_update"],
-      excludeMessages: ["wasSentByApi", "isGroupYes"],
+      excludeMessages: ["wasSentByApi"],
     }),
   });
 }

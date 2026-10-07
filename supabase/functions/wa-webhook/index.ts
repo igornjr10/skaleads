@@ -7,9 +7,13 @@ import { tokenDaInstancia } from "../_shared/whatsapp.ts";
 // prova a origem e o `token` da instancia que vem no corpo de todo evento.
 //
 // Responde 200 mesmo quando ignora o evento: erro faz a uazapi reenviar, e
-// grupo, canal ou numero sem cara de telefone nunca vao virar conversa.
+// canal ou numero sem cara de telefone nunca vao virar conversa.
+//
+// Grupo vira conversa com o JID como chave: nao casa com lead nem avisa
+// ninguem, so aparece na caixa com quem falou em cada mensagem.
 
-const IGNORAR_CHAT = /@(g\.us|newsletter|broadcast)$/;
+const IGNORAR_CHAT = /@(newsletter|broadcast)$/;
+const GRUPO = /@g\.us$/;
 
 let empresaEmCache: string | null = null;
 
@@ -38,12 +42,39 @@ function quando(ts: unknown): string {
   return new Date(n < 1e12 ? n * 1000 : n).toISOString();
 }
 
+async function registrarGrupo(body: any, m: any, chatid: string) {
+  const companyId = await empresaDoNumero();
+  if (!companyId) throw new Error("app_config.whatsapp_company_id nao configurado");
+  const entrada = !m.fromMe;
+
+  await inserir("wa_mensagens?on_conflict=messageid", {
+    company_id: companyId,
+    lead_id: null,
+    chave: chatid,
+    chatid,
+    telefone: null,
+    nome_contato: body.chat?.name || body.chat?.wa_name || m.groupName || null,
+    remetente: entrada ? (m.senderName || String(m.sender_pn ?? m.sender ?? "").split("@")[0] || null) : null,
+    messageid: m.messageid ?? m.id ?? null,
+    direcao: entrada ? "entrada" : "saida",
+    tipo: m.messageType ?? null,
+    texto: textoDa(m),
+    origem: entrada ? "contato" : "celular",
+    status: m.status ?? null,
+    enviada_em: quando(m.messageTimestamp),
+  }, false).catch((err) => {
+    if (!String(err).includes("23505")) throw err;
+  });
+  return "gravada (grupo)";
+}
+
 async function registrarMensagem(body: any) {
   const m = body.message;
-  if (!m || m.isGroup) return "ignorada: sem mensagem ou grupo";
+  if (!m) return "ignorada: sem mensagem";
 
   const chatid: string = m.chatid ?? body.chat?.wa_chatid ?? "";
-  if (IGNORAR_CHAT.test(chatid)) return "ignorada: grupo/canal";
+  if (IGNORAR_CHAT.test(chatid)) return "ignorada: canal/lista";
+  if (m.isGroup || GRUPO.test(chatid)) return registrarGrupo(body, m, chatid);
   // Chat por LID (id anonimo) nao tem o numero no id: usa o que vier resolvido.
   const origemNumero = chatid.endsWith("@lid")
     ? (m.sender_pn ?? body.chat?.phone ?? "")

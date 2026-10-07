@@ -50,6 +50,32 @@ serve(async (req) => {
       chave = lead.wa_chave;
       companyId = lead.company_id;
       if (!chave) return json({ error: "O lead não tem WhatsApp cadastrado" }, 400);
+    } else if (/@g\.us$/.test(String(body.chave ?? ""))) {
+      // Grupo: a chave e o proprio JID, e e para ele que a uazapi manda.
+      if (!(await hasAnyRole(user.id, ["owner", "admin", "sdr", "closer", "social_seller"]))) {
+        return json({ error: "Só o time comercial responde grupos" }, 403);
+      }
+      const jid = String(body.chave);
+      const [ultimaDoGrupo] = await comoUsuario<any[]>(
+        req,
+        `wa_mensagens?chave=eq.${encodeURIComponent(jid)}&select=company_id&limit=1`
+      );
+      if (!ultimaDoGrupo) return json({ error: "Grupo não encontrado" }, 404);
+
+      const enviado = await sendText(jid, texto);
+      const [mensagem] = await inserir<any[]>("wa_mensagens", {
+        company_id: ultimaDoGrupo.company_id,
+        chave: jid,
+        chatid: jid,
+        messageid: enviado?.messageid ?? enviado?.id ?? null,
+        direcao: "saida",
+        tipo: "text",
+        texto,
+        origem: "manual",
+        status: enviado?.status ?? "enviada",
+        autor_id: user.id,
+      });
+      return json({ mensagem });
     } else {
       chave = chaveTelefone(body.chave);
       if (!chave) return json({ error: "Informe o lead ou a conversa" }, 400);

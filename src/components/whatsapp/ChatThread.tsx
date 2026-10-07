@@ -108,6 +108,9 @@ export function ChatThread({ chave, leadId, lead, onEnviada, altura = "h-[420px]
                     <div className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${
                       minha ? "rounded-br-md bg-primary/15 text-foreground" : "rounded-bl-md bg-muted"
                     }`}>
+                      {!minha && m.remetente && (
+                        <p className="mb-0.5 text-[11px] font-semibold text-primary">{m.remetente}</p>
+                      )}
                       <p className="whitespace-pre-wrap break-words">{m.texto}</p>
                       <div className="mt-0.5 flex items-center justify-end gap-1 text-[10px] text-muted-foreground">
                         {ORIGEM[m.origem] && <span>{ORIGEM[m.origem]} ·</span>}
