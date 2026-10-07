@@ -26,6 +26,7 @@ interface Membro {
   full_name: string | null;
   role: string | null;
   modulos: string[] | null;
+  whatsapp: string | null;
   pendente: boolean;
   client_ids: string[];
 }
@@ -133,6 +134,12 @@ export function EquipeCard() {
     } finally {
       setOcupado(false);
     }
+  }
+
+  async function salvarWhatsapp(membro: Membro, valor: string) {
+    const digitos = valor.replace(/\D/g, "");
+    if (digitos === (membro.whatsapp ?? "")) return;
+    await atualizar(membro, { whatsapp: digitos || null }, digitos ? "WhatsApp salvo" : "WhatsApp removido");
   }
 
   async function salvarEdicao() {
@@ -280,6 +287,7 @@ export function EquipeCard() {
                   <TableHead>Papel</TableHead>
                   <TableHead>Clientes</TableHead>
                   <TableHead>Módulos</TableHead>
+                  <TableHead title="Recebe os lembretes da Rotina">WhatsApp</TableHead>
                   <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
@@ -319,6 +327,17 @@ export function EquipeCard() {
                       </TableCell>
                       <TableCell>{resumoClientes(m)}</TableCell>
                       <TableCell>{resumoModulos(m)}</TableCell>
+                      <TableCell>
+                        <Input
+                          key={`${m.user_id}|${m.whatsapp ?? ""}`}
+                          defaultValue={m.whatsapp ?? ""}
+                          onBlur={e => salvarWhatsapp(m, e.target.value)}
+                          placeholder="DDD + número"
+                          inputMode="tel"
+                          disabled={ocupado}
+                          className="h-9 w-40"
+                        />
+                      </TableCell>
                       <TableCell>
                         {!bloqueado && (
                           <Button
