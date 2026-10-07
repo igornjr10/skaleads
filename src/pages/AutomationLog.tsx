@@ -7,13 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import {
   Dialog,
   DialogContent,
@@ -94,6 +89,7 @@ export default function AutomationLog() {
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [selectedManagerIds, setSelectedManagerIds] = useState<string[]>([]);
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [buscaGrupo, setBuscaGrupo] = useState("");
 
   const [sendMode, setSendMode] = useState<"message" | "report">("message");
   const [messageText, setMessageText] = useState("");
@@ -361,14 +357,19 @@ export default function AutomationLog() {
               {loadingGroups ? (
                 <Loader2 className="h-4 w-4 animate-spin mt-2" />
               ) : (
+                <>
+                {(waGroups?.length ?? 0) > 6 && (
+                  <CampoBusca value={buscaGrupo} onChange={setBuscaGrupo} placeholder="Buscar grupo" className="mt-1" />
+                )}
                 <div className="space-y-1 mt-1 max-h-40 overflow-y-auto">
-                  {(waGroups ?? []).map(g => (
+                  {(waGroups ?? []).filter(g => selectedGroupIds.includes(g.id) || casaBusca(buscaGrupo, g.subject)).map(g => (
                     <label key={g.id} className="flex items-center gap-2 text-sm cursor-pointer">
                       <Checkbox checked={selectedGroupIds.includes(g.id)} onCheckedChange={() => toggleGroupSelected(g.id)} />
                       {g.subject}
                     </label>
                   ))}
                 </div>
+                </>
               )}
             </div>
           </CardContent>
@@ -409,12 +410,14 @@ export default function AutomationLog() {
             ) : (
               <div className="space-y-1">
                 <Label className="text-xs">Cliente</Label>
-                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
-                  <SelectTrigger className="text-sm"><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
-                  <SelectContent>
-                    {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={clients.map(c => ({ value: c.id, label: c.name }))}
+                  value={selectedClientId}
+                  onChange={setSelectedClientId}
+                  placeholder="Selecione o cliente"
+                  searchPlaceholder="Buscar cliente..."
+                  className="text-sm"
+                />
               </div>
             )}
 

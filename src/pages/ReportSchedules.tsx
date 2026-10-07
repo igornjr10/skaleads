@@ -23,6 +23,8 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Calendar, Trash2, FilePlus2 } from "lucide-react";
 import { RelatorioEditor } from "@/components/reports/RelatorioEditor";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -63,6 +65,7 @@ export default function ReportSchedules() {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
+  const [busca, setBusca] = useState("");
 
   // Form state
   const [formClientId, setFormClientId] = useState("");
@@ -144,6 +147,8 @@ export default function ReportSchedules() {
     setSaving(false);
   }
 
+  const visiveis = schedules.filter(s => casaBusca(busca, s.clients?.name));
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -170,7 +175,8 @@ export default function ReportSchedules() {
         </TabsContent>
 
         <TabsContent value="agendamentos" className="mt-5 space-y-4">
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar cliente" className="max-w-sm flex-1" />
             <Button onClick={() => setShowDialog(true)}>
               <Plus className="mr-2 h-4 w-4" />
               Novo Agendamento
@@ -197,7 +203,10 @@ export default function ReportSchedules() {
             </Card>
           ) : (
             <div className="space-y-3">
-              {schedules.map(schedule => (
+              {visiveis.length === 0 && (
+                <p className="py-8 text-center text-sm text-muted-foreground">Nenhum agendamento encontrado</p>
+              )}
+              {visiveis.map(schedule => (
                 <Card key={schedule.id}>
                   <CardContent className="flex items-center gap-4 py-4">
                     <Calendar className="h-8 w-8 text-primary shrink-0" />
@@ -256,16 +265,14 @@ export default function ReportSchedules() {
           <div className="space-y-4 mt-2">
             <div className="space-y-1">
               <Label className="text-xs">Cliente</Label>
-              <Select value={formClientId} onValueChange={setFormClientId}>
-                <SelectTrigger className="text-sm">
-                  <SelectValue placeholder="Selecione o cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={clients.map(c => ({ value: c.id, label: c.name }))}
+                value={formClientId}
+                onChange={setFormClientId}
+                placeholder="Selecione o cliente"
+                searchPlaceholder="Buscar cliente..."
+                className="text-sm"
+              />
             </div>
 
             <div className="space-y-1">
