@@ -68,7 +68,7 @@ const NAV: NavNode[] = [
     title: "Envios", icon: Send,
     children: [
       { title: "Relatórios", url: "/report-schedules", icon: CalendarClock },
-      { title: "Msgs WhatsApp", url: "/whatsapp-scheduled", icon: WhatsAppIcon },
+      { title: "WhatsApp", url: "/whatsapp-scheduled", icon: WhatsAppIcon },
       { title: "Automações", url: "/automations", icon: Activity },
     ],
   },
