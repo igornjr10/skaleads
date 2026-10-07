@@ -151,6 +151,17 @@ export function sendText(number: string, text: string) {
   return call("/send/text", { method: "POST", body: JSON.stringify({ number, text }) });
 }
 
+/** URL publica da midia de uma mensagem recebida. A uazapi guarda por 2 dias e gera outra a cada chamada. */
+export async function downloadMedia(messageid: string): Promise<{ url: string; mimetype: string | null }> {
+  const r = await call("/message/download", {
+    method: "POST",
+    body: JSON.stringify({ id: messageid, generate_mp3: true }),
+  });
+  const url = r?.fileURL ?? r?.fileUrl ?? r?.url;
+  if (!url) throw new Error("A uazapi nao devolveu o arquivo dessa mensagem");
+  return { url, mimetype: r?.mimetype ?? null };
+}
+
 export function sendDocument(
   number: string,
   opts: { base64: string; fileName: string; caption?: string; mimetype?: string }
