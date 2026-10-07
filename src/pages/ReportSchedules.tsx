@@ -20,7 +20,9 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Calendar, Trash2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Calendar, Trash2, FilePlus2 } from "lucide-react";
+import { RelatorioEditor } from "@/components/reports/RelatorioEditor";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -144,82 +146,104 @@ export default function ReportSchedules() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Agendamentos de Relatórios</h1>
-          <p className="text-sm text-muted-foreground mt-1">Configure envio automático de relatórios via WhatsApp</p>
-        </div>
-        <Button onClick={() => setShowDialog(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Novo Agendamento
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">Relatórios para o cliente</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Monte relatórios personalizados (ou com IA a partir dos prints), exporte em PDF e agende o envio pelo WhatsApp
+        </p>
       </div>
 
-      {loading ? (
-        <div className="space-y-3">
-          {[1, 2].map(i => <Skeleton key={i} className="h-24" />)}
-        </div>
-      ) : schedules.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <Calendar className="h-10 w-10 text-muted-foreground mb-3" />
-            <p className="font-medium">Nenhum agendamento configurado</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Crie agendamentos para enviar relatórios automaticamente
-            </p>
-            <Button className="mt-4" onClick={() => setShowDialog(true)}>
+      <Tabs defaultValue="ia">
+        <TabsList>
+          <TabsTrigger value="ia" className="gap-1.5">
+            <FilePlus2 className="h-4 w-4" />
+            Criar relatório
+          </TabsTrigger>
+          <TabsTrigger value="agendamentos" className="gap-1.5">
+            <Calendar className="h-4 w-4" />
+            Agendamentos
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="ia" className="mt-5">
+          <RelatorioEditor />
+        </TabsContent>
+
+        <TabsContent value="agendamentos" className="mt-5 space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => setShowDialog(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Criar Agendamento
+              Novo Agendamento
             </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {schedules.map(schedule => (
-            <Card key={schedule.id}>
-              <CardContent className="flex items-center gap-4 py-4">
-                <Calendar className="h-8 w-8 text-primary shrink-0" />
+          </div>
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{schedule.clients?.name || "Cliente"}</p>
-                    <Badge variant={schedule.is_active ? "default" : "secondary"}>
-                      {schedule.is_active ? "Ativo" : "Pausado"}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{cronLabel(schedule.cron)}</p>
-                  <div className="flex items-center gap-1 mt-1">
-                    <WhatsAppIcon className="h-3 w-3 text-green-600" />
-                    <p className="text-xs text-muted-foreground truncate">
-                      Reenvia o relatório mais recente pro WhatsApp do cliente
-                    </p>
-                  </div>
-                  {schedule.last_run_at && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Último envio: {format(new Date(schedule.last_run_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-                  <Switch
-                    checked={schedule.is_active}
-                    onCheckedChange={() => toggleActive(schedule)}
-                  />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-destructive hover:text-destructive"
-                    onClick={() => deleteSchedule(schedule.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2].map(i => <Skeleton key={i} className="h-24" />)}
+            </div>
+          ) : schedules.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                <Calendar className="h-10 w-10 text-muted-foreground mb-3" />
+                <p className="font-medium">Nenhum agendamento configurado</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Crie agendamentos para enviar relatórios automaticamente
+                </p>
+                <Button className="mt-4" onClick={() => setShowDialog(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Criar Agendamento
+                </Button>
               </CardContent>
             </Card>
-          ))}
-        </div>
-      )}
+          ) : (
+            <div className="space-y-3">
+              {schedules.map(schedule => (
+                <Card key={schedule.id}>
+                  <CardContent className="flex items-center gap-4 py-4">
+                    <Calendar className="h-8 w-8 text-primary shrink-0" />
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{schedule.clients?.name || "Cliente"}</p>
+                        <Badge variant={schedule.is_active ? "default" : "secondary"}>
+                          {schedule.is_active ? "Ativo" : "Pausado"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{cronLabel(schedule.cron)}</p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <WhatsAppIcon className="h-3 w-3 text-green-600" />
+                        <p className="text-xs text-muted-foreground truncate">
+                          Reenvia o relatório mais recente pro WhatsApp do cliente
+                        </p>
+                      </div>
+                      {schedule.last_run_at && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Último envio: {format(new Date(schedule.last_run_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 shrink-0">
+                      <Switch
+                        checked={schedule.is_active}
+                        onCheckedChange={() => toggleActive(schedule)}
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => deleteSchedule(schedule.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Create dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>

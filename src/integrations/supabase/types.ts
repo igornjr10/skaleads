@@ -904,6 +904,36 @@ export type Database = {
         }
         Relationships: []
       }
+      relatorios_ia: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          dados: Json
+          id: string
+          periodo: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          dados: Json
+          id?: string
+          periodo?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          dados?: Json
+          id?: string
+          periodo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       crm_funis: {
         Row: {
           client_id: string | null
