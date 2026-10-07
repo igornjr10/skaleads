@@ -36,6 +36,7 @@ export interface DemandaAgencia {
   status: string;
   prazo: string | null;
   assigned_to: string | null;
+  categoria?: string | null;
 }
 
 export interface EntradaVisao {
@@ -160,6 +161,10 @@ export function montarVisaoAgencia(e: EntradaVisao) {
       abertas: abertas.length,
       atrasadas: abertas.filter(d => estaAtrasada(d, e.hoje)).length,
       emRevisao: abertas.filter(d => d.status === "revisao").length,
+      hoje: abertas.filter(d => d.prazo === e.hoje).length,
+      // Reuniao feita continua sendo a reuniao do dia: conta tambem as concluidas.
+      reunioesHoje: e.demandas.filter(d => d.categoria === "reuniao" && d.prazo === e.hoje).length,
+      reunioesHojeFeitas: e.demandas.filter(d => d.categoria === "reuniao" && d.prazo === e.hoje && !estaAberta(d)).length,
       carga: [...carga.entries()]
         .map(([pessoa, n]) => ({ pessoa, ...n }))
         .sort((a, b) => b.atrasadas - a.atrasadas || b.abertas - a.abertas),

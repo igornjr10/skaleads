@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -123,7 +124,9 @@ export default function Rotina() {
   const [dataSel, setDataSel] = useState(() => new Date());
   const [inicioSemana, setInicioSemana] = useState(() => inicioDaSemana(new Date()));
   const [equipes, setEquipes] = useState<Equipe[]>([]);
-  const [equipeSel, setEquipeSel] = useState(TODAS_EQUIPES);
+  // ?equipe=<id> vem do pipeline por setor da Visao da agencia.
+  const [searchParams] = useSearchParams();
+  const [equipeSel, setEquipeSel] = useState(() => searchParams.get("equipe") || TODAS_EQUIPES);
   const [gerindoEquipes, setGerindoEquipes] = useState(false);
   const [novaEquipe, setNovaEquipe] = useState("");
   const [lembreteEnviando, setLembreteEnviando] = useState<string | null>(null);
