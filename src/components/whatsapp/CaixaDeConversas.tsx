@@ -23,7 +23,7 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
   const { user } = useAuth();
   const [aberta, setAberta] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
-  const [filtro, setFiltro] = useState<"todas" | "nao_lidas" | "sem_lead">("todas");
+  const [filtro, setFiltro] = useState<"todas" | "nao_lidas" | "sem_lead" | "grupos">("todas");
   const [leads, setLeads] = useState<Map<string, LeadResumo>>(new Map());
   const [criando, setCriando] = useState(false);
 
@@ -35,6 +35,7 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
   }, [idsDeLead]);
 
   const nomeDe = (c: Conversa) => {
+    if (c.grupo) return c.nome || "Grupo";
     const l = c.leadId ? leads.get(c.leadId) : null;
     if (l) return l.empresa ? `${l.empresa} · ${l.contato_nome}` : l.contato_nome;
     return c.nome || formatarTelefone(c.telefone ?? c.chave);
@@ -42,7 +43,8 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
 
   const visiveis = conversas.filter(c => {
     if (filtro === "nao_lidas" && !c.naoLidas) return false;
-    if (filtro === "sem_lead" && c.leadId) return false;
+    if (filtro === "sem_lead" && (c.leadId || c.grupo)) return false;
+    if (filtro === "grupos" && !c.grupo) return false;
     const termo = busca.trim().toLowerCase();
     if (!termo) return true;
     const digitos = termo.replace(/\D/g, "");
@@ -95,7 +97,7 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
           <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar nome ou número" className="pl-9" />
         </div>
         <div className="flex gap-1">
-          {([["todas", "Todas"], ["nao_lidas", "Não lidas"], ["sem_lead", "Sem lead"]] as const).map(([id, rotulo]) => (
+          {([["todas", "Todas"], ["nao_lidas", "Não lidas"], ["sem_lead", "Sem lead"], ["grupos", "Grupos"]] as const).map(([id, rotulo]) => (
             <Button key={id} size="sm" variant={filtro === id ? "secondary" : "ghost"} onClick={() => setFiltro(id)}>{rotulo}</Button>
           ))}
         </div>
@@ -119,9 +121,11 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-                    {c.ultima.direcao === "saida" ? "Você: " : ""}{c.ultima.texto}
+                    {c.ultima.direcao === "saida" ? "Você: " : c.ultima.remetente ? `${c.ultima.remetente}: ` : ""}{c.ultima.texto}
                   </span>
-                  {!c.leadId && <Badge variant="outline" className="shrink-0 text-[9px]">sem lead</Badge>}
+                  {c.grupo
+                    ? <Badge variant="outline" className="shrink-0 text-[9px]">grupo</Badge>
+                    : !c.leadId && <Badge variant="outline" className="shrink-0 text-[9px]">sem lead</Badge>}
                   {c.naoLidas > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">{c.naoLidas}</span>}
                 </div>
               </button>
@@ -140,8 +144,8 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{nomeDe(atual)}</span>
-              <span className="text-xs text-muted-foreground">{formatarTelefone(atual.telefone ?? atual.chave)}</span>
-              {!atual.leadId && (
+              <span className="text-xs text-muted-foreground">{atual.grupo ? "Grupo do WhatsApp" : formatarTelefone(atual.telefone ?? atual.chave)}</span>
+              {!atual.leadId && !atual.grupo && (
                 <Button size="sm" variant="outline" className="ml-auto" onClick={() => virarLead(atual)} disabled={criando}>
                   {criando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <UserPlus className="mr-1.5 h-4 w-4" />} Virar lead
                 </Button>

@@ -1,21 +1,14 @@
 // Briefing por nicho: le o historico da carteira e diz por onde comecar.
 //
-// Roda na Groq, nao na Anthropic. O chat interno ja usava Groq e a chave ja
-// estava configurada; para um texto de meia pagina por clique nao compensa
-// depender de credito pago.
-//
-// A Groq desliga modelo com data marcada (o llama-3.3-70b-versatile morreu em
-// 16/08/2026). Como secret, trocar o modelo nao exige redeploy — mesmo padrao
-// do chat-assistant.
+// Mesmo provedor do chat-assistant (_shared/llm.ts): OpenAI, ou Groq sem ela.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard } from "../_shared/auth.ts";
+import { limiteDeTokens, provedorLLM } from "../_shared/llm.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-const GROQ_MODEL = Deno.env.get("GROQ_MODEL") ?? "openai/gpt-oss-120b";
 
 interface Benchmark {
   clientes: number;
@@ -321,8 +314,7 @@ serve(async (req) => {
       anuncios: num(f?.anuncios),
     }));
 
-    const groqKey = Deno.env.get("GROQ_API_KEY");
-    if (!groqKey) throw new Error("GROQ_API_KEY nao configurado");
+    const ia = provedorLLM();
 
     const segLabel = String(body.segmentLabel).slice(0, 80);
     const objLabel = String(body.goalLabel).slice(0, 80);
@@ -360,12 +352,12 @@ serve(async (req) => {
         ? montarPromptCliente(segLabel, objLabel, benchmark, cliente, criativos, formatos)
         : montarPrompt(segLabel, objLabel, benchmark, criativos, formatos);
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch(ia.url, {
       method: "POST",
-      headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${ia.key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: GROQ_MODEL,
-        max_tokens: 2048,
+        model: ia.model,
+        ...limiteDeTokens(ia, 2048),
         messages: [
           { role: "system", content: modoPauta ? SYSTEM_PAUTA : SYSTEM },
           { role: "user", content: prompt },
@@ -378,13 +370,13 @@ serve(async (req) => {
 
     if (!response.ok) {
       const err = await response.json().catch(() => null);
-      throw new Error(`Groq respondeu ${response.status}: ${err?.error?.message ?? response.statusText}`);
+      throw new Error(`${ia.nome} respondeu ${response.status}: ${err?.error?.message ?? response.statusText}`);
     }
 
     const data = await response.json();
     const briefing = data?.choices?.[0]?.message?.content;
     if (typeof briefing !== "string" || !briefing.trim()) {
-      throw new Error("A Groq respondeu 200 mas sem texto no briefing");
+      throw new Error(`${ia.nome} respondeu 200 mas sem texto no briefing`);
     }
 
     let pauta: unknown = null;

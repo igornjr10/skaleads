@@ -10,8 +10,11 @@ export interface MensagemWa {
   company_id: string;
   lead_id: string | null;
   chave: string;
+  chatid?: string | null;
   telefone: string | null;
   nome_contato: string | null;
+  /** Em grupo, quem mandou a mensagem. */
+  remetente?: string | null;
   messageid: string | null;
   direcao: string;
   tipo: string | null;
@@ -25,6 +28,7 @@ export interface MensagemWa {
 
 export interface Conversa {
   chave: string;
+  grupo: boolean;
   leadId: string | null;
   nome: string | null;
   telefone: string | null;
@@ -35,6 +39,8 @@ export interface Conversa {
 /** A caixa olha 90 dias; a conversa aberta carrega o historico inteiro do contato. */
 const DIAS = 90;
 
+export const ehGrupo = (chave: string) => chave.endsWith("@g.us");
+
 export function agruparConversas(mensagens: MensagemWa[]): Conversa[] {
   const porChave = new Map<string, Conversa>();
   for (const m of mensagens) {
@@ -42,7 +48,7 @@ export function agruparConversas(mensagens: MensagemWa[]): Conversa[] {
     const naoLida = m.direcao === "entrada" && !m.lida_em ? 1 : 0;
     if (!c) {
       porChave.set(m.chave, {
-        chave: m.chave, leadId: m.lead_id, nome: m.nome_contato, telefone: m.telefone, ultima: m, naoLidas: naoLida,
+        chave: m.chave, grupo: ehGrupo(m.chave), leadId: m.lead_id, nome: m.nome_contato, telefone: m.telefone, ultima: m, naoLidas: naoLida,
       });
       continue;
     }
