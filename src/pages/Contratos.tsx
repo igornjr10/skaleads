@@ -10,9 +10,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FileSignature, Loader2, RefreshCw, Search, Download, Link2, AlertCircle } from "lucide-react";
+import { FileSignature, Loader2, RefreshCw, Search, Download, Link2, AlertCircle, Settings2, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 interface Signatario {
   nome: string | null;
@@ -41,10 +51,20 @@ interface Cliente {
   name: string;
 }
 
+interface Situacao {
+  empresa: string | null;
+  token_configurado: boolean;
+  webhook_configurado: boolean;
+}
+
 // A tabela `contratos` e nova e os tipos gerados do Supabase estao atrasados em
 // relacao ao banco. O cast fica num lugar so, em vez de espalhado pela tela.
 const tabelaContratos = () =>
   (supabase.from as unknown as (t: string) => ReturnType<typeof supabase.from>)("contratos");
+const rpcSolta = supabase.rpc as unknown as (
+  fn: string,
+  args?: Record<string, unknown>
+) => Promise<{ data: unknown; error: { message: string } | null }>;
 
 const TOM: Record<Contrato["status"], { rotulo: string; classe: string; peso: number }> = {
   recusado: { rotulo: "Recusado", classe: "border-rose-200 bg-rose-50 text-rose-700", peso: 0 },
@@ -67,6 +87,10 @@ function situacao(s: Signatario): string {
 }
 
 export default function Contratos() {
+  const { role } = useAuth();
+  const ehAdm = role === "admin" || role === "owner";
+  const [situacao, setSituacao] = useState<Situacao | null>(null);
+  const [configurando, setConfigurando] = useState(false);
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -78,10 +102,12 @@ export default function Contratos() {
 
   async function carregar() {
     setCarregando(true);
-    const [c, cl] = await Promise.all([
+    const [c, cl, sit] = await Promise.all([
       tabelaContratos().select("*").order("criado_em", { ascending: false }),
       supabase.from("clients").select("id, name").order("name"),
+      rpcSolta("autentique_situacao"),
     ]);
+    setSituacao(((sit.data as Situacao[] | null) ?? [])[0] ?? null);
     setContratos((c.data as unknown as Contrato[]) ?? []);
     setClientes((cl.data as Cliente[]) ?? []);
     setCarregando(false);
@@ -145,11 +171,40 @@ export default function Contratos() {
             Espelho da Autentique. Criar e enviar continua sendo lá.
           </p>
         </div>
-        <Button onClick={sincronizar} disabled={sincronizando} variant="outline">
-          {sincronizando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-          Sincronizar
-        </Button>
+        <div className="flex items-center gap-2">
+          {ehAdm && (
+            <Button onClick={() => setConfigurando(true)} variant="ghost">
+              <Settings2 className="mr-2 h-4 w-4" />
+              Configurar Autentique
+            </Button>
+          )}
+          <Button onClick={sincronizar} disabled={sincronizando || situacao?.token_configurado === false} variant="outline">
+            {sincronizando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+            Sincronizar
+          </Button>
+        </div>
       </div>
+
+      {situacao && (!situacao.token_configurado || !situacao.webhook_configurado) && (
+        <Card className="border-amber-300 bg-amber-50/60 dark:bg-amber-950/20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <span>
+                {!situacao.token_configurado
+                  ? "A Autentique ainda não está conectada: sem o token da API nada é espelhado."
+                  : "Sem o webhook, os contratos só atualizam na varredura de 6 em 6 horas."}
+                {!ehAdm && " Peça para um ADM configurar."}
+              </span>
+            </div>
+            {ehAdm && (
+              <Button size="sm" onClick={() => setConfigurando(true)}>
+                {situacao.token_configurado ? "Configurar webhook" : "Conectar Autentique"}
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">
@@ -180,7 +235,9 @@ export default function Contratos() {
           <CardContent className="flex flex-col items-center gap-2 py-12 text-center text-sm text-muted-foreground">
             <AlertCircle className="h-5 w-5" />
             {contratos.length === 0
-              ? "Nenhum contrato ainda. Clique em Sincronizar para trazer o que já existe na Autentique."
+              ? situacao?.token_configurado === false
+                ? "Conecte a Autentique para trazer os contratos."
+                : "Nenhum contrato ainda. Clique em Sincronizar para trazer o que já existe na Autentique."
               : "Nenhum contrato com esse filtro."}
           </CardContent>
         </Card>
@@ -258,6 +315,127 @@ export default function Contratos() {
           ))}
         </div>
       )}
+
+      {ehAdm && situacao?.empresa && (
+        <ConfigurarAutentique
+          aberto={configurando}
+          aoFechar={() => setConfigurando(false)}
+          situacao={situacao}
+          aoSalvar={async (tokenNovo) => {
+            setConfigurando(false);
+            await carregar();
+            if (tokenNovo) await sincronizar();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function ConfigurarAutentique({
+  aberto,
+  aoFechar,
+  situacao,
+  aoSalvar,
+}: {
+  aberto: boolean;
+  aoFechar: () => void;
+  situacao: Situacao;
+  aoSalvar: (tokenNovo: boolean) => void;
+}) {
+  const [token, setToken] = useState("");
+  const [segredo, setSegredo] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  const urlWebhook = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autentique-webhook?empresa=${situacao.empresa}`;
+
+  async function salvar() {
+    setSalvando(true);
+    const { error } = await rpcSolta("configurar_autentique", {
+      _token: token.trim() || null,
+      _webhook_secret: segredo.trim() || null,
+    });
+    setSalvando(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Autentique configurada");
+    const tokenNovo = Boolean(token.trim());
+    setToken("");
+    setSegredo("");
+    aoSalvar(tokenNovo);
+  }
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(urlWebhook);
+      toast.success("URL copiada");
+    } catch {
+      toast.error("Não deu para copiar. Selecione e copie à mão.");
+    }
+  }
+
+  return (
+    <Dialog open={aberto} onOpenChange={v => !v && aoFechar()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Configurar Autentique</DialogTitle>
+          <DialogDescription>
+            O token fica guardado no servidor e não volta para a tela. Deixe um campo vazio para manter o que já está salvo.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="autentique-token">
+              1. Token da API {situacao.token_configurado && <span className="text-xs text-emerald-600">(salvo)</span>}
+            </Label>
+            <Input
+              id="autentique-token"
+              type="password"
+              autoComplete="off"
+              placeholder={situacao.token_configurado ? "•••••••• (deixe vazio para manter)" : "Cole o token"}
+              value={token}
+              onChange={e => setToken(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">Gerado na área de API / desenvolvedor do painel da Autentique.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>2. URL do webhook</Label>
+            <div className="flex gap-2">
+              <Input readOnly value={urlWebhook} className="font-mono text-xs" onFocus={e => e.target.select()} />
+              <Button type="button" size="icon" variant="outline" onClick={copiar} aria-label="Copiar URL">
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              No painel de desenvolvedor da Autentique, cadastre um webhook com esta URL e marque os eventos de documento
+              e de assinatura (document.* e signature.*).
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="autentique-segredo">
+              3. Segredo do webhook {situacao.webhook_configurado && <span className="text-xs text-emerald-600">(salvo)</span>}
+            </Label>
+            <Input
+              id="autentique-segredo"
+              type="password"
+              autoComplete="off"
+              placeholder={situacao.webhook_configurado ? "•••••••• (deixe vazio para manter)" : "Cole o segredo que a Autentique mostrar"}
+              value={segredo}
+              onChange={e => setSegredo(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={aoFechar}>Cancelar</Button>
+          <Button onClick={salvar} disabled={salvando || (!token.trim() && !segredo.trim())}>
+            {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Salvar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/utils";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 import { TextoComVariaveis } from "./TextoComVariaveis";
 
 interface Modelo { id: string; nome: string; texto: string; created_by: string | null }
@@ -16,6 +17,7 @@ export function ModelosTab({ meuId, isAdmin }: { meuId: string | undefined; isAd
   const [modelos, setModelos] = useState<Modelo[] | null>(null);
   const [editando, setEditando] = useState<{ id: string | null; nome: string; texto: string } | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState("");
 
   async function carregar() {
     const { data } = await supabase.from("wa_modelos").select("id, nome, texto, created_by").order("nome");
@@ -49,11 +51,18 @@ export function ModelosTab({ meuId, isAdmin }: { meuId: string | undefined; isAd
         <p className="text-sm text-muted-foreground">Mensagens prontas para responder rápido, disparar e montar sequências.</p>
         <Button onClick={() => setEditando({ id: null, nome: "", texto: "" })}><Plus className="mr-1.5 h-4 w-4" /> Modelo</Button>
       </div>
+      {modelos && modelos.length > 0 && (
+        <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar modelo" className="max-w-sm" />
+      )}
+
       {modelos === null ? (
         <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {modelos.map(m => {
+          {modelos.length > 0 && !modelos.some(m => casaBusca(busca, m.nome, m.texto)) && (
+            <p className="col-span-full py-6 text-center text-sm text-muted-foreground">Nenhum modelo encontrado</p>
+          )}
+          {modelos.filter(m => casaBusca(busca, m.nome, m.texto)).map(m => {
             const meu = isAdmin || m.created_by === meuId;
             return (
               <Card key={m.id} className="shadow-card">

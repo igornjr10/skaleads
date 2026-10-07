@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { errorMessage } from "@/lib/utils";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 import { SeletorDeLeads } from "./SeletorDeLeads";
 import { TextoComVariaveis } from "./TextoComVariaveis";
 
@@ -26,6 +27,7 @@ export function SequenciasTab({ meuId, isAdmin }: { meuId: string | undefined; i
   const [inscrevendo, setInscrevendo] = useState<Sequencia | null>(null);
   const [ids, setIds] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState("");
 
   async function carregar() {
     const { data } = await supabase.from("wa_sequencias")
@@ -115,11 +117,18 @@ export function SequenciasTab({ meuId, isAdmin }: { meuId: string | undefined; i
         )}
       </div>
 
+      {sequencias && sequencias.length > 0 && (
+        <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar sequência" className="max-w-sm" />
+      )}
+
       {sequencias === null ? (
         <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
-          {sequencias.map(s => {
+          {sequencias.length > 0 && !sequencias.some(s => casaBusca(busca, s.nome, ...s.wa_sequencia_passos.map(p => p.texto))) && (
+            <p className="col-span-full py-6 text-center text-sm text-muted-foreground">Nenhuma sequência encontrada</p>
+          )}
+          {sequencias.filter(s => casaBusca(busca, s.nome, ...s.wa_sequencia_passos.map(p => p.texto))).map(s => {
             const c = contagens.get(s.id) ?? VAZIA();
             let dia = 0;
             return (

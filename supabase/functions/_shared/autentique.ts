@@ -87,3 +87,64 @@ export function acharCliente(
   const vencedores = candidatos.filter((c) => c.chave.length === maiorNome);
   return vencedores.length === 1 ? vencedores[0].id : null;
 }
+
+export const CAMPOS_DO_DOCUMENTO = `
+  id
+  name
+  created_at
+  signatures {
+    public_id
+    name
+    email
+    viewed { created_at }
+    signed { created_at }
+    rejected { created_at }
+  }
+  files { original signed }
+`;
+
+/** A linha que `gravar_contratos` espera. */
+export function montarLinha(doc: Documento, clientes: Array<{ id: string; name: string }>) {
+  const assinaturas = doc.signatures ?? [];
+  const { status, assinadoEm } = statusDoDocumento(assinaturas);
+  return {
+    autentique_id: doc.id,
+    client_id: acharCliente(doc.name ?? "", clientes),
+    nome: doc.name ?? "(sem nome)",
+    status,
+    criado_em: doc.created_at,
+    assinado_em: assinadoEm,
+    arquivo_original: doc.files?.original ?? null,
+    arquivo_assinado: doc.files?.signed ?? null,
+    signatarios: assinaturas.map((a) => ({
+      nome: a.name,
+      email: a.email,
+      visto_em: a.viewed?.created_at ?? null,
+      assinado_em: a.signed?.created_at ?? null,
+      recusado_em: a.rejected?.created_at ?? null,
+    })),
+  };
+}
+
+/**
+ * O id do documento a partir do corpo do webhook.
+ *
+ * Evento de documento traz o documento em `event.data.object`; evento de
+ * assinatura traz a assinatura solta em `event.data`, com o id do documento em
+ * `document` (string). Member nao tem documento.
+ */
+export function acharIdDoDocumento(payload: unknown): string | null {
+  const dados = (payload as { event?: { data?: Record<string, unknown> } })?.event?.data;
+  if (!dados) return null;
+  const objeto = dados.object as { id?: unknown; object?: unknown; document?: unknown } | undefined;
+
+  const candidatos: unknown[] = [];
+  if (objeto && typeof objeto === "object") {
+    if (objeto.object === "document" || objeto.object === undefined) candidatos.push(objeto.id);
+    candidatos.push(objeto.document);
+  }
+  candidatos.push(dados.document, (dados.document as { id?: unknown } | undefined)?.id, dados.document_id);
+
+  const achado = candidatos.find((c) => typeof c === "string" && c.length > 0);
+  return (achado as string | undefined) ?? null;
+}

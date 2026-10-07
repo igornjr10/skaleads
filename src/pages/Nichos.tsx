@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { AlertTriangle, Compass, FileText, ImageIcon, Loader2, Sparkles, TrendingUp } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -396,17 +397,17 @@ export default function Nichos() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <Select value={clienteId} onValueChange={setClienteId}>
-                  <SelectTrigger className="w-[240px]">
-                    <SelectValue placeholder="Alvo do briefing" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={TODO_O_NICHO}>Nicho inteiro</SelectItem>
-                    {clientes.map((cliente) => (
-                      <SelectItem key={cliente.id} value={cliente.id}>{cliente.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={[
+                    { value: TODO_O_NICHO, label: "Nicho inteiro" },
+                    ...clientes.map((cliente) => ({ value: cliente.id, label: cliente.name })),
+                  ]}
+                  value={clienteId}
+                  onChange={setClienteId}
+                  placeholder="Alvo do briefing"
+                  searchPlaceholder="Buscar cliente..."
+                  className="w-[240px]"
+                />
                 <Select value={objetivo} onValueChange={setObjetivo}>
                   <SelectTrigger className="w-[260px]">
                     <SelectValue placeholder="Objetivo da campanha" />

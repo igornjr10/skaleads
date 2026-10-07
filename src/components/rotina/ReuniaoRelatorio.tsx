@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientAvatar } from "@/components/ClientAvatar";
+import { CampoBusca } from "@/components/CampoBusca";
 import { errorMessage } from "@/lib/utils";
 import { isoLocal } from "@/lib/rotinas";
 
@@ -236,12 +237,7 @@ export function ReuniaoRelatorio({ clientes }: { clientes: ClienteResumo[] }) {
           </Button>
         )}
 
-        <Input
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar cliente"
-          className="h-9 lg:max-w-56"
-        />
+        <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar cliente" className="lg:max-w-56" />
 
         <Select value={filtroGestor} onValueChange={setFiltroGestor}>
           <SelectTrigger className="h-9 lg:w-48">

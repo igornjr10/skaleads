@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { errorMessage } from "@/lib/utils";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 import { SeletorDeLeads, type LeadParaEnvio } from "./SeletorDeLeads";
 import { TextoComVariaveis } from "./TextoComVariaveis";
 import { type LimitesWa, estimativaDeEnvio } from "@/lib/whatsapp-fila";
@@ -36,6 +37,7 @@ export function DisparosTab({ meuId, isAdmin, limites }: { meuId: string | undef
   const [ids, setIds] = useState<string[]>([]);
   const [escolhidos, setEscolhidos] = useState<LeadParaEnvio[]>([]);
   const [criando, setCriando] = useState(false);
+  const [busca, setBusca] = useState("");
 
   async function carregar() {
     const { data } = await supabase.from("wa_disparos").select("id, nome, texto, status, created_at, criado_por").order("created_at", { ascending: false }).limit(50);
@@ -106,11 +108,18 @@ export function DisparosTab({ meuId, isAdmin, limites }: { meuId: string | undef
         <Button onClick={() => setNovo(true)}><Plus className="mr-1.5 h-4 w-4" /> Disparo</Button>
       </div>
 
+      {disparos && disparos.length > 0 && (
+        <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar disparo" className="max-w-sm" />
+      )}
+
       {disparos === null ? (
         <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
       ) : (
         <div className="space-y-3">
-          {disparos.map(d => {
+          {disparos.length > 0 && !disparos.some(d => casaBusca(busca, d.nome, d.texto)) && (
+            <p className="col-span-full py-6 text-center text-sm text-muted-foreground">Nenhum disparo encontrado</p>
+          )}
+          {disparos.filter(d => casaBusca(busca, d.nome, d.texto)).map(d => {
             const c = contagens.get(d.id) ?? { pendente: 0, enviado: 0, erro: 0, cancelado: 0 };
             const total = c.pendente + c.enviado + c.erro + c.cancelado;
             const st = STATUS[d.status] ?? STATUS.ativo;

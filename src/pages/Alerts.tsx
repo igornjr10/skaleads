@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { runAllAlerts, ruleToHuman, type AlertRule } from "@/lib/alert-engine";
 import { useAuth } from "@/hooks/useAuth";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 
 interface AlertRow {
   id: string;
@@ -50,6 +51,7 @@ export default function Alerts() {
   const [running, setRunning] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [openCount, setOpenCount] = useState(0);
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
     fetchAll();
@@ -94,6 +96,8 @@ export default function Alerts() {
   }
 
   const activeCount = alerts.filter(a => a.is_active).length;
+  const nomeCliente = (id: string | null) => clients.find(c => c.id === id)?.name;
+  const visiveis = alerts.filter(a => casaBusca(busca, a.name, a.description, nomeCliente(a.client_id)));
 
   return (
     <div className="space-y-6 p-6">
@@ -165,7 +169,11 @@ export default function Alerts() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {alerts.map(alert => {
+          <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar por alerta ou cliente" className="max-w-sm" />
+          {visiveis.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">Nenhum alerta encontrado</p>
+          )}
+          {visiveis.map(alert => {
             const client = clients.find(c => c.id === alert.client_id);
             const rule = alert.rule_json || { conditions: [], logic: "AND" };
             const channels = alert.channels || {};

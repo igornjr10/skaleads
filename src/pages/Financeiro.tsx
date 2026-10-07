@@ -24,6 +24,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClientAvatar } from "@/components/ClientAvatar";
 
@@ -84,6 +85,7 @@ export default function Financeiro() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [mensalidades, setMensalidades] = useState<Record<string, Mensalidade>>({});
   const [faturas, setFaturas] = useState<Fatura[]>([]);
+  const [busca, setBusca] = useState("");
   const [ajustes, setAjustes] = useState<Ajustes | null>(null);
   const [loading, setLoading] = useState(true);
   const [semTabela, setSemTabela] = useState(false);
@@ -169,6 +171,9 @@ export default function Financeiro() {
     () => Object.fromEntries(clientes.map((c) => [c.id, c])),
     [clientes]
   );
+
+  const faturasVisiveis = faturasDoMes.filter((f) => casaBusca(busca, nomePorCliente[f.client_id]?.name));
+  const clientesVisiveis = clientes.filter((c) => c.status === "active" && casaBusca(busca, c.name));
 
   async function mudarStatus(fatura: Fatura, status: Fatura["status"]) {
     const anterior = faturas;
@@ -302,11 +307,14 @@ export default function Financeiro() {
       </div>
 
       <Tabs defaultValue="faturas">
-        <TabsList>
-          <TabsTrigger value="faturas">Faturas do mês</TabsTrigger>
-          <TabsTrigger value="mensalidades">Mensalidades</TabsTrigger>
-          {podeGerenciar && <TabsTrigger value="ajustes">Ajustes da cobrança</TabsTrigger>}
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList>
+            <TabsTrigger value="faturas">Faturas do mês</TabsTrigger>
+            <TabsTrigger value="mensalidades">Mensalidades</TabsTrigger>
+            {podeGerenciar && <TabsTrigger value="ajustes">Ajustes da cobrança</TabsTrigger>}
+          </TabsList>
+          <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar cliente" className="w-full sm:w-64" />
+        </div>
 
         {/* ── Faturas ───────────────────────────────────────────────────── */}
         <TabsContent value="faturas" className="mt-4 space-y-2">
@@ -321,8 +329,10 @@ export default function Financeiro() {
                 </p>
               </CardContent>
             </Card>
+          ) : faturasVisiveis.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma fatura encontrada</p>
           ) : (
-            faturasDoMes.map((fatura) => {
+            faturasVisiveis.map((fatura) => {
               const cliente = nomePorCliente[fatura.client_id];
               const badge = STATUS_BADGE[fatura.status];
               return (
@@ -369,8 +379,10 @@ export default function Financeiro() {
 
         {/* ── Mensalidades ──────────────────────────────────────────────── */}
         <TabsContent value="mensalidades" className="mt-4 space-y-2">
-          {clientes
-            .filter((c) => c.status === "active")
+          {clientesVisiveis.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">Nenhum cliente encontrado</p>
+          )}
+          {clientesVisiveis
             .map((cliente) => {
               const m = mensalidades[cliente.id];
               const semWhatsapp = !cliente.whatsapp_number && !cliente.whatsapp_group_jid;

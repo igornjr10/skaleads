@@ -16,6 +16,7 @@ import {
 import { Copy, Link2, Loader2, UserMinus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 import { useAuth } from "@/hooks/useAuth";
 import { MODULOS, PAPEIS, modulosPadrao, rotuloPapel, veTodosOsClientes, type Modulo } from "@/lib/permissoes";
 
@@ -53,11 +54,16 @@ function ListaMarcavel<T extends string>({ itens, marcados, onChange }: {
   marcados: T[];
   onChange: (marcados: T[]) => void;
 }) {
+  const [busca, setBusca] = useState("");
   if (itens.length === 0) return <p className="py-6 text-center text-sm text-muted-foreground">Nada para listar.</p>;
+  const visiveis = itens.filter(item => casaBusca(busca, item.label));
   return (
+    <div className="space-y-2">
+    {itens.length > 8 && <CampoBusca value={busca} onChange={setBusca} />}
     <ScrollArea className="max-h-72 pr-3">
       <div className="space-y-1">
-        {itens.map(item => {
+        {visiveis.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Nada encontrado.</p>}
+        {visiveis.map(item => {
           const ativo = marcados.includes(item.key);
           return (
             <label key={item.key} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/50">
@@ -71,6 +77,7 @@ function ListaMarcavel<T extends string>({ itens, marcados, onChange }: {
         })}
       </div>
     </ScrollArea>
+    </div>
   );
 }
 
@@ -85,6 +92,7 @@ export function EquipeCard() {
   const [edicao, setEdicao] = useState<Edicao | null>(null);
   const [remover, setRemover] = useState<Membro | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [busca, setBusca] = useState("");
 
   const [convidando, setConvidando] = useState(false);
   const [convite, setConvite] = useState({ full_name: "", email: "", role: "analyst", client_ids: [] as string[] });
@@ -260,6 +268,11 @@ export function EquipeCard() {
           </div>
         ) : (
           <div className="overflow-x-auto">
+            {membros.length > 5 && (
+              <div className="px-6 pb-3">
+                <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar por nome ou e-mail" className="max-w-sm" />
+              </div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -271,7 +284,7 @@ export function EquipeCard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {membros.map(m => {
+                {membros.filter(m => casaBusca(busca, m.full_name, m.email)).map(m => {
                   const euMesmo = m.user_id === user?.id;
                   const bloqueado = euMesmo || m.role === "owner";
                   return (

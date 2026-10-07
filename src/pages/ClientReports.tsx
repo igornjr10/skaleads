@@ -25,6 +25,7 @@ import {
 import { ChevronLeft, Download, Eye, FileText, Link2, Loader2, MessageSquare, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 import type { ReportData } from "@/lib/report-types";
 import { blobToBase64, buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
 
@@ -67,6 +68,7 @@ export default function ClientReports() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [busca, setBusca] = useState("");
 
   useEffect(() => {
     if (clientId) {
@@ -181,6 +183,8 @@ export default function ClientReports() {
     setDeleteId(null);
   }
 
+  const visiveis = reports.filter((r) => casaBusca(busca, r.name, r.period?.label));
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -246,7 +250,13 @@ export default function ClientReports() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {reports.map((report) => {
+          {reports.length > 0 && (
+            <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar relatório ou período" className="max-w-sm" />
+          )}
+          {reports.length > 0 && visiveis.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">Nenhum relatório encontrado</p>
+          )}
+          {visiveis.map((report) => {
             const status = STATUS_LABELS[report.status] || STATUS_LABELS.pending;
             const createdAt = format(new Date(report.created_at), "dd MMM yyyy 'as' HH:mm", { locale: ptBR });
 

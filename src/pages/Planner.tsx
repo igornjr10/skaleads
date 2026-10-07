@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 import { DemandaDetalhe } from "@/components/demandas/DemandaDetalhe";
 import { NovaDemandaDialog } from "@/components/demandas/NovaDemandaDialog";
 import { useAuth } from "@/hooks/useAuth";
@@ -32,14 +33,18 @@ export default function Planner() {
   const [ref, setRef] = useState(new Date());
   const [responsavel, setResponsavel] = useState(TODOS);
   const [aberta, setAberta] = useState<Demanda | null>(null);
+  const [busca, setBusca] = useState("");
   // "" = nova demanda sem prazo; data = clique num dia do calendario.
   const [novaEm, setNovaEm] = useState<string | null>(null);
 
   const hoje = hojeISO();
 
   const filtradas = useMemo(
-    () => demandas.filter(d => responsavel === TODOS || d.assigned_to === responsavel),
-    [demandas, responsavel]
+    () => demandas.filter(d =>
+      (responsavel === TODOS || d.assigned_to === responsavel) &&
+      casaBusca(busca, d.titulo, d.client_id ? clientePorId.get(d.client_id)?.name : null, d.assigned_to ? pessoaPorId.get(d.assigned_to)?.nome : null)
+    ),
+    [demandas, responsavel, busca, clientePorId, pessoaPorId]
   );
 
   const porDia = useMemo(() => {
@@ -141,6 +146,7 @@ export default function Planner() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <CampoBusca value={busca} onChange={setBusca} placeholder="Buscar demanda ou cliente" className="w-full sm:w-60" />
           <div className="flex rounded-xl border border-border/60 p-0.5">
             {([["mes", "Mês"], ["semana", "Semana"], ["responsavel", "Por responsável"]] as [Visao, string][]).map(([id, label]) => (
               <Button key={id} size="sm" variant={visao === id ? "secondary" : "ghost"} onClick={() => setVisao(id)}>{label}</Button>

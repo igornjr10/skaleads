@@ -1,34 +1,26 @@
 // Recebe os eventos da Autentique e atualiza o contrato na hora, em vez de
 // esperar a proxima varredura.
 //
-// Precisa ser deployada com --no-verify-jwt: quem chama e a Autentique, que nao
-// tem como mandar um JWT do Supabase. A autorizacao aqui e a assinatura HMAC.
+// Sem JWT (verify_jwt = false): quem chama e a Autentique. A URL cadastrada no
+// painel deles leva `?empresa=<company_id>`, que diz qual token e qual segredo
+// usar; a autorizacao de verdade e o HMAC com o segredo daquela empresa.
 //
-// Em vez de tentar interpretar o payload de cada um dos 17 eventos (documento,
-// assinatura, membro), o handler so extrai o id do documento e vai buscar o
-// estado atual na API. Um caminho so, e o que a gente grava e sempre o que a
-// Autentique diz agora — nao a nossa leitura do evento.
+// Em vez de interpretar o payload de cada um dos 17 eventos, o handler so
+// extrai o id do documento e vai buscar o estado atual na API: o que a gente
+// grava e sempre o que a Autentique diz agora — e a entrega fora de ordem, que
+// a doc deles avisa que acontece, deixa de importar.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { graphql, statusDoDocumento, acharCliente, type Documento } from "../_shared/autentique.ts";
+import { graphql, montarLinha, acharIdDoDocumento, CAMPOS_DO_DOCUMENTO, type Documento } from "../_shared/autentique.ts";
+import { isUuid } from "../_shared/auth.ts";
 
-const QUERY = `
-  query($id: UUID!) {
-    document(id: $id) {
-      id
-      name
-      created_at
-      signatures {
-        public_id
-        name
-        email
-        viewed { created_at }
-        signed { created_at }
-        rejected { created_at }
-      }
-      files { original signed }
-    }
-  }
-`;
+// O id vai literal na query, sem variavel: o id da Autentique e um hash hex e
+// nao da para conferir aqui o nome do tipo que o schema deles espera.
+const ID_SEGURO = /^[A-Za-z0-9_-]{8,128}$/;
+const consultaDoDocumento = (id: string) => `query { document(id: "${id}") { ${CAMPOS_DO_DOCUMENTO} } }`;
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
 
 /** Comparacao em tempo constante: `a === b` vaza o tamanho do prefixo certo. */
 function iguaisEmTempoConstante(a: string, b: string): boolean {
@@ -51,111 +43,68 @@ async function assinaturaConfere(corpoCru: string, assinaturaRecebida: string, s
   return iguaisEmTempoConstante(esperada, assinaturaRecebida.trim().toLowerCase());
 }
 
-/** O id do documento, venha o evento de documento, de assinatura ou de membro. */
-export function acharIdDoDocumento(payload: unknown): string | null {
-  const dados = (payload as { event?: { data?: Record<string, unknown> } })?.event?.data;
-  if (!dados) return null;
-  const documento = dados.document as { id?: unknown } | undefined;
-  const candidato = documento?.id ?? dados.document_id ?? dados.id;
-  return typeof candidato === "string" && candidato.length > 0 ? candidato : null;
-}
-
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "content-type, x-autentique-signature",
-      },
-    });
-  }
-  if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Use POST" }), { status: 405, headers: { "Content-Type": "application/json" } });
-  }
+  if (req.method !== "POST") return json({ error: "Use POST" }, 405);
 
-  const segredo = Deno.env.get("AUTENTIQUE_WEBHOOK_SECRET");
-  const token = Deno.env.get("AUTENTIQUE_TOKEN");
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const svcKey = Deno.env.get("SVC_ROLE_KEY")!;
+  const svc = { apikey: svcKey, Authorization: `Bearer ${svcKey}`, "Content-Type": "application/json" };
 
   // Le o corpo cru: o HMAC e sobre os bytes que chegaram, e um JSON.stringify
   // do objeto ja parseado muda espacos e ordem e derruba a validacao.
   const corpoCru = await req.text();
 
-  if (!segredo) {
-    return new Response(JSON.stringify({ error: "AUTENTIQUE_WEBHOOK_SECRET nao configurado" }), {
-      status: 500, headers: { "Content-Type": "application/json" },
-    });
-  }
+  const empresa = new URL(req.url).searchParams.get("empresa");
+  if (!isUuid(empresa)) return json({ error: "URL sem ?empresa=<id>" }, 400);
+
+  const [config] = await fetch(
+    `${supabaseUrl}/rest/v1/autentique_config?company_id=eq.${empresa}&select=token,webhook_secret`,
+    { headers: svc }
+  ).then((r) => r.json()).catch(() => []) as Array<{ token: string; webhook_secret: string | null }>;
+
+  if (!config?.webhook_secret) return json({ error: "Webhook da Autentique nao configurado para esta empresa" }, 401);
+
   const assinatura = req.headers.get("x-autentique-signature");
-  if (!assinatura || !(await assinaturaConfere(corpoCru, assinatura, segredo))) {
-    return new Response(JSON.stringify({ error: "Assinatura invalida" }), {
-      status: 401, headers: { "Content-Type": "application/json" },
-    });
+  if (!assinatura || !(await assinaturaConfere(corpoCru, assinatura, config.webhook_secret))) {
+    return json({ error: "Assinatura invalida" }, 401);
   }
 
   try {
-    if (!token) throw new Error("AUTENTIQUE_TOKEN nao configurado");
-
     const payload = JSON.parse(corpoCru);
-    const tipo = payload?.event?.type ?? "desconhecido";
+    const tipo: string = payload?.event?.type ?? "desconhecido";
     const documentoId = acharIdDoDocumento(payload);
 
     // Sem id de documento nao ha o que atualizar (member.created, por exemplo).
     // Responde 200 assim mesmo: 4xx aqui so faz a Autentique reenviar para
     // sempre um evento que nunca vamos conseguir tratar.
-    if (!documentoId) {
-      return new Response(JSON.stringify({ ok: true, tipo, ignorado: "evento sem documento" }), {
-        headers: { "Content-Type": "application/json" },
-      });
+    if (!documentoId || !ID_SEGURO.test(documentoId)) return json({ ok: true, tipo, ignorado: "evento sem documento" });
+
+    if (tipo === "document.deleted") {
+      await fetch(
+        `${supabaseUrl}/rest/v1/contratos?autentique_id=eq.${encodeURIComponent(documentoId)}&company_id=eq.${empresa}`,
+        { method: "DELETE", headers: svc }
+      );
+      return json({ ok: true, tipo, documento: documentoId, removido: true });
     }
 
-    const data = await graphql<{ document: Documento | null }>(token, QUERY, { id: documentoId });
+    const data = await graphql<{ document: Documento | null }>(config.token, consultaDoDocumento(documentoId));
     const doc = data.document;
-    if (!doc) {
-      return new Response(JSON.stringify({ ok: true, tipo, ignorado: "documento nao encontrado" }), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+    if (!doc) return json({ ok: true, tipo, ignorado: "documento nao encontrado" });
 
     const clientes: Array<{ id: string; name: string }> = await fetch(
-      `${supabaseUrl}/rest/v1/clients?select=id,name`,
-      { headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}` } }
+      `${supabaseUrl}/rest/v1/clients?select=id,name&company_id=eq.${empresa}`,
+      { headers: svc }
     ).then((r) => r.json());
-
-    const assinaturas = doc.signatures ?? [];
-    const { status, assinadoEm } = statusDoDocumento(assinaturas);
-    const linha = {
-      autentique_id: doc.id,
-      client_id: acharCliente(doc.name ?? "", clientes),
-      nome: doc.name ?? "(sem nome)",
-      status,
-      criado_em: doc.created_at,
-      assinado_em: assinadoEm,
-      arquivo_original: doc.files?.original ?? null,
-      arquivo_assinado: doc.files?.signed ?? null,
-      signatarios: assinaturas.map((a) => ({
-        nome: a.name,
-        email: a.email,
-        visto_em: a.viewed?.created_at ?? null,
-        assinado_em: a.signed?.created_at ?? null,
-        recusado_em: a.rejected?.created_at ?? null,
-      })),
-    };
 
     const res = await fetch(`${supabaseUrl}/rest/v1/rpc/gravar_contratos`, {
       method: "POST",
-      headers: { apikey: svcKey, Authorization: `Bearer ${svcKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ _linhas: [linha] }),
+      headers: svc,
+      body: JSON.stringify({ _company_id: empresa, _linhas: [montarLinha(doc, clientes)] }),
     });
     if (!res.ok) throw new Error(`gravar_contratos falhou (${res.status}): ${await res.text().catch(() => "")}`);
 
-    return new Response(JSON.stringify({ ok: true, tipo, documento: doc.id, status }), {
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ ok: true, tipo, documento: doc.id });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : String(e) }), {
-      status: 500, headers: { "Content-Type": "application/json" },
-    });
+    return json({ ok: false, error: e instanceof Error ? e.message : String(e) }, 500);
   }
 });

@@ -16,6 +16,8 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { CampoBusca, casaBusca } from "@/components/CampoBusca";
+import { SearchableSelect } from "@/components/SearchableSelect";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -116,6 +118,7 @@ export default function Rotina() {
   const [soMinhas, setSoMinhas] = useState(false);
 
   const [editando, setEditando] = useState<Rotina | null>(null);
+  const [busca, setBusca] = useState("");
   const [criando, setCriando] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [salvando, setSalvando] = useState(false);
@@ -210,6 +213,19 @@ export default function Rotina() {
       .filter((r) => venceEm(r, dataSel))
       .filter((r) => (soMinhas ? r.assigned_to === user?.id : true));
   }, [ativas, dataSel, soMinhas, user?.id]);
+
+  function casaRotina(r: Rotina) {
+    return casaBusca(
+      busca,
+      r.titulo,
+      r.descricao,
+      r.client_id ? clientePorId.get(r.client_id)?.name : null,
+      r.assigned_to ? pessoaPorId.get(r.assigned_to)?.nome : null
+    );
+  }
+
+  const doDiaVisiveis = doDia.filter(casaRotina);
+  const rotinasVisiveis = rotinas.filter(casaRotina);
 
   function baixaDe(rotina: Rotina, dataISO = dataSelISO) {
     return execPorChave.get(`${rotina.id}|${dataISO}`);
@@ -529,6 +545,15 @@ export default function Rotina() {
             </Button>
           </>
         )}
+
+        {modo !== "compromissos" && (
+          <CampoBusca
+            value={busca}
+            onChange={setBusca}
+            placeholder="Buscar rotina, cliente ou responsável"
+            className="w-full lg:ml-auto lg:w-72"
+          />
+        )}
       </div>
 
       {loading ? (
@@ -541,7 +566,7 @@ export default function Rotina() {
         <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
           {/* ── Rotinas do dia ──────────────────────────────────────── */}
           <div className="space-y-2">
-            {doDia.map((rotina) => {
+            {doDiaVisiveis.map((rotina) => {
               const baixa = baixaDe(rotina);
               const cliente = rotina.client_id ? clientePorId.get(rotina.client_id) : null;
               const responsavel = rotina.assigned_to ? pessoaPorId.get(rotina.assigned_to) : null;
@@ -624,10 +649,12 @@ export default function Rotina() {
               );
             })}
 
-            {doDia.length === 0 && (
+            {doDiaVisiveis.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border/50 px-4 py-12 text-center text-sm text-muted-foreground">
                 {ativas.length === 0
                   ? "Nenhuma rotina cadastrada ainda."
+                  : doDia.length > 0
+                  ? "Nenhuma rotina encontrada na busca."
                   : "Nenhuma rotina vence nesta data com esses filtros."}
               </div>
             )}
@@ -672,7 +699,7 @@ export default function Rotina() {
             <span />
           </div>
 
-          {rotinas.map((rotina) => (
+          {rotinasVisiveis.map((rotina) => (
             <div
               key={rotina.id}
               className="grid grid-cols-1 gap-2 border-b border-border/40 px-4 py-3 last:border-0 lg:grid-cols-[2fr_1fr_1fr_1fr_auto] lg:items-center lg:gap-3"
@@ -716,6 +743,9 @@ export default function Rotina() {
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
               Nenhuma rotina cadastrada. Comece pelo que a equipe já faz todo dia.
             </div>
+          )}
+          {rotinas.length > 0 && rotinasVisiveis.length === 0 && (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">Nenhuma rotina encontrada na busca.</div>
           )}
         </div>
       )}
@@ -865,19 +895,15 @@ export default function Rotina() {
               </div>
               <div>
                 <Label>Cliente</Label>
-                <Select value={form.client_id} onValueChange={(v) => setForm({ ...form, client_id: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={SEM_CLIENTE}>Sem cliente</SelectItem>
-                    {clientes.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <SearchableSelect
+                  options={[
+                    { value: SEM_CLIENTE, label: "Sem cliente" },
+                    ...clientes.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                  value={form.client_id}
+                  onChange={(v) => setForm({ ...form, client_id: v })}
+                  searchPlaceholder="Buscar cliente..."
+                />
               </div>
             </div>
 

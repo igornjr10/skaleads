@@ -280,6 +280,40 @@ serve(async (req) => {
       return json({ success: true });
     }
 
+    // Um gestor de trafego por cliente: trocar tira o anterior da carteira
+    // daquele cliente, sem mexer nos outros papeis (designer, sdr...).
+    if (action === "gestor_do_cliente") {
+      const clientId = body.client_id;
+      const userId = body.user_id ?? null;
+      if (!isUuid(clientId)) return json({ error: "client_id inválido" }, 400);
+      if (userId !== null && !isUuid(userId)) return json({ error: "user_id inválido" }, 400);
+
+      const [cliente] = await db(`clients?id=eq.${clientId}&company_id=eq.${companyId}&select=id`) ?? [];
+      if (!cliente) return json({ error: "Cliente não é desta empresa" }, 404);
+
+      const links = await db(`user_companies?company_id=eq.${companyId}&select=user_id`);
+      const ids: string[] = (links ?? []).map((l: { user_id: string }) => l.user_id);
+      const papeis = ids.length
+        ? await db(`user_roles?user_id=in.(${ids.join(",")})&select=user_id,role`)
+        : [];
+      const gestores = ids.filter(id =>
+        papelMaisForte((papeis ?? []).filter((r: { user_id: string }) => r.user_id === id).map((r: { role: string }) => r.role)) === "analyst"
+      );
+      if (userId && !gestores.includes(userId)) return json({ error: "Essa pessoa não é gestor de tráfego da equipe" }, 400);
+
+      if (gestores.length) {
+        await db(`client_assignments?client_id=eq.${clientId}&user_id=in.(${gestores.join(",")})`, { method: "DELETE" });
+      }
+      if (userId) {
+        await db("client_assignments", {
+          method: "POST",
+          headers: { Prefer: "return=minimal" },
+          body: JSON.stringify({ client_id: clientId, user_id: userId, company_id: companyId }),
+        });
+      }
+      return json({ success: true });
+    }
+
     return json({ error: "Ação desconhecida" }, 400);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Erro inesperado" }, 500);

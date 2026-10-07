@@ -158,6 +158,20 @@ interface ManagerOption {
   is_active: boolean;
 }
 
+interface GestorTrafego {
+  user_id: string;
+  nome: string;
+  company_id: string;
+}
+
+interface MembroEquipe {
+  user_id: string;
+  email: string | null;
+  full_name: string | null;
+  role: string | null;
+  client_ids: string[];
+}
+
 interface ReportRow {
   client_id: string;
   created_at: string;
@@ -248,6 +262,9 @@ export default function Clients() {
   const [monthSpend, setMonthSpend] = useState<Record<string, number>>({});
   const [fundingSummaries, setFundingSummaries] = useState<Record<string, ClientFundingSummary>>({});
   const [managers, setManagers] = useState<ManagerOption[]>([]);
+  const [gestores, setGestores] = useState<GestorTrafego[]>([]);
+  const [gestorDoCliente, setGestorDoCliente] = useState<Record<string, string>>({});
+  const [salvandoGestorDe, setSalvandoGestorDe] = useState<string | null>(null);
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -351,7 +368,9 @@ export default function Clients() {
     setMonthSpend(spendTotals);
     setFundingSummaries(funding);
 
-    setClients((clientsData as Client[]) ?? []);
+    const listaClientes = (clientsData ?? []) as unknown as Client[];
+    setClients(listaClientes);
+    if (canManage) carregarGestores(listaClientes);
     setManagers((managersData as ManagerOption[]) ?? []);
     setCompanies((companiesData as { id: string; name: string }[]) ?? []);
 
@@ -368,13 +387,42 @@ export default function Clients() {
     setLoading(false);
   }
 
+  // Gestor de trafego = membro da equipe com esse papel; o vinculo e a
+  // carteira dele (client_assignments). O owner ve varias empresas, entao
+  // pede a equipe de cada uma.
+  async function carregarGestores(lista: Client[]) {
+    const empresas = [...new Set(lista.map((c) => c.company_id).filter((id): id is string => Boolean(id)))];
+    const respostas = await Promise.all(
+      empresas.map(async (companyId) => {
+        const { data, error } = await supabase.functions.invoke("company-members", {
+          body: { action: "list", company_id: companyId },
+        });
+        if (error || data?.error) return { companyId, members: [] as MembroEquipe[] };
+        return { companyId, members: (data?.members ?? []) as MembroEquipe[] };
+      })
+    );
+    const doCliente: Record<string, string> = {};
+    const todos: GestorTrafego[] = [];
+    respostas.forEach(({ companyId, members }) => {
+      members
+        .filter((m) => m.role === "analyst")
+        .forEach((m) => {
+          todos.push({ user_id: m.user_id, nome: m.full_name || m.email || "Sem nome", company_id: companyId });
+          m.client_ids.forEach((clientId) => { doCliente[clientId] = m.user_id; });
+        });
+    });
+    todos.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+    setGestores(todos);
+    setGestorDoCliente(doCliente);
+  }
+
   useEffect(() => {
     load();
   }, []);
 
-  const managerById = useMemo(() => {
-    return new Map(managers.map((manager) => [manager.id, manager]));
-  }, [managers]);
+  const gestorPorId = useMemo(() => {
+    return new Map(gestores.map((gestor) => [gestor.user_id, gestor]));
+  }, [gestores]);
 
   const clientsWithStats = useMemo(() => {
     return clients.map((client) => {
@@ -435,7 +483,7 @@ export default function Clients() {
           (connectionFilter === "disconnected" && !isConnected);
         const matchesManager =
           managerFilter === "all" ||
-          (managerFilter === NO_MANAGER ? !client.manager_id : client.manager_id === managerFilter);
+          (managerFilter === NO_MANAGER ? !gestorDoCliente[client.id] : gestorDoCliente[client.id] === managerFilter);
         const matchesBudget =
           budgetFilter === "all" ||
           (budgetFilter === "vaiFaltar" && (budget.level === "ahead" || budget.level === "over")) ||
@@ -458,7 +506,7 @@ export default function Clients() {
         }
         return new Date(b.client.created_at).getTime() - new Date(a.client.created_at).getTime();
       });
-  }, [clientsWithStats, search, statusFilter, connectionFilter, managerFilter, budgetFilter, sortBy]);
+  }, [clientsWithStats, search, statusFilter, connectionFilter, managerFilter, budgetFilter, sortBy, gestorDoCliente]);
 
   const filteredActiveCount = filteredClients.filter(({ isActive }) => isActive).length;
   const filteredConnectedCount = filteredClients.filter(({ isConnected }) => isConnected).length;
@@ -811,14 +859,89 @@ export default function Clients() {
     load();
   }
 
-  async function assignManager(client: Client, managerId: string | null) {
-    const { error } = await supabase.from("clients").update({ manager_id: managerId }).eq("id", client.id);
-    if (error) return toast.error(error.message);
-    setClients((prev) => prev.map((item) => (item.id === client.id ? { ...item, manager_id: managerId } : item)));
+  async function definirGestor(client: Client, userId: string | null) {
+    if (!client.company_id) return toast.error("Defina a empresa do cliente antes de vincular o gestor");
+    setSalvandoGestorDe(client.id);
+    const { data, error } = await supabase.functions.invoke("company-members", {
+      body: { action: "gestor_do_cliente", company_id: client.company_id, client_id: client.id, user_id: userId },
+    });
+    setSalvandoGestorDe(null);
+    if (error || data?.error) {
+      // FunctionsHttpError esconde o corpo — e nele que vem o motivo de verdade.
+      const detalhe = await (error as { context?: { json?: () => Promise<{ error?: string }> } } | null)
+        ?.context?.json?.().catch(() => null);
+      return toast.error(data?.error || detalhe?.error || error?.message || "Erro ao vincular gestor");
+    }
+    setGestorDoCliente((prev) => {
+      const next = { ...prev };
+      if (userId) next[client.id] = userId;
+      else delete next[client.id];
+      return next;
+    });
     toast.success(
-      managerId
-        ? `${client.name} atribuido a ${managerById.get(managerId)?.name ?? "gestor"}`
-        : "Gestor removido da conta"
+      userId
+        ? `${client.name} vinculado a ${gestorPorId.get(userId)?.nome ?? "gestor"}`
+        : "Gestor de trafego removido do cliente"
+    );
+  }
+
+  function renderGestorOpcoes(client: Client) {
+    if (!client.company_id) {
+      return <DropdownMenuItem disabled>Defina a empresa do cliente primeiro</DropdownMenuItem>;
+    }
+    const opcoes = gestores.filter((g) => g.company_id === client.company_id);
+    if (opcoes.length === 0) {
+      return (
+        <DropdownMenuItem onClick={() => navigate("/settings")}>
+          Nenhum gestor de trafego na equipe. Convidar em Configuracoes
+        </DropdownMenuItem>
+      );
+    }
+    return (
+      <DropdownMenuRadioGroup
+        value={gestorDoCliente[client.id] ?? NO_MANAGER}
+        onValueChange={(value) => definirGestor(client, value === NO_MANAGER ? null : value)}
+      >
+        <DropdownMenuRadioItem value={NO_MANAGER}>Sem gestor</DropdownMenuRadioItem>
+        {opcoes.map((gestor) => (
+          <DropdownMenuRadioItem key={gestor.user_id} value={gestor.user_id}>
+            {gestor.nome}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+    );
+  }
+
+  function renderGestorPicker(client: Client, variant: "badge" | "inline") {
+    const atual = gestorDoCliente[client.id];
+    const nome = atual ? gestorPorId.get(atual)?.nome ?? "Gestor removido" : "Sem gestor";
+    const salvando = salvandoGestorDe === client.id;
+
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            title="Vincular gestor de trafego"
+            disabled={salvando}
+            className={variant === "badge"
+              ? `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors ${
+                  atual
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    : "border-dashed border-slate-300 bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                }`
+              : `inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-xs hover:bg-muted ${
+                  atual ? "font-medium text-slate-700" : "text-muted-foreground"
+                }`}
+          >
+            {salvando ? <Loader2 className="h-3 w-3 animate-spin" /> : <UserCog className="h-3 w-3" />}
+            {nome}
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-60">
+          {renderGestorOpcoes(client)}
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   }
 
@@ -1083,24 +1206,10 @@ export default function Clients() {
                 <DropdownMenuSeparator />
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
-                    <UserCog className="mr-2 h-4 w-4" />Gestor responsavel
+                    <UserCog className="mr-2 h-4 w-4" />Gestor de trafego
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
-                    {managers.length === 0 ? (
-                      <DropdownMenuItem disabled>Cadastre gestores em Automacao</DropdownMenuItem>
-                    ) : (
-                      <DropdownMenuRadioGroup
-                        value={client.manager_id ?? NO_MANAGER}
-                        onValueChange={(value) => assignManager(client, value === NO_MANAGER ? null : value)}
-                      >
-                        <DropdownMenuRadioItem value={NO_MANAGER}>Sem gestor</DropdownMenuRadioItem>
-                        {managers.map((manager) => (
-                          <DropdownMenuRadioItem key={manager.id} value={manager.id}>
-                            {manager.name}
-                          </DropdownMenuRadioItem>
-                        ))}
-                      </DropdownMenuRadioGroup>
-                    )}
+                    {renderGestorOpcoes(client)}
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
                 <DropdownMenuItem onClick={() => openEditDialog(client)}>
@@ -1215,8 +1324,8 @@ export default function Clients() {
                   </div>
                   <div className="space-y-2">
                     <Label className="flex items-center gap-1.5">
-                      Gestor responsavel
-                      <span className="text-xs font-normal text-muted-foreground">(quem cuida dessa conta)</span>
+                      Contato de alertas
+                      <span className="text-xs font-normal text-muted-foreground">(recebe os avisos no WhatsApp)</span>
                     </Label>
                     <Select
                       value={newManagerId || NO_MANAGER}
@@ -1224,7 +1333,7 @@ export default function Clients() {
                     >
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NO_MANAGER}>Sem gestor definido</SelectItem>
+                        <SelectItem value={NO_MANAGER}>Sem contato definido</SelectItem>
                         {managers.map((manager) => (
                           <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
                         ))}
@@ -1686,6 +1795,7 @@ export default function Clients() {
                   <SelectItem value="disconnected">Nao conectada</SelectItem>
                 </SelectContent>
               </Select>
+              {canManage && (
               <Select value={managerFilter} onValueChange={(value) => setManagerFilter(value as ManagerFilter)}>
                 <SelectTrigger className="w-[170px]">
                   <UserCog className="mr-2 h-4 w-4" />
@@ -1694,11 +1804,12 @@ export default function Clients() {
                 <SelectContent>
                   <SelectItem value="all">Todos gestores</SelectItem>
                   <SelectItem value={NO_MANAGER}>Sem gestor</SelectItem>
-                  {managers.map((manager) => (
-                    <SelectItem key={manager.id} value={manager.id}>{manager.name}</SelectItem>
+                  {gestores.map((gestor) => (
+                    <SelectItem key={gestor.user_id} value={gestor.user_id}>{gestor.nome}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              )}
               <Select value={budgetFilter} onValueChange={(value) => setBudgetFilter(value as BudgetFilter)}>
                 <SelectTrigger className="w-[180px]">
                   <Wallet className="mr-2 h-4 w-4" />
@@ -1803,15 +1914,7 @@ export default function Clients() {
                                   <Store className="h-3 w-3" />{segmentLabel(client.business_segment)}
                                 </Badge>
                               )}
-                              <Badge
-                                variant="outline"
-                                className={client.manager_id
-                                  ? "gap-1 border-emerald-200 bg-emerald-50 text-emerald-700"
-                                  : "gap-1 border-dashed border-slate-200 bg-slate-50 text-slate-500"}
-                              >
-                                <UserCog className="h-3 w-3" />
-                                {client.manager_id ? managerById.get(client.manager_id)?.name ?? "Gestor removido" : "Sem gestor"}
-                              </Badge>
+                              {canManage && renderGestorPicker(client, "badge")}
                               {(client.city || client.state) && (
                                 <Badge variant="outline" className="gap-1 border-slate-200 bg-slate-50 text-slate-600">
                                   <MapPin className="h-3 w-3" />{[client.city, client.state].filter(Boolean).join("/")}
@@ -1878,7 +1981,7 @@ export default function Clients() {
                   <TableHead>Cliente</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Meta Ads</TableHead>
-                  <TableHead>Gestor</TableHead>
+                  <TableHead>Gestor de trafego</TableHead>
                   <TableHead>Verba do mes</TableHead>
                   <TableHead>Relatorios</TableHead>
                   <TableHead>Ultima sync</TableHead>
@@ -1939,13 +2042,7 @@ export default function Clients() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {client.manager_id ? (
-                          <span className="text-xs font-medium text-slate-700">
-                            {managerById.get(client.manager_id)?.name ?? "Gestor removido"}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Sem gestor</span>
-                        )}
+                        {canManage ? renderGestorPicker(client, "inline") : <span className="text-xs text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell>
                         <ClientBudgetCell status={budget} />
