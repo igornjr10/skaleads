@@ -3,7 +3,7 @@
 // Mesmo provedor do chat-assistant (_shared/llm.ts): OpenAI, ou Groq sem ela.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard } from "../_shared/auth.ts";
-import { limiteDeTokens, provedorLLM } from "../_shared/llm.ts";
+import { erroDoProvedor, limiteDeTokens, provedorLLM } from "../_shared/llm.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -368,10 +368,7 @@ serve(async (req) => {
       }),
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => null);
-      throw new Error(`${ia.nome} respondeu ${response.status}: ${err?.error?.message ?? response.statusText}`);
-    }
+    if (!response.ok) throw await erroDoProvedor(ia, response);
 
     const data = await response.json();
     const briefing = data?.choices?.[0]?.message?.content;

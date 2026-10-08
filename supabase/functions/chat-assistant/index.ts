@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getUser, jsonResponse, ownsClient } from "../_shared/auth.ts";
 import { avaliarMeta, type MetricaDiaria, resultadosDoDia } from "../_shared/metas.ts";
-import { limiteDeTokens, provedorLLM } from "../_shared/llm.ts";
+import { erroDoProvedor, limiteDeTokens, provedorLLM } from "../_shared/llm.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -385,10 +385,7 @@ Como responder:
       }),
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(`${ia.nome} API error: ${err.error?.message ?? response.statusText}`);
-    }
+    if (!response.ok) throw await erroDoProvedor(ia, response);
 
     const data = await response.json();
     const reply = data.choices[0].message.content as string;

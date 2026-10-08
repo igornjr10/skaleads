@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { guard, jsonResponse } from "../_shared/auth.ts";
-import { limiteDeTokens, provedorLLM } from "../_shared/llm.ts";
+import { erroDoProvedor, limiteDeTokens, provedorLLM } from "../_shared/llm.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -109,10 +109,7 @@ serve(async (req) => {
       }),
     });
 
-    if (!resposta.ok) {
-      const erro = await resposta.text();
-      throw new Error(`${ia.nome} respondeu ${resposta.status}: ${erro.slice(0, 300)}`);
-    }
+    if (!resposta.ok) throw await erroDoProvedor(ia, resposta);
     const corpo = await resposta.json();
     const texto: string = corpo.choices?.[0]?.message?.content ?? "";
     const inicio = texto.indexOf("{");
