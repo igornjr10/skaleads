@@ -61,10 +61,6 @@ interface Situacao {
 // relacao ao banco. O cast fica num lugar so, em vez de espalhado pela tela.
 const tabelaContratos = () =>
   (supabase.from as unknown as (t: string) => ReturnType<typeof supabase.from>)("contratos");
-const rpcSolta = supabase.rpc as unknown as (
-  fn: string,
-  args?: Record<string, unknown>
-) => Promise<{ data: unknown; error: { message: string } | null }>;
 
 const TOM: Record<Contrato["status"], { rotulo: string; classe: string; peso: number }> = {
   recusado: { rotulo: "Recusado", classe: "border-rose-200 bg-rose-50 text-rose-700", peso: 0 },
@@ -79,7 +75,7 @@ function data(iso: string | null) {
 }
 
 /** Onde cada signatario parou: e o que responde "por que ainda nao assinou". */
-function situacao(s: Signatario): string {
+function situacaoSignatario(s: Signatario): string {
   if (s.recusado_em) return `recusou em ${data(s.recusado_em)}`;
   if (s.assinado_em) return `assinou em ${data(s.assinado_em)}`;
   if (s.visto_em) return `abriu em ${data(s.visto_em)}, sem assinar`;
@@ -94,6 +90,8 @@ export default function Contratos() {
   const [contratos, setContratos] = useState<Contrato[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [erroCarregamento, setErroCarregamento] = useState<string | null>(null);
+  const [erroSituacao, setErroSituacao] = useState<string | null>(null);
   const [sincronizando, setSincronizando] = useState(false);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<"todos" | Contrato["status"] | "sem_cliente">("todos");
@@ -102,15 +100,30 @@ export default function Contratos() {
 
   async function carregar() {
     setCarregando(true);
-    const [c, cl, sit] = await Promise.all([
-      tabelaContratos().select("*").order("criado_em", { ascending: false }),
-      supabase.from("clients").select("id, name").order("name"),
-      rpcSolta("autentique_situacao"),
-    ]);
-    setSituacao(((sit.data as Situacao[] | null) ?? [])[0] ?? null);
-    setContratos((c.data as unknown as Contrato[]) ?? []);
-    setClientes((cl.data as Cliente[]) ?? []);
-    setCarregando(false);
+    setErroCarregamento(null);
+    setErroSituacao(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15_000);
+    try {
+      const [c, cl, sit] = await Promise.all([
+        tabelaContratos().select("*").order("criado_em", { ascending: false }).abortSignal(controller.signal),
+        supabase.from("clients").select("id, name").order("name").abortSignal(controller.signal),
+        supabase.rpc("autentique_situacao").abortSignal(controller.signal),
+      ]);
+      setSituacao(sit.error ? null : sit.data?.[0] ?? null);
+      if (sit.error) setErroSituacao("Não foi possível consultar a configuração da Autentique. Tente novamente.");
+      else if (!sit.data?.[0]?.empresa) setErroSituacao("Seu usuário não está vinculado a uma empresa. Peça ao administrador para conferir seu acesso.");
+      if (c.error || cl.error) setErroCarregamento("Não foi possível carregar os contratos ou clientes. Tente novamente.");
+      if (!c.error) setContratos((c.data as unknown as Contrato[]) ?? []);
+      if (!cl.error) setClientes((cl.data as Cliente[]) ?? []);
+    } catch {
+      setSituacao(null);
+      setErroSituacao("Não foi possível consultar a configuração da Autentique. Tente novamente.");
+      setErroCarregamento("Não foi possível carregar os contratos. Tente novamente.");
+    } finally {
+      window.clearTimeout(timeout);
+      setCarregando(false);
+    }
   }
 
   async function sincronizar() {
@@ -228,6 +241,13 @@ export default function Contratos() {
         </Select>
       </div>
 
+      {erroCarregamento && (
+        <div role="alert" className="space-y-2 rounded-md border border-destructive/30 p-4">
+          <p className="text-sm">{erroCarregamento}</p>
+          <Button variant="outline" size="sm" onClick={carregar}>Tentar novamente</Button>
+        </div>
+      )}
+
       {carregando ? (
         <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
       ) : visiveis.length === 0 ? (
@@ -305,7 +325,7 @@ export default function Contratos() {
                     {contrato.signatarios.map((s, i) => (
                       <div key={`${contrato.id}-${i}`} className="flex flex-wrap gap-x-2 text-xs text-muted-foreground">
                         <span className="font-medium text-foreground">{s.nome || s.email || "(sem nome)"}</span>
-                        <span>{situacao(s)}</span>
+                        <span>{situacaoSignatario(s)}</span>
                       </div>
                     ))}
                   </div>
@@ -316,11 +336,14 @@ export default function Contratos() {
         </div>
       )}
 
-      {ehAdm && situacao?.empresa && (
+      {ehAdm && (
         <ConfigurarAutentique
           aberto={configurando}
           aoFechar={() => setConfigurando(false)}
           situacao={situacao}
+          carregando={carregando}
+          erro={erroSituacao}
+          aoRecarregar={carregar}
           aoSalvar={async (tokenNovo) => {
             setConfigurando(false);
             await carregar();
@@ -336,32 +359,46 @@ function ConfigurarAutentique({
   aberto,
   aoFechar,
   situacao,
+  carregando,
+  erro,
+  aoRecarregar,
   aoSalvar,
 }: {
   aberto: boolean;
   aoFechar: () => void;
-  situacao: Situacao;
+  situacao: Situacao | null;
+  carregando: boolean;
+  erro: string | null;
+  aoRecarregar: () => void;
   aoSalvar: (tokenNovo: boolean) => void;
 }) {
   const [token, setToken] = useState("");
   const [segredo, setSegredo] = useState("");
   const [salvando, setSalvando] = useState(false);
 
-  const urlWebhook = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autentique-webhook?empresa=${situacao.empresa}`;
+  const urlWebhook = situacao?.empresa
+    ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/autentique-webhook?empresa=${situacao.empresa}`
+    : "";
 
   async function salvar() {
+    if (!situacao?.empresa || carregando || erro) return;
     setSalvando(true);
-    const { error } = await rpcSolta("configurar_autentique", {
-      _token: token.trim() || null,
-      _webhook_secret: segredo.trim() || null,
-    });
-    setSalvando(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Autentique configurada");
-    const tokenNovo = Boolean(token.trim());
-    setToken("");
-    setSegredo("");
-    aoSalvar(tokenNovo);
+    try {
+      const { error } = await supabase.rpc("configurar_autentique", {
+        _token: token.trim() || null,
+        _webhook_secret: segredo.trim() || null,
+      });
+      if (error) throw error;
+      toast.success("Autentique configurada");
+      const tokenNovo = Boolean(token.trim());
+      setToken("");
+      setSegredo("");
+      aoSalvar(tokenNovo);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Não foi possível salvar a configuração. Tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
   }
 
   async function copiar() {
@@ -383,6 +420,14 @@ function ConfigurarAutentique({
           </DialogDescription>
         </DialogHeader>
 
+        {carregando ? (
+          <p role="status" className="py-6 text-sm text-muted-foreground">Carregando configuração...</p>
+        ) : erro || !situacao?.empresa ? (
+          <div role="alert" className="space-y-3 py-4">
+            <p className="text-sm">{erro || "Não foi possível identificar a empresa deste usuário."}</p>
+            <Button variant="outline" onClick={aoRecarregar}>Tentar novamente</Button>
+          </div>
+        ) : (
         <div className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="autentique-token">
@@ -427,10 +472,11 @@ function ConfigurarAutentique({
             />
           </div>
         </div>
+        )}
 
         <DialogFooter>
           <Button variant="ghost" onClick={aoFechar}>Cancelar</Button>
-          <Button onClick={salvar} disabled={salvando || (!token.trim() && !segredo.trim())}>
+          <Button onClick={salvar} disabled={salvando || carregando || Boolean(erro) || !situacao?.empresa || (!token.trim() && !segredo.trim())}>
             {salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Salvar
           </Button>
