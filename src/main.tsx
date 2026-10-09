@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import { renderFatal } from "./lib/fatal-screen";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // O import do App e dinamico de proposito. Num import estatico, um erro na
 // avaliacao dos modulos (ex.: variavel de ambiente ausente no build) estoura
@@ -13,7 +14,7 @@ async function boot() {
 
   try {
     const { default: App } = await import("./App.tsx");
-    createRoot(root).render(<App />);
+    createRoot(root).render(<ErrorBoundary><App /></ErrorBoundary>);
   } catch (error) {
     console.error("Falha ao iniciar o app:", error);
     renderFatal(root, error);

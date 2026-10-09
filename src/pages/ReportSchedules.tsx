@@ -28,8 +28,7 @@ import { SearchableSelect } from "@/components/SearchableSelect";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { formatReportDate } from "@/lib/report-date";
 
 interface Schedule {
   id: string;
@@ -227,7 +226,7 @@ export default function ReportSchedules() {
                       </div>
                       {schedule.last_run_at && (
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          Último envio: {format(new Date(schedule.last_run_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                          Último envio: {formatReportDate(schedule.last_run_at)}
                         </p>
                       )}
                     </div>

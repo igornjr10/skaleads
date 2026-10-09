@@ -33,6 +33,8 @@ import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/useAuth";
+import { useReportHistory, type SavedReport } from "@/hooks/useReportHistory";
+import { formatReportDate } from "@/lib/report-date";
 import { comprimirImagem } from "@/lib/report-analise";
 import { blobToBase64, downloadBlob } from "@/lib/report-pdf";
 import { relatorioEmPdf } from "@/lib/relatorio-pdf";
@@ -60,13 +62,6 @@ interface Cliente {
   logo_url: string | null;
   city: string | null;
   state: string | null;
-}
-
-interface Salvo {
-  id: string;
-  periodo: string;
-  updated_at: string;
-  dados: Json;
 }
 
 const CAMPOS_METRICA: Array<{ chave: keyof MetricasRelatorio; rotulo: string }> = [
@@ -132,7 +127,7 @@ export function RelatorioEditor() {
   const [salvoId, setSalvoId] = useState<string | null>(null);
   const [alterado, setAlterado] = useState(false);
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
-  const [historico, setHistorico] = useState<Salvo[]>([]);
+  const { historico, setHistorico, loading: carregandoHistorico, error: erroHistorico, retry: recarregarHistorico } = useReportHistory(clienteId);
   const [gerando, setGerando] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [exportando, setExportando] = useState(false);
@@ -149,18 +144,6 @@ export function RelatorioEditor() {
       .order("name")
       .then(({ data }) => setClientes((data as Cliente[]) ?? []));
   }, []);
-
-  useEffect(() => {
-    setHistorico([]);
-    if (!clienteId) return;
-    supabase
-      .from("relatorios_ia")
-      .select("id, periodo, updated_at, dados")
-      .eq("client_id", clienteId)
-      .order("updated_at", { ascending: false })
-      .limit(20)
-      .then(({ data }) => setHistorico((data as Salvo[]) ?? []));
-  }, [clienteId]);
 
   function relatorioEmBranco(c: Cliente): RelatorioDados {
     return {
@@ -277,7 +260,7 @@ export function RelatorioEditor() {
     const { data, error } = await consulta.select("id, periodo, updated_at, dados").single();
     setSalvando(false);
     if (error) return toast.error("Não consegui salvar o relatório");
-    const salvo = data as Salvo;
+    const salvo = data as SavedReport;
     setSalvoId(salvo.id);
     setAlterado(false);
     setHistorico((h) => [salvo, ...h.filter((r) => r.id !== salvo.id)]);
@@ -508,6 +491,15 @@ export function RelatorioEditor() {
           </>
         )}
 
+        {clienteId && carregandoHistorico && (
+          <p role="status" className="text-sm text-muted-foreground">Carregando relatórios salvos...</p>
+        )}
+        {clienteId && erroHistorico && (
+          <div role="alert" className="space-y-2 rounded-md border border-destructive/30 p-3">
+            <p className="text-sm">{erroHistorico}</p>
+            <Button variant="outline" size="sm" onClick={recarregarHistorico}>Tentar novamente</Button>
+          </div>
+        )}
         {clienteId && historico.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
@@ -528,7 +520,7 @@ export function RelatorioEditor() {
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">{r.periodo || "Sem período"}</span>
                       <span className="block text-xs text-muted-foreground">
-                        Editado em {format(new Date(r.updated_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                        Editado em {formatReportDate(r.updated_at)}
                         {salvoId === r.id ? " · aberto" : ""}
                       </span>
                     </span>

@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { AppLayout } from "@/components/AppLayout";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const Auth = lazy(() => import("./pages/Auth"));
 const DefinirSenha = lazy(() => import("./pages/DefinirSenha"));
@@ -103,7 +104,7 @@ const App = () => (
                 <Route path="/alerts/new" element={<AlertBuilder />} />
                 <Route path="/alerts/:id/edit" element={<AlertBuilder />} />
                 <Route path="/alert-events" element={<AlertEvents />} />
-                <Route path="/report-schedules" element={<ReportSchedules />} />
+                <Route path="/report-schedules" element={<ErrorBoundary><ReportSchedules /></ErrorBoundary>} />
                 <Route path="/whatsapp-scheduled" element={<WhatsappScheduled />} />
                 <Route path="/automations" element={<AutomationLog />} />
                 <Route path="/chat" element={<Chat />} />
