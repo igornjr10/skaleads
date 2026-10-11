@@ -2687,6 +2687,177 @@ export type Database = {
           },
         ]
       }
+      operacao_onboarding: {
+        Row: {
+          company_id: string
+          fase: string
+          ativa: boolean
+          responsavel_id: string | null
+          dias_prazo: number
+        }
+        Insert: {
+          company_id: string
+          fase: string
+          ativa?: boolean
+          responsavel_id?: string | null
+          dias_prazo?: number
+        }
+        Update: {
+          company_id?: string
+          fase?: string
+          ativa?: boolean
+          responsavel_id?: string | null
+          dias_prazo?: number
+        }
+        Relationships: []
+      }
+      operacao_aprovacoes: {
+        Row: {
+          id: string
+          company_id: string
+          client_id: string
+          fase: string
+          responsavel_id: string | null
+          prazo: string
+          status: string
+          decidido_por: string | null
+          decidido_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          client_id: string
+          fase: string
+          responsavel_id?: string | null
+          prazo: string
+          status?: string
+          decidido_por?: string | null
+          decidido_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          client_id?: string
+          fase?: string
+          responsavel_id?: string | null
+          prazo?: string
+          status?: string
+          decidido_por?: string | null
+          decidido_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      operacao_regras: {
+        Row: {
+          company_id: string
+          tipo: string
+          ativa: boolean
+          horario: string
+          antecedencia_horas: number
+          dias_parada: number
+          limite_carga: number
+          destinatarios: string[]
+          whatsapp: boolean
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          tipo: string
+          ativa?: boolean
+          horario?: string
+          antecedencia_horas?: number
+          dias_parada?: number
+          limite_carga?: number
+          destinatarios?: string[]
+          whatsapp?: boolean
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          tipo?: string
+          ativa?: boolean
+          horario?: string
+          antecedencia_horas?: number
+          dias_parada?: number
+          limite_carga?: number
+          destinatarios?: string[]
+          whatsapp?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      operacao_avisos: {
+        Row: {
+          id: string
+          company_id: string
+          autor_id: string
+          tipo: string
+          texto: string
+          resolvido_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          autor_id: string
+          tipo: string
+          texto: string
+          resolvido_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          autor_id?: string
+          tipo?: string
+          texto?: string
+          resolvido_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      operacao_execucoes: {
+        Row: {
+          id: string
+          company_id: string
+          tipo: string
+          chave: string
+          destinatario: string
+          titulo: string
+          mensagem: string
+          created_at: string
+          whatsapp_status: string
+          erro: string | null
+        }
+        Insert: {
+          id?: string
+          company_id: string
+          tipo: string
+          chave: string
+          destinatario: string
+          titulo: string
+          mensagem: string
+          created_at?: string
+          whatsapp_status?: string
+          erro?: string | null
+        }
+        Update: {
+          id?: string
+          company_id?: string
+          tipo?: string
+          chave?: string
+          destinatario?: string
+          titulo?: string
+          mensagem?: string
+          created_at?: string
+          whatsapp_status?: string
+          erro?: string | null
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           assigned_to: string | null
@@ -2700,6 +2871,8 @@ export type Database = {
           descricao: string | null
           id: string
           onboarding_fase: string | null
+          bloqueio: string | null
+          horario_limite: string | null
           prazo: string | null
           prioridade: string
           status: string
@@ -2718,6 +2891,8 @@ export type Database = {
           descricao?: string | null
           id?: string
           onboarding_fase?: string | null
+          bloqueio?: string | null
+          horario_limite?: string | null
           prazo?: string | null
           prioridade?: string
           status?: string
@@ -2736,6 +2911,8 @@ export type Database = {
           descricao?: string | null
           id?: string
           onboarding_fase?: string | null
+          bloqueio?: string | null
+          horario_limite?: string | null
           prazo?: string | null
           prioridade?: string
           status?: string
@@ -3532,6 +3709,7 @@ export type Database = {
         }
         Returns: string
       }
+      decidir_onboarding_operacional: { Args: { _id: string; _aprovar: boolean }; Returns: undefined }
       seed_client_tasks: { Args: { _client_id: string }; Returns: number }
       shares_company: { Args: { _other: string }; Returns: boolean }
       sincronizar_demanda_da_etapa: {

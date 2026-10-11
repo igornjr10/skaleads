@@ -114,6 +114,8 @@ export function DemandaDetalhe({
       prioridade: rascunho!.prioridade,
       categoria: rascunho!.categoria,
       prazo: rascunho!.prazo || null,
+      horario_limite: rascunho!.horario_limite || null,
+      bloqueio: rascunho!.bloqueio || null,
       assigned_to: rascunho!.assigned_to,
     }, "Demanda atualizada");
     setSalvando(false);
@@ -306,6 +308,10 @@ export function DemandaDetalhe({
                   <div>
                     <Label>Prazo</Label>
                     <Input type="date" value={rascunho.prazo ?? ""} onChange={e => setRascunho({ ...rascunho, prazo: e.target.value || null })} />
+                    <Label className="mt-2 block text-xs">Horário limite (Brasília, opcional)</Label>
+                    <Input type="time" value={rascunho.horario_limite?.slice(0, 5) ?? ""} onChange={e => setRascunho({ ...rascunho, horario_limite: e.target.value || null })} />
+                    <Label className="mt-2 block text-xs">Impedimento</Label>
+                    <select aria-label="Impedimento" className="h-10 w-full rounded-md border bg-background px-3" value={rascunho.bloqueio ?? ""} onChange={e => setRascunho({ ...rascunho, bloqueio: e.target.value || null })}><option value="">Sem impedimento registrado</option><option value="material_cliente">Aguardando material do cliente</option><option value="aprovacao_cliente">Aguardando aprovação do cliente</option><option value="dependencia">Aguardando outra entrega</option></select>
                   </div>
                 </div>
                 <div>

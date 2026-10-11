@@ -22,6 +22,9 @@ export interface Demanda {
   company_id: string | null;
   concluida_at: string | null;
   created_at: string;
+  updated_at?: string;
+  horario_limite?: string | null;
+  bloqueio?: string | null;
   /** Demanda de etapa do Onboarding: o checklist e o do Onboarding e anda junto. */
   onboarding_fase?: string | null;
 }

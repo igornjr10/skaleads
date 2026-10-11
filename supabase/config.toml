@@ -21,3 +21,7 @@ verify_jwt = false
 # Checa por conta propria: x-cron-secret no cron, sessao do usuario no botao Sincronizar.
 [functions.sync-autentique]
 verify_jwt = false
+
+# Cron autenticado pelo x-cron-secret; também aceita service role.
+[functions.operacao-whatsapp]
+verify_jwt = false
