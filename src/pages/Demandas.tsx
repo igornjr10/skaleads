@@ -31,7 +31,7 @@ export default function Demandas() {
   const isAdmin = veTodosOsClientes(role);
   const {
     demandas, setDemandas, substituir, remover,
-    clientesDaCarteira, clientePorId, pessoas, pessoaPorId, loading,
+    clientesDaCarteira, clientePorId, pessoas, pessoaPorId, loading, error, recarregar,
   } = useDemandas();
 
   const [escopo, setEscopo] = useState<Escopo>(isAdmin ? "todas" : "comigo");
@@ -152,6 +152,7 @@ export default function Demandas() {
 
   return (
     <div className="space-y-6">
+      {error && <p role="alert" className="text-sm text-destructive">Não foi possível atualizar as demandas.<Button className="ml-2" variant="outline" onClick={recarregar}>Tentar novamente</Button></p>}
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">
@@ -311,7 +312,7 @@ export default function Demandas() {
       <NovaDemandaDialog
         open={criando}
         onOpenChange={setCriando}
-        onCreated={d => setDemandas(atual => [...atual, d])}
+        onCreated={substituir}
         clientes={clientesDaCarteira}
         pessoas={pessoas}
       />
