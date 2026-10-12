@@ -17,11 +17,16 @@ export interface Demanda {
   categoria: string;
   checklist: ItemChecklist[];
   prazo: string | null;
+  /** Horario de entrega no dia do prazo (HH:MM:SS); sem ele vale o dia todo. */
+  prazo_hora?: string | null;
+  /** Entrega travada esperando material do cliente. */
+  aguardando_cliente?: boolean;
   assigned_to: string | null;
   created_by: string | null;
   company_id: string | null;
   concluida_at: string | null;
   created_at: string;
+  updated_at?: string;
   /** Demanda de etapa do Onboarding: o checklist e o do Onboarding e anda junto. */
   onboarding_fase?: string | null;
 }
@@ -87,6 +92,13 @@ export function estaAberta(d: Pick<Demanda, "status">) {
 
 export function estaAtrasada(d: Pick<Demanda, "status" | "prazo">, hoje = hojeISO()) {
   return estaAberta(d) && !!d.prazo && d.prazo < hoje;
+}
+
+/** "12/10" ou "12/10 · 14:30". */
+export function rotuloPrazo(d: Pick<Demanda, "prazo" | "prazo_hora">) {
+  if (!d.prazo) return "Sem prazo";
+  const [, m, dia] = d.prazo.split("-");
+  return `${dia}/${m}${d.prazo_hora ? ` · ${d.prazo_hora.slice(0, 5)}` : ""}`;
 }
 
 export function progressoChecklist(checklist: ItemChecklist[] | null | undefined) {

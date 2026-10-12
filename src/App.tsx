@@ -23,6 +23,7 @@ const Demandas = lazy(() => import("./pages/Demandas"));
 const Comercial = lazy(() => import("./pages/Comercial"));
 const Conversas = lazy(() => import("./pages/Conversas"));
 const Agencia = lazy(() => import("./pages/Agencia"));
+const CentralAutomacoes = lazy(() => import("./pages/CentralAutomacoes"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Rotina = lazy(() => import("./pages/Rotina"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -77,6 +78,7 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/agencia" element={<Agencia />} />
+                <Route path="/agencia/automacoes" element={<CentralAutomacoes />} />
                 <Route path="/demandas" element={<Demandas />} />
                 <Route path="/comercial" element={<Comercial />} />
                 <Route path="/conversas" element={<Conversas />} />

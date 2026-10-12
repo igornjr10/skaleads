@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -11,13 +12,16 @@ interface Notification {
   id: string;
   title: string;
   body: string | null;
+  link?: string | null;
   read: boolean;
   created_at: string;
 }
 
 export function NotificationsBell() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<Notification[]>([]);
+  const [aberto, setAberto] = useState(false);
 
   const unread = items.filter((i) => !i.read).length;
 
@@ -55,8 +59,17 @@ export function NotificationsBell() {
     load();
   }
 
+  async function abrir(n: Notification) {
+    if (!n.read) await supabase.from("notifications").update({ read: true }).eq("id", n.id);
+    if (n.link) {
+      setAberto(false);
+      navigate(n.link);
+    }
+    load();
+  }
+
   return (
-    <Popover>
+    <Popover open={aberto} onOpenChange={setAberto}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
@@ -81,16 +94,18 @@ export function NotificationsBell() {
             <div className="p-8 text-center text-sm text-muted-foreground">Nenhuma notificação ainda</div>
           ) : (
             items.map((n) => (
-              <div
+              <button
+                type="button"
                 key={n.id}
-                className={`border-b border-border/50 p-3 text-sm ${!n.read ? "bg-primary/5" : ""}`}
+                onClick={() => abrir(n)}
+                className={`block w-full border-b border-border/50 p-3 text-left text-sm transition-colors hover:bg-muted/40 ${!n.read ? "bg-primary/5" : ""}`}
               >
                 <div className="font-medium">{n.title}</div>
                 {n.body && <div className="mt-0.5 text-xs text-muted-foreground">{n.body}</div>}
                 <div className="mt-1 text-[10px] text-muted-foreground">
                   {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: ptBR })}
                 </div>
-              </div>
+              </button>
             ))
           )}
         </div>
