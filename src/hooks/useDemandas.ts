@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { errorMessage } from "@/lib/utils";
+import { buscarTudo } from "@/lib/buscar-tudo";
 import { type Demanda, paraDemanda } from "@/lib/demandas";
 
 export interface ClienteResumo {
@@ -29,8 +30,13 @@ export function useDemandas() {
   const [loading, setLoading] = useState(true);
 
   const carregar = useCallback(async () => {
+    // PostgREST corta em 1000 linhas: com o historico de concluidas a fila
+    // passaria disso e demanda sumiria sem aviso.
+    const todasAsDemandas = buscarTudo<Record<string, unknown>>((de, ate) =>
+      supabase.from("tasks").select("*").order("prazo", { ascending: true, nullsFirst: false }).order("id").range(de, ate)
+    ).then(data => ({ data, error: null }), error => ({ data: null, error }));
     const [demandasRes, carteiraRes, nomesRes, papeisRes, perfisRes] = await Promise.all([
-      supabase.from("tasks").select("*").order("prazo", { ascending: true, nullsFirst: false }),
+      todasAsDemandas,
       supabase.from("clients").select("id, name, logo_url").neq("status", "archived").order("name"),
       supabase.rpc("clientes_das_minhas_demandas"),
       supabase.from("user_roles").select("user_id, role"),
@@ -52,6 +58,22 @@ export function useDemandas() {
   }, []);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  // Mudanca feita por outra pessoa (ou pelo cron) aparece sem recarregar a tela.
+  useEffect(() => {
+    let espera: ReturnType<typeof setTimeout> | undefined;
+    const canal = supabase
+      .channel(`tasks-${crypto.randomUUID()}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks" }, () => {
+        clearTimeout(espera);
+        espera = setTimeout(() => { carregar(); }, 800);
+      })
+      .subscribe();
+    return () => {
+      clearTimeout(espera);
+      supabase.removeChannel(canal);
+    };
+  }, [carregar]);
 
   const clientePorId = useMemo(
     () => new Map([...clientesDasDemandas, ...clientesDaCarteira].map(c => [c.id, c])),

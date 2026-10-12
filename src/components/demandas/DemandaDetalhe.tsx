@@ -114,6 +114,7 @@ export function DemandaDetalhe({
       prioridade: rascunho!.prioridade,
       categoria: rascunho!.categoria,
       prazo: rascunho!.prazo || null,
+      prazo_hora: rascunho!.prazo ? rascunho!.prazo_hora || null : null,
       assigned_to: rascunho!.assigned_to,
     }, "Demanda atualizada");
     setSalvando(false);
@@ -249,6 +250,18 @@ export function DemandaDetalhe({
           </div>
         </div>
 
+        {demanda.status !== "concluida" && (
+          <label className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${rascunho.aguardando_cliente ? "border-amber-500/40 bg-amber-500/10" : "border-border/60"}`}>
+            <Checkbox
+              checked={!!rascunho.aguardando_cliente}
+              disabled={!podeMover}
+              onCheckedChange={v => gravar({ aguardando_cliente: !!v }, v ? "Marcada como aguardando o cliente" : undefined)}
+            />
+            <span className="flex-1">Aguardando material do cliente</span>
+            <span className="text-[11px] text-muted-foreground">não conta como parada; a Central lembra de cobrar</span>
+          </label>
+        )}
+
         <Tabs defaultValue="detalhes" className="mt-2">
           <TabsList className="flex w-full flex-wrap justify-start">
             <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
@@ -305,7 +318,17 @@ export function DemandaDetalhe({
                   </div>
                   <div>
                     <Label>Prazo</Label>
-                    <Input type="date" value={rascunho.prazo ?? ""} onChange={e => setRascunho({ ...rascunho, prazo: e.target.value || null })} />
+                    <div className="flex gap-2">
+                      <Input type="date" value={rascunho.prazo ?? ""} onChange={e => setRascunho({ ...rascunho, prazo: e.target.value || null })} />
+                      <Input
+                        type="time"
+                        aria-label="Horário"
+                        className="w-28"
+                        disabled={!rascunho.prazo}
+                        value={rascunho.prazo_hora?.slice(0, 5) ?? ""}
+                        onChange={e => setRascunho({ ...rascunho, prazo_hora: e.target.value || null })}
+                      />
+                    </div>
                   </div>
                 </div>
                 <div>
@@ -322,7 +345,7 @@ export function DemandaDetalhe({
               <div className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-3 text-muted-foreground">
                   <span>Prioridade: <strong className="text-foreground">{prioridadeMeta(demanda.prioridade).label}</strong></span>
-                  <span>Prazo: <strong className="text-foreground">{demanda.prazo ? format(parseISO(demanda.prazo), "dd/MM/yyyy") : "—"}</strong></span>
+                  <span>Prazo: <strong className="text-foreground">{demanda.prazo ? `${format(parseISO(demanda.prazo), "dd/MM/yyyy")}${demanda.prazo_hora ? ` às ${demanda.prazo_hora.slice(0, 5)}` : ""}` : "—"}</strong></span>
                 </div>
                 <p className="whitespace-pre-wrap rounded-xl border border-border/60 bg-background/40 px-3 py-2 text-muted-foreground">
                   {demanda.descricao || "Sem descrição."}

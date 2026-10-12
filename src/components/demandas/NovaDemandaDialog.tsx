@@ -23,16 +23,28 @@ const VAZIO = {
   client_id: SEM,
   prioridade: "media",
   prazo: "",
+  prazo_hora: "",
   assigned_to: SEM,
 };
 
-export function NovaDemandaDialog({ open, onOpenChange, onCreated, clientes, pessoas, prazoInicial }: {
+export interface DemandaInicial {
+  titulo?: string;
+  descricao?: string;
+  categoria?: string;
+  client_id?: string | null;
+  assigned_to?: string | null;
+}
+
+export function NovaDemandaDialog({ open, onOpenChange, onCreated, clientes, pessoas, prazoInicial, inicial, descricaoDialogo }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (d: Demanda) => void;
   clientes: ClienteResumo[];
   pessoas: Pessoa[];
   prazoInicial?: string;
+  /** Pre-preenche (ex.: tarefa que saiu de uma reuniao). */
+  inicial?: DemandaInicial;
+  descricaoDialogo?: string;
 }) {
   const { user } = useAuth();
   const [form, setForm] = useState({ ...VAZIO, prazo: prazoInicial ?? "" });
@@ -40,8 +52,17 @@ export function NovaDemandaDialog({ open, onOpenChange, onCreated, clientes, pes
 
   // Quem abre e o pai (botao ou dia do calendario): o form zera a cada abertura.
   useEffect(() => {
-    if (open) setForm({ ...VAZIO, prazo: prazoInicial ?? "" });
-  }, [open, prazoInicial]);
+    if (!open) return;
+    setForm({
+      ...VAZIO,
+      prazo: prazoInicial ?? "",
+      titulo: inicial?.titulo ?? "",
+      descricao: inicial?.descricao ?? "",
+      categoria: inicial?.categoria ?? VAZIO.categoria,
+      client_id: inicial?.client_id ?? SEM,
+      assigned_to: inicial?.assigned_to ?? SEM,
+    });
+  }, [open, prazoInicial, inicial]);
 
   async function criar(e: React.FormEvent) {
     e.preventDefault();
@@ -57,6 +78,7 @@ export function NovaDemandaDialog({ open, onOpenChange, onCreated, clientes, pes
         client_id: form.client_id === SEM ? null : form.client_id,
         prioridade: form.prioridade,
         prazo: form.prazo || null,
+        prazo_hora: form.prazo && form.prazo_hora ? form.prazo_hora : null,
         assigned_to: form.assigned_to === SEM ? null : form.assigned_to,
         created_by: user.id,
       })
@@ -75,7 +97,7 @@ export function NovaDemandaDialog({ open, onOpenChange, onCreated, clientes, pes
         <form onSubmit={criar} className="space-y-3">
           <DialogHeader>
             <DialogTitle>Nova demanda</DialogTitle>
-            <DialogDescription>Quem recebe é avisado no sino. Você acompanha e aprova quando ela voltar para revisão.</DialogDescription>
+            <DialogDescription>{descricaoDialogo ?? "Quem recebe é avisado no sino. Você acompanha e aprova quando ela voltar para revisão."}</DialogDescription>
           </DialogHeader>
 
           <div>
@@ -127,9 +149,13 @@ export function NovaDemandaDialog({ open, onOpenChange, onCreated, clientes, pes
                 </SelectContent>
               </Select>
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <Label>Prazo</Label>
               <Input type="date" value={form.prazo} onChange={e => setForm({ ...form, prazo: e.target.value })} />
+            </div>
+            <div>
+              <Label>Horário <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+              <Input type="time" disabled={!form.prazo} value={form.prazo_hora} onChange={e => setForm({ ...form, prazo_hora: e.target.value })} />
             </div>
           </div>
 

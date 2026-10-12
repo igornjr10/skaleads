@@ -572,6 +572,87 @@ export type Database = {
           },
         ]
       }
+      automacao_execucoes: {
+        Row: {
+          acao: Json | null
+          canal_whatsapp: string | null
+          chave: string
+          company_id: string
+          corpo: string | null
+          created_at: string
+          decidido_at: string | null
+          decidido_por: string | null
+          id: string
+          link: string | null
+          ref: string
+          status: string
+          titulo: string
+          user_id: string | null
+        }
+        Insert: {
+          acao?: Json | null
+          canal_whatsapp?: string | null
+          chave: string
+          company_id: string
+          corpo?: string | null
+          created_at?: string
+          decidido_at?: string | null
+          decidido_por?: string | null
+          id?: string
+          link?: string | null
+          ref: string
+          status?: string
+          titulo: string
+          user_id?: string | null
+        }
+        Update: {
+          acao?: Json | null
+          canal_whatsapp?: string | null
+          chave?: string
+          company_id?: string
+          corpo?: string | null
+          created_at?: string
+          decidido_at?: string | null
+          decidido_por?: string | null
+          id?: string
+          link?: string | null
+          ref?: string
+          status?: string
+          titulo?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      automacoes: {
+        Row: {
+          ativa: boolean
+          chave: string
+          company_id: string
+          config: Json
+          updated_at: string
+          updated_by: string | null
+          whatsapp: boolean
+        }
+        Insert: {
+          ativa?: boolean
+          chave: string
+          company_id?: string
+          config?: Json
+          updated_at?: string
+          updated_by?: string | null
+          whatsapp?: boolean
+        }
+        Update: {
+          ativa?: boolean
+          chave?: string
+          company_id?: string
+          config?: Json
+          updated_at?: string
+          updated_by?: string | null
+          whatsapp?: boolean
+        }
+        Relationships: []
+      }
       automation_runs: {
         Row: {
           created_at: string
@@ -2099,11 +2180,51 @@ export type Database = {
           },
         ]
       }
+      mural_itens: {
+        Row: {
+          autor_id: string | null
+          client_id: string | null
+          company_id: string
+          created_at: string
+          id: string
+          resolvido_at: string | null
+          resolvido_por: string | null
+          texto: string | null
+          tipo: string
+          titulo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          client_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          resolvido_at?: string | null
+          resolvido_por?: string | null
+          texto?: string | null
+          tipo: string
+          titulo: string
+        }
+        Update: {
+          autor_id?: string | null
+          client_id?: string | null
+          company_id?: string
+          created_at?: string
+          id?: string
+          resolvido_at?: string | null
+          resolvido_por?: string | null
+          texto?: string | null
+          tipo?: string
+          titulo?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           body: string | null
           created_at: string
           id: string
+          link: string | null
           read: boolean
           title: string
           type: string
@@ -2113,6 +2234,7 @@ export type Database = {
           body?: string | null
           created_at?: string
           id?: string
+          link?: string | null
           read?: boolean
           title: string
           type?: string
@@ -2122,6 +2244,7 @@ export type Database = {
           body?: string | null
           created_at?: string
           id?: string
+          link?: string | null
           read?: boolean
           title?: string
           type?: string
@@ -2701,6 +2824,8 @@ export type Database = {
           id: string
           onboarding_fase: string | null
           prazo: string | null
+          prazo_hora: string | null
+          aguardando_cliente: boolean
           prioridade: string
           status: string
           titulo: string
@@ -2719,6 +2844,8 @@ export type Database = {
           id?: string
           onboarding_fase?: string | null
           prazo?: string | null
+          prazo_hora?: string | null
+          aguardando_cliente?: boolean
           prioridade?: string
           status?: string
           titulo: string
@@ -2737,6 +2864,8 @@ export type Database = {
           id?: string
           onboarding_fase?: string | null
           prazo?: string | null
+          prazo_hora?: string | null
+          aguardando_cliente?: boolean
           prioridade?: string
           status?: string
           titulo?: string
@@ -3465,6 +3594,10 @@ export type Database = {
         Returns: string
       }
       default_company_id: { Args: never; Returns: string }
+      decidir_automacao: {
+        Args: { _aprovar: boolean; _id: string }
+        Returns: undefined
+      }
       definir_metas_cliente: {
         Args: {
           p_client_id: string
