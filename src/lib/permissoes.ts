@@ -42,7 +42,9 @@ export type Modulo =
   | "campanhas"
   | "alertas"
   | "envios"
-  | "ia";
+  | "ia"
+  | "biblioteca"
+  | "reunioes";
 
 export const MODULOS: { key: Modulo; label: string; rotas: string[] }[] = [
   { key: "dashboard", label: "Dashboard de campanhas", rotas: ["/dashboard"] },
@@ -53,10 +55,12 @@ export const MODULOS: { key: Modulo; label: string; rotas: string[] }[] = [
   { key: "demandas", label: "Demandas e planner", rotas: ["/demandas", "/planner"] },
   { key: "comercial", label: "Comercial (CRM, prospecção e WhatsApp)", rotas: ["/comercial", "/conversas"] },
   { key: "rotina", label: "Rotina", rotas: ["/rotina"] },
-  { key: "campanhas", label: "Campanhas e nichos", rotas: ["/campaigns", "/nichos"] },
+  { key: "campanhas", label: "Campanhas", rotas: ["/campaigns"] },
   { key: "alertas", label: "Alertas", rotas: ["/alerts", "/alert-events"] },
   { key: "envios", label: "Relatórios, WhatsApp e automações", rotas: ["/report-schedules", "/whatsapp-scheduled", "/automations"] },
   { key: "ia", label: "Assistente IA e Cérebro", rotas: ["/chat", "/cerebro", "/andromeda"] },
+  { key: "biblioteca", label: "Biblioteca de ideias", rotas: ["/biblioteca"] },
+  { key: "reunioes", label: "Reuniões", rotas: ["/reunioes"] },
 ];
 
 const TODOS = MODULOS.map(m => m.key);
@@ -64,12 +68,12 @@ const TODOS = MODULOS.map(m => m.key);
 const PADRAO_POR_PAPEL: Record<AppRole, Modulo[]> = {
   owner: TODOS,
   admin: TODOS,
-  analyst: ["dashboard", "clientes", "demandas", "comercial", "rotina", "campanhas", "alertas", "envios", "ia"],
-  designer: ["demandas", "rotina"],
-  editor: ["demandas", "rotina"],
-  sdr: ["comercial", "demandas", "rotina"],
-  closer: ["comercial", "demandas", "rotina"],
-  social_seller: ["comercial", "demandas", "rotina"],
+  analyst: ["dashboard", "clientes", "demandas", "comercial", "rotina", "campanhas", "alertas", "envios", "ia", "biblioteca", "reunioes"],
+  designer: ["demandas", "rotina", "biblioteca"],
+  editor: ["demandas", "rotina", "biblioteca"],
+  sdr: ["comercial", "demandas", "rotina", "reunioes"],
+  closer: ["comercial", "demandas", "rotina", "reunioes"],
+  social_seller: ["comercial", "demandas", "rotina", "biblioteca"],
   viewer: ["dashboard", "clientes", "campanhas"],
 };
 

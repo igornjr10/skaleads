@@ -129,7 +129,7 @@ export default function Comercial() {
         <TabsContent value="pipeline" className="space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <Select value={funilId ?? undefined} onValueChange={setFunilId}>
-              <SelectTrigger className="w-72"><SelectValue placeholder="Funil" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-72"><SelectValue placeholder="Funil" /></SelectTrigger>
               <SelectContent>
                 {funis.map(f => (
                   <SelectItem key={f.id} value={f.id}>{f.client_id ? `${nomeCliente(f.client_id)} · ${f.nome}` : `${f.nome} (agência)`}</SelectItem>

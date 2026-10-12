@@ -29,6 +29,61 @@ export interface Demanda {
   updated_at?: string;
   /** Demanda de etapa do Onboarding: o checklist e o do Onboarding e anda junto. */
   onboarding_fase?: string | null;
+  /** Modelo recorrente: concluir abre a proxima (o banco cria). */
+  recorrencia?: string | null;
+  recorrencia_origem?: string | null;
+}
+
+/** Cliente de demanda com varios clientes, com o "feito" de cada um. */
+export interface ClienteDaDemanda {
+  client_id: string;
+  feito: boolean;
+}
+
+/**
+ * O que vive fora da linha de `tasks`: clientes (quando sao varios) e os
+ * corresponsaveis. `disponivel` e falso enquanto a migration nao rodou — a
+ * tela esconde o que depende dessas tabelas em vez de quebrar.
+ */
+export interface VinculosDemandas {
+  disponivel: boolean;
+  clientes: Map<string, ClienteDaDemanda[]>;
+  corresponsaveis: Map<string, string[]>;
+}
+
+export const SEM_VINCULOS: VinculosDemandas = { disponivel: false, clientes: new Map(), corresponsaveis: new Map() };
+
+/** Todos os clientes da demanda: a lista de varios ou o unico de `client_id`. */
+export function idsDosClientes(d: Pick<Demanda, "id" | "client_id">, v: VinculosDemandas): string[] {
+  const varios = v.clientes.get(d.id);
+  if (varios?.length) return varios.map(c => c.client_id);
+  return d.client_id ? [d.client_id] : [];
+}
+
+export function corresponsaveisDe(d: Pick<Demanda, "id">, v: VinculosDemandas): string[] {
+  return v.corresponsaveis.get(d.id) ?? [];
+}
+
+/** Principal ou corresponsavel: a demanda esta com a pessoa. */
+export function estaCom(d: Pick<Demanda, "id" | "assigned_to">, uid: string | undefined, v: VinculosDemandas): boolean {
+  if (!uid) return false;
+  return d.assigned_to === uid || corresponsaveisDe(d, v).includes(uid);
+}
+
+/** Progresso por cliente; total 0 quando a demanda tem um cliente so (ou nenhum). */
+export function progressoClientes(d: Pick<Demanda, "id">, v: VinculosDemandas) {
+  const lista = v.clientes.get(d.id) ?? [];
+  return { feitos: lista.filter(c => c.feito).length, total: lista.length };
+}
+
+export const RECORRENCIAS = [
+  { id: "semanal", label: "Toda semana" },
+  { id: "quinzenal", label: "A cada 15 dias" },
+  { id: "mensal", label: "Todo mês" },
+] as const;
+
+export function recorrenciaLabel(id: string | null | undefined) {
+  return RECORRENCIAS.find(r => r.id === id)?.label ?? null;
 }
 
 /** Linha de `tasks` vinda do banco: checklist chega como Json e pode ser qualquer coisa. */

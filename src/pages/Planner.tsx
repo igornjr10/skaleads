@@ -13,7 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useDemandas } from "@/hooks/useDemandas";
 import { rotuloPapel, veTodosOsClientes } from "@/lib/permissoes";
 import {
-  type Demanda, agruparPorResponsavel, diasDaSemana, diasDoMes, estaAberta, estaAtrasada, hojeISO, statusMeta,
+  type Demanda, agruparPorResponsavel, corresponsaveisDe, diasDaSemana, diasDoMes, estaAberta, estaAtrasada, hojeISO, statusMeta,
 } from "@/lib/demandas";
 
 type Visao = "mes" | "semana" | "responsavel";
@@ -26,7 +26,8 @@ export default function Planner() {
   const isAdmin = veTodosOsClientes(role);
   const {
     demandas, setDemandas, substituir, remover,
-    clientesDaCarteira, clientePorId, pessoas, pessoaPorId, loading,
+    clientesDaCarteira, clientesAtivos, clientePorId, pessoas, pessoaPorId,
+    vinculos, definirVinculos, loading,
   } = useDemandas();
 
   const [visao, setVisao] = useState<Visao>("mes");
@@ -41,10 +42,10 @@ export default function Planner() {
 
   const filtradas = useMemo(
     () => demandas.filter(d =>
-      (responsavel === TODOS || d.assigned_to === responsavel) &&
+      (responsavel === TODOS || d.assigned_to === responsavel || corresponsaveisDe(d, vinculos).includes(responsavel)) &&
       casaBusca(busca, d.titulo, d.client_id ? clientePorId.get(d.client_id)?.name : null, d.assigned_to ? pessoaPorId.get(d.assigned_to)?.nome : null)
     ),
-    [demandas, responsavel, busca, clientePorId, pessoaPorId]
+    [demandas, responsavel, busca, clientePorId, pessoaPorId, vinculos]
   );
 
   const porDia = useMemo(() => {
@@ -249,6 +250,9 @@ export default function Planner() {
         clientePorId={clientePorId}
         pessoas={pessoas}
         pessoaPorId={pessoaPorId}
+        vinculos={vinculos}
+        clientesAtivos={clientesAtivos}
+        onVinculos={definirVinculos}
       />
 
       <NovaDemandaDialog
@@ -258,6 +262,9 @@ export default function Planner() {
         clientes={clientesDaCarteira}
         pessoas={pessoas}
         prazoInicial={novaEm || undefined}
+        vinculos={vinculos}
+        clientesAtivos={clientesAtivos}
+        onVinculos={definirVinculos}
       />
     </div>
   );

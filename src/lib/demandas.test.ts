@@ -6,8 +6,12 @@ import {
   diasDaSemana,
   diasDoMes,
   estaAtrasada,
+  estaCom,
+  idsDosClientes,
   ordenarPorPrazo,
   progressoChecklist,
+  progressoClientes,
+  type VinculosDemandas,
 } from "./demandas";
 
 function demanda(parcial: Partial<Demanda>): Demanda {
@@ -99,5 +103,31 @@ describe("calendario", () => {
     expect(dias.map(d => format(d, "yyyy-MM-dd"))).toEqual([
       "2026-09-14", "2026-09-15", "2026-09-16", "2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20",
     ]);
+  });
+});
+
+describe("vinculos de demanda", () => {
+  const v: VinculosDemandas = {
+    disponivel: true,
+    clientes: new Map([["t1", [{ client_id: "a", feito: true }, { client_id: "b", feito: false }]]]),
+    corresponsaveis: new Map([["t1", ["u2"]]]),
+  };
+
+  it("varios clientes vem da lista; um so vem de client_id", () => {
+    expect(idsDosClientes({ id: "t1", client_id: null }, v)).toEqual(["a", "b"]);
+    expect(idsDosClientes({ id: "t2", client_id: "c" }, v)).toEqual(["c"]);
+    expect(idsDosClientes({ id: "t2", client_id: null }, v)).toEqual([]);
+  });
+
+  it("corresponsavel tambem esta com a demanda", () => {
+    expect(estaCom({ id: "t1", assigned_to: "u1" }, "u2", v)).toBe(true);
+    expect(estaCom({ id: "t1", assigned_to: "u1" }, "u1", v)).toBe(true);
+    expect(estaCom({ id: "t1", assigned_to: "u1" }, "u3", v)).toBe(false);
+    expect(estaCom({ id: "t1", assigned_to: "u1" }, undefined, v)).toBe(false);
+  });
+
+  it("progresso por cliente", () => {
+    expect(progressoClientes({ id: "t1" }, v)).toEqual({ feitos: 1, total: 2 });
+    expect(progressoClientes({ id: "t2" }, v)).toEqual({ feitos: 0, total: 0 });
   });
 });

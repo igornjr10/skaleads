@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ExternalLink, FileUp, History, Link2, ListChecks, Loader2, MessageCircle, Paperclip, Plus, Trash2, X } from "lucide-react";
+import { ExternalLink, FileUp, History, Link2, ListChecks, Loader2, MessageCircle, Paperclip, Plus, Repeat, Trash2, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,13 +13,17 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { SeletorMultiplo } from "@/components/SeletorMultiplo";
+import { ClientAvatar } from "@/components/ClientAvatar";
 import { useAuth } from "@/hooks/useAuth";
 import type { ClienteResumo, Pessoa } from "@/hooks/useDemandas";
 import { errorMessage } from "@/lib/utils";
 import { rotuloPapel, veTodosOsClientes } from "@/lib/permissoes";
 import {
-  CATEGORIAS, PRIORIDADES, STATUS_DEMANDA, type Demanda, type ItemChecklist,
-  categoriaLabel, novoItemChecklist, paraBanco, paraDemanda, prioridadeMeta, progressoChecklist, statusMeta,
+  CATEGORIAS, PRIORIDADES, RECORRENCIAS, SEM_VINCULOS, STATUS_DEMANDA,
+  type ClienteDaDemanda, type Demanda, type ItemChecklist, type VinculosDemandas,
+  categoriaLabel, corresponsaveisDe, idsDosClientes, novoItemChecklist, paraBanco, paraDemanda, prioridadeMeta,
+  progressoChecklist, recorrenciaLabel, statusMeta,
 } from "@/lib/demandas";
 
 const SEM = "sem";
@@ -36,6 +40,7 @@ function formatarTamanho(bytes: number | null) {
 
 export function DemandaDetalhe({
   demanda, onClose, onChange, onDelete, clientesDaCarteira, clientePorId, pessoas, pessoaPorId,
+  vinculos = SEM_VINCULOS, clientesAtivos, onVinculos,
 }: {
   demanda: Demanda | null;
   onClose: () => void;
@@ -45,9 +50,14 @@ export function DemandaDetalhe({
   clientePorId: Map<string, ClienteResumo>;
   pessoas: Pessoa[];
   pessoaPorId: Map<string, Pessoa>;
+  vinculos?: VinculosDemandas;
+  clientesAtivos?: ClienteResumo[];
+  onVinculos?: (taskId: string, v: { clientes?: ClienteDaDemanda[]; corresponsaveis?: string[] }) => void;
 }) {
   const { user, role } = useAuth();
   const [rascunho, setRascunho] = useState<Demanda | null>(demanda);
+  const [rascClientes, setRascClientes] = useState<string[]>([]);
+  const [rascCorres, setRascCorres] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [comentarios, setComentarios] = useState<Comentario[]>([]);
   const [anexos, setAnexos] = useState<Anexo[]>([]);
@@ -61,6 +71,8 @@ export function DemandaDetalhe({
   const id = demanda?.id;
   useEffect(() => {
     setRascunho(demanda);
+    setRascClientes(demanda ? idsDosClientes(demanda, vinculos) : []);
+    setRascCorres(demanda ? corresponsaveisDe(demanda, vinculos) : []);
     setNovoComentario("");
     setNovoItem("");
     setLink({ nome: "", url: "" });
@@ -83,11 +95,70 @@ export function DemandaDetalhe({
   const isAdmin = veTodosOsClientes(role);
   const souQuemPediu = demanda.created_by === user?.id;
   const podeEditarTudo = isAdmin || souQuemPediu;
-  const podeMover = podeEditarTudo || demanda.assigned_to === user?.id;
+  const corresponsaveisAtuais = corresponsaveisDe(demanda, vinculos);
+  const podeMover = podeEditarTudo || demanda.assigned_to === user?.id || (!!user && corresponsaveisAtuais.includes(user.id));
   // Itens de etapa do Onboarding so se criam e apagam la; aqui so se marcam.
   const checklistDoOnboarding = !!demanda.onboarding_fase;
   const nome = (uid: string | null) => (uid ? pessoaPorId.get(uid)?.nome ?? "Alguém" : "Sistema");
   const cliente = demanda.client_id ? clientePorId.get(demanda.client_id) : null;
+  const multi = vinculos.disponivel;
+  const clientesDaLista = vinculos.clientes.get(demanda.id) ?? [];
+  const idsAtuais = idsDosClientes(demanda, vinculos);
+  const nomeCliente = (id: string) => clientePorId.get(id)?.name ?? "Cliente";
+  const resumoClientes = idsAtuais.length === 0 ? "Sem cliente"
+    : idsAtuais.length === 1 ? nomeCliente(idsAtuais[0])
+    : `${idsAtuais.length} clientes`;
+
+  /** Deixa task_clientes / client_id e task_corresponsaveis iguais ao rascunho. */
+  async function gravarVinculos(): Promise<{ client_id: string | null } | null> {
+    const principal = rascunho!.assigned_to;
+    const desejados = [...new Set(rascClientes)];
+    const corres = [...new Set(rascCorres)].filter(id => id !== principal);
+    const idsLista = clientesDaLista.map(c => c.client_id);
+    const listaNova = desejados.length > 1 ? desejados : [];
+    const tirar = idsLista.filter(id => !listaNova.includes(id));
+    const incluir = listaNova.filter(id => !idsLista.includes(id));
+    const tirarCorres = corresponsaveisAtuais.filter(id => !corres.includes(id));
+    const incluirCorres = corres.filter(id => !corresponsaveisAtuais.includes(id));
+
+    const passos = [
+      tirar.length ? supabase.from("task_clientes").delete().eq("task_id", demanda!.id).in("client_id", tirar) : null,
+      incluir.length ? supabase.from("task_clientes").insert(incluir.map(client_id => ({ task_id: demanda!.id, client_id }))) : null,
+      tirarCorres.length ? supabase.from("task_corresponsaveis").delete().eq("task_id", demanda!.id).in("user_id", tirarCorres) : null,
+      incluirCorres.length ? supabase.from("task_corresponsaveis").insert(incluirCorres.map(user_id => ({ task_id: demanda!.id, user_id }))) : null,
+    ].filter(Boolean);
+    const resultados = await Promise.all(passos);
+    const erro = resultados.find(r => r?.error)?.error;
+    if (erro) {
+      toast.error(errorMessage(erro, "Não foi possível salvar clientes ou responsáveis"));
+      return null;
+    }
+    onVinculos?.(demanda!.id, {
+      clientes: listaNova.map(client_id => ({ client_id, feito: clientesDaLista.find(c => c.client_id === client_id)?.feito ?? false })),
+      corresponsaveis: corres,
+    });
+    return { client_id: desejados.length === 1 ? desejados[0] : null };
+  }
+
+  async function marcarCliente(clientId: string, feito: boolean) {
+    const anterior = clientesDaLista;
+    onVinculos?.(demanda!.id, { clientes: anterior.map(c => (c.client_id === clientId ? { ...c, feito } : c)) });
+    const { error } = await supabase.from("task_clientes").update({ feito }).eq("task_id", demanda!.id).eq("client_id", clientId);
+    if (error) {
+      onVinculos?.(demanda!.id, { clientes: anterior });
+      toast.error(errorMessage(error, "Não foi possível marcar o cliente"));
+    }
+  }
+
+  async function marcarTodosClientes(feito: boolean) {
+    const anterior = clientesDaLista;
+    onVinculos?.(demanda!.id, { clientes: anterior.map(c => ({ ...c, feito })) });
+    const { error } = await supabase.from("task_clientes").update({ feito }).eq("task_id", demanda!.id);
+    if (error) {
+      onVinculos?.(demanda!.id, { clientes: anterior });
+      toast.error(errorMessage(error, "Não foi possível marcar os clientes"));
+    }
+  }
 
   async function gravar(mudanca: Partial<Demanda>, sucesso?: string) {
     const { data, error } = await supabase.from("tasks").update(paraBanco(mudanca)).eq("id", demanda!.id).select("*").single();
@@ -107,15 +178,22 @@ export function DemandaDetalhe({
   async function salvarCampos() {
     if (!rascunho!.titulo.trim()) return toast.error("A demanda precisa de um título");
     setSalvando(true);
+    let clientId = rascunho!.client_id;
+    if (multi) {
+      const r = await gravarVinculos();
+      if (!r) return setSalvando(false);
+      clientId = r.client_id;
+    }
     await gravar({
       titulo: rascunho!.titulo.trim(),
       descricao: rascunho!.descricao,
-      client_id: rascunho!.client_id,
+      client_id: clientId,
       prioridade: rascunho!.prioridade,
       categoria: rascunho!.categoria,
       prazo: rascunho!.prazo || null,
       prazo_hora: rascunho!.prazo ? rascunho!.prazo_hora || null : null,
       assigned_to: rascunho!.assigned_to,
+      ...(multi ? { recorrencia: rascunho!.recorrencia ?? null } : {}),
     }, "Demanda atualizada");
     setSalvando(false);
   }
@@ -212,14 +290,23 @@ export function DemandaDetalhe({
   }
 
   const progresso = progressoChecklist(rascunho.checklist);
+  const feitosClientes = clientesDaLista.filter(c => c.feito).length;
+  const opcoesPessoas = pessoas.map(p => ({ value: p.id, label: p.nome, detalhe: rotuloPapel(p.role) }));
+  // Cliente atual fora da carteira de quem edita continua escolhivel (o designer recebe arte de cliente que nao e dele).
+  const opcoesClientes = [
+    ...idsAtuais.filter(id => !clientesDaCarteira.some(c => c.id === id)).map(id => ({ value: id, label: nomeCliente(id) })),
+    ...clientesDaCarteira.map(c => ({ value: c.id, label: c.name, detalhe: c.status && c.status !== "active" ? "inativo" : undefined })),
+  ];
+  const recorrencia = recorrenciaLabel(demanda.recorrencia);
 
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle className="pr-6">{demanda.titulo}</DialogTitle>
-          <DialogDescription>
-            {cliente?.name ?? "Sem cliente"} · {categoriaLabel(demanda.categoria)} · pedida por {nome(demanda.created_by)}
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl sm:max-w-2xl">
+        <DialogHeader className="min-w-0">
+          <DialogTitle className="break-words pr-6 leading-snug">{demanda.titulo}</DialogTitle>
+          <DialogDescription className="break-words">
+            {resumoClientes} · {categoriaLabel(demanda.categoria)} · pedida por {nome(demanda.created_by)}
+            {recorrencia && ` · ${recorrencia.toLowerCase()}`}
             {demanda.concluida_at && ` · concluída em ${format(parseISO(demanda.concluida_at), "dd/MM/yyyy")}`}
           </DialogDescription>
         </DialogHeader>
@@ -234,8 +321,8 @@ export function DemandaDetalhe({
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Responsável</Label>
+          <div className="min-w-0">
+            <Label>{multi ? "Responsável principal" : "Responsável"}</Label>
             <Select
               value={rascunho.assigned_to ?? SEM}
               onValueChange={v => setRascunho({ ...rascunho, assigned_to: v === SEM ? null : v })}
@@ -248,23 +335,46 @@ export function DemandaDetalhe({
               </SelectContent>
             </Select>
           </div>
+          {multi && (
+            <div className="min-w-0 sm:col-span-2">
+              <Label>Responsáveis secundários</Label>
+              {podeEditarTudo ? (
+                <SeletorMultiplo
+                  opcoes={opcoesPessoas.filter(o => o.value !== rascunho.assigned_to)}
+                  valor={rascCorres.filter(id => id !== rascunho.assigned_to)}
+                  onChange={setRascCorres}
+                  placeholder="Ninguém além do principal"
+                  busca="Buscar pessoa..."
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {corresponsaveisAtuais.length ? corresponsaveisAtuais.map(nome).join(", ") : "Ninguém além do principal"}
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {demanda.status !== "concluida" && (
-          <label className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${rascunho.aguardando_cliente ? "border-amber-500/40 bg-amber-500/10" : "border-border/60"}`}>
+          <label className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl border px-3 py-2 text-sm ${rascunho.aguardando_cliente ? "border-amber-500/40 bg-amber-500/10" : "border-border/60"}`}>
             <Checkbox
               checked={!!rascunho.aguardando_cliente}
               disabled={!podeMover}
               onCheckedChange={v => gravar({ aguardando_cliente: !!v }, v ? "Marcada como aguardando o cliente" : undefined)}
             />
             <span className="flex-1">Aguardando material do cliente</span>
-            <span className="text-[11px] text-muted-foreground">não conta como parada; a Central lembra de cobrar</span>
+            <span className="w-full pl-6 text-[11px] text-muted-foreground sm:w-auto sm:pl-0">não conta como parada; a Central lembra de cobrar</span>
           </label>
         )}
 
         <Tabs defaultValue="detalhes" className="mt-2">
-          <TabsList className="flex w-full flex-wrap justify-start">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start">
             <TabsTrigger value="detalhes">Detalhes</TabsTrigger>
+            {clientesDaLista.length > 1 && (
+              <TabsTrigger value="clientes" className="gap-1.5">
+                <Users className="h-3.5 w-3.5" /> {feitosClientes}/{clientesDaLista.length}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="checklist" className="gap-1.5">
               <ListChecks className="h-3.5 w-3.5" /> {progresso.total ? `${progresso.feitos}/${progresso.total}` : "Checklist"}
             </TabsTrigger>
@@ -281,23 +391,37 @@ export function DemandaDetalhe({
                   <Input value={rascunho.titulo} onChange={e => setRascunho({ ...rascunho, titulo: e.target.value })} />
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label>Cliente</Label>
-                    <Select
-                      value={rascunho.client_id ?? SEM}
-                      onValueChange={v => setRascunho({ ...rascunho, client_id: v === SEM ? null : v })}
-                    >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={SEM}>Sem cliente</SelectItem>
-                        {/* O cliente atual fica na lista mesmo se nao for da carteira de quem edita. */}
-                        {cliente && !clientesDaCarteira.some(c => c.id === cliente.id) && (
-                          <SelectItem value={cliente.id}>{cliente.name}</SelectItem>
-                        )}
-                        {clientesDaCarteira.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {multi ? (
+                    <div className="min-w-0 sm:col-span-2">
+                      <Label>Clientes</Label>
+                      <SeletorMultiplo
+                        opcoes={opcoesClientes}
+                        valor={rascClientes}
+                        onChange={setRascClientes}
+                        placeholder="Sem cliente (interna)"
+                        busca="Buscar cliente..."
+                        todos={{ label: "Selecionar todos os ativos", valores: (clientesAtivos ?? clientesDaCarteira).map(c => c.id) }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="min-w-0">
+                      <Label>Cliente</Label>
+                      <Select
+                        value={rascunho.client_id ?? SEM}
+                        onValueChange={v => setRascunho({ ...rascunho, client_id: v === SEM ? null : v })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SEM}>Sem cliente</SelectItem>
+                          {/* O cliente atual fica na lista mesmo se nao for da carteira de quem edita. */}
+                          {cliente && !clientesDaCarteira.some(c => c.id === cliente.id) && (
+                            <SelectItem value={cliente.id}>{cliente.name}</SelectItem>
+                          )}
+                          {clientesDaCarteira.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <div>
                     <Label>Categoria</Label>
                     <Select value={rascunho.categoria} onValueChange={v => setRascunho({ ...rascunho, categoria: v })}>
@@ -316,20 +440,35 @@ export function DemandaDetalhe({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <Label>Prazo</Label>
                     <div className="flex gap-2">
-                      <Input type="date" value={rascunho.prazo ?? ""} onChange={e => setRascunho({ ...rascunho, prazo: e.target.value || null })} />
+                      <Input type="date" className="min-w-0 flex-1" value={rascunho.prazo ?? ""} onChange={e => setRascunho({ ...rascunho, prazo: e.target.value || null })} />
                       <Input
                         type="time"
                         aria-label="Horário"
-                        className="w-28"
+                        className="w-28 shrink-0"
                         disabled={!rascunho.prazo}
                         value={rascunho.prazo_hora?.slice(0, 5) ?? ""}
                         onChange={e => setRascunho({ ...rascunho, prazo_hora: e.target.value || null })}
                       />
                     </div>
                   </div>
+                  {multi && (
+                    <div className="min-w-0 sm:col-span-2">
+                      <Label>Repetir</Label>
+                      <Select
+                        value={rascunho.recorrencia ?? SEM}
+                        onValueChange={v => setRascunho({ ...rascunho, recorrencia: v === SEM ? null : v })}
+                      >
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SEM}>Não repete</SelectItem>
+                          {RECORRENCIAS.map(r => <SelectItem key={r.id} value={r.id}>{r.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <Label>Descrição / briefing</Label>
@@ -343,7 +482,10 @@ export function DemandaDetalhe({
               </>
             ) : (
               <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-3 text-muted-foreground">
+                <div className="grid gap-3 text-muted-foreground sm:grid-cols-2">
+                  {recorrencia && (
+                    <span className="inline-flex items-center gap-1.5 sm:col-span-2"><Repeat className="h-3.5 w-3.5" /> Repete: <strong className="text-foreground">{recorrencia}</strong></span>
+                  )}
                   <span>Prioridade: <strong className="text-foreground">{prioridadeMeta(demanda.prioridade).label}</strong></span>
                   <span>Prazo: <strong className="text-foreground">{demanda.prazo ? `${format(parseISO(demanda.prazo), "dd/MM/yyyy")}${demanda.prazo_hora ? ` às ${demanda.prazo_hora.slice(0, 5)}` : ""}` : "—"}</strong></span>
                 </div>
@@ -354,6 +496,38 @@ export function DemandaDetalhe({
               </div>
             )}
           </TabsContent>
+
+          {clientesDaLista.length > 1 && (
+            <TabsContent value="clientes" className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {feitosClientes} de {clientesDaLista.length} clientes feitos
+                </span>
+                {podeMover && (
+                  <div className="flex gap-1">
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => marcarTodosClientes(true)} disabled={feitosClientes === clientesDaLista.length}>
+                      Marcar todos
+                    </Button>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground" onClick={() => marcarTodosClientes(false)} disabled={feitosClientes === 0}>
+                      Desmarcar
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <Progress value={(feitosClientes / clientesDaLista.length) * 100} className="h-1.5" />
+              <div className="grid gap-1 sm:grid-cols-2">
+                {[...clientesDaLista].sort((a, b) => nomeCliente(a.client_id).localeCompare(nomeCliente(b.client_id))).map(c => (
+                  <label key={c.client_id} className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-muted/40">
+                    <Checkbox checked={c.feito} disabled={!podeMover} onCheckedChange={v => marcarCliente(c.client_id, !!v)} />
+                    <ClientAvatar name={nomeCliente(c.client_id)} logoUrl={clientePorId.get(c.client_id)?.logo_url ?? null} className="h-5 w-5" />
+                    <span className={`min-w-0 flex-1 truncate text-sm ${c.feito ? "text-muted-foreground line-through" : ""}`} title={nomeCliente(c.client_id)}>
+                      {nomeCliente(c.client_id)}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </TabsContent>
+          )}
 
           <TabsContent value="checklist" className="space-y-3">
             {progresso.total > 0 && <Progress value={(progresso.feitos / progresso.total) * 100} className="h-1.5" />}

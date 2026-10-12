@@ -1,20 +1,23 @@
-import { useEffect, useState } from "react";
-import { endOfMonth, format, startOfMonth, subDays } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { useEffect, useMemo, useState } from "react";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Download, FileText, ImagePlus, Loader2, Sparkles, Trash2, X } from "lucide-react";
+import { BookmarkCheck, Download, Eye, FileText, ImagePlus, Loader2, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
+import type { Json } from "@/integrations/supabase/types";
 import { buildReportPdfBlob, blobToBase64, downloadBlob } from "@/lib/report-pdf";
 import { extractPhoneCalls, extractDirections, extractLeads, GOAL_KPIS, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
-import { MetricPreferencesBuilder } from "./MetricPreferencesBuilder";
+import { SeletorDeMetricas } from "./SeletorDeMetricas";
+import { SeletorDePeriodo } from "./SeletorDePeriodo";
+import { hojeEmSaoPaulo, periodoDoModelo, resolverPeriodo, type PeriodoSpec } from "@/lib/report-periodo";
+import { metricasDoModelo, metricasParaOLegado, type MetricaRelatorio } from "@/lib/report-metricas";
 import { errorMessage } from "@/lib/utils";
 import { META_GRAPH_VERSION } from "@/lib/meta-insights";
 import { credencialDaPagina, credencialDoCliente, metaGet, metaGetAll, type MetaFetchOptions } from "@/lib/meta-fetch";
@@ -23,7 +26,7 @@ import { sendChatMessage } from "@/lib/ai-service";
 import { useAuth } from "@/hooks/useAuth";
 import { nomeDaMarca } from "@/components/MarcaEmpresa";
 
-const MAX_PRINTS = 6;
+const MAX_PRINTS = 8;
 
 const CAMPOS_ANALISE = [
   { key: "highlights", label: "Destaques da semana", placeholder: "Um por linha. Ex.: Custo por conversa caiu 18%" },
@@ -55,35 +58,7 @@ interface SocialPresenceSnapshot {
   }>;
 }
 
-const PERIOD_PRESETS = [
-  { label: "Ultimos 7 dias", days: 7 },
-  { label: "Ultimos 30 dias", days: 30 },
-  { label: "Ultimos 90 dias", days: 90 },
-  { label: "Este mes", days: 0 },
-];
-
-const REPORT_METRIC_OPTIONS = [
-  { key: "purchaseValue", label: "Valor de conversao de compras", helper: "Valor total gerado por compras" },
-  { key: "purchases", label: "Compras", helper: "Quantidade total de compras" },
-  { key: "costPerPurchase", label: "Custo por compra", helper: "Investimento medio por compra" },
-  { key: "spend", label: "Valor investido", helper: "Total gasto no periodo" },
-  { key: "impressions", label: "Impressoes", helper: "Entrega total da conta" },
-  { key: "clicks", label: "Total de cliques no link", helper: "Cliques no link registrados no periodo" },
-  { key: "messagesStarted", label: "Mensagens iniciadas", helper: "Conversas abertas no periodo" },
-  { key: "instagramProfileVisits", label: "Visitas no perfil", helper: "Visitas ao perfil do Instagram no periodo" },
-  { key: "phoneCalls", label: "Ligacoes", helper: "Cliques para ligar registrados no periodo" },
-  { key: "directions", label: "Rotas / Como chegar", helper: "Cliques em rotas ou localizacao no periodo" },
-  { key: "leads", label: "Leads", helper: "Cadastros e leads gerados no periodo" },
-  { key: "roas", label: "ROAS", helper: "Retorno sobre investimento" },
-  { key: "revenue", label: "Faturamento", helper: "Receita gerada no periodo" },
-  { key: "reach", label: "Alcance", helper: "Pessoas unicas alcancadas na conta do cliente" },
-  { key: "ctr", label: "CTR", helper: "Taxa de cliques no link" },
-  { key: "cpc", label: "CPC", helper: "Custo medio por clique" },
-  { key: "cpm", label: "CPM", helper: "Custo por mil impressoes" },
-  { key: "frequency", label: "Frequencia", helper: "Media de exibicoes por pessoa" },
-] as const;
-
-type ReportMetricPreference = (typeof REPORT_METRIC_OPTIONS)[number]["key"];
+type ReportMetricPreference = MetricaRelatorio;
 type SocialMetricPreference = "followers" | "profileViews" | "reach" | "engagement" | "contentViews";
 
 const LOCAL_TO_REPORT_METRIC: Record<LocalMetricKey, ReportMetricPreference> = {
@@ -229,9 +204,10 @@ export function ReportGeneratorPanel({
   const [sugerindo, setSugerindo] = useState(false);
   const [prints, setPrints] = useState<Array<{ src: string; caption: string }>>([]);
   const [incluirDestaque, setIncluirDestaque] = useState(true);
-  const [preset, setPreset] = useState("30");
-  const [startDate, setStartDate] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
-  const [endDate, setEndDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [periodo, setPeriodo] = useState<PeriodoSpec>({ tipo: "ultimos_dias", dias: 30 });
+  const periodoResolvido = useMemo(() => resolverPeriodo(periodo, hojeEmSaoPaulo()), [periodo]);
+  const startDate = periodoResolvido.start;
+  const endDate = periodoResolvido.end;
   const [metricPreferences, setMetricPreferences] = useState<ReportMetricPreference[]>([
     "purchaseValue",
     "purchases",
@@ -243,6 +219,13 @@ export function ReportGeneratorPanel({
     "impressions",
     "ctr",
   ]);
+  // Modelo salvo no cliente (clients.report_template): vem pre-aplicado e o
+  // gestor pode sobrescrever com "Salvar como modelo do cliente".
+  const [modeloDoCliente, setModeloDoCliente] = useState<Record<string, unknown> | null>(null);
+  const [usandoModelo, setUsandoModelo] = useState(false);
+  const [salvandoModelo, setSalvandoModelo] = useState(false);
+  const [previa, setPrevia] = useState<{ data: ReportData; blob: Blob; url: string } | null>(null);
+  const [gerandoPrevia, setGerandoPrevia] = useState(false);
   const [includeSocialPresence, setIncludeSocialPresence] = useState(true);
   const [socialMetricPreferences, setSocialMetricPreferences] = useState<SocialMetricPreference[]>([
     "followers",
@@ -256,11 +239,24 @@ export function ReportGeneratorPanel({
     let active = true;
     supabase
       .from("clients")
-      .select("primary_goal")
+      .select("primary_goal, report_template")
       .eq("id", clientId)
       .maybeSingle()
       .then(({ data }) => {
         if (!active) return;
+        const bruto = data?.report_template;
+        const modelo = bruto && typeof bruto === "object" && !Array.isArray(bruto) ? (bruto as Record<string, unknown>) : null;
+        setModeloDoCliente(modelo);
+        const periodoModelo = periodoDoModelo(modelo);
+        if (periodoModelo) setPeriodo(periodoModelo);
+        // O modelo antigo (so as 5 metricas padrao do envio rapido) nao diz
+        // nada sobre o cliente: so vale o que foi salvo por este painel.
+        const metricasModelo = modelo?.report_metrics ? metricasDoModelo(modelo) : null;
+        if (metricasModelo) {
+          setMetricPreferences(metricasModelo);
+          setUsandoModelo(true);
+          return;
+        }
         const goal = (data?.primary_goal as LocalGoal | null) ?? null;
         if (!goal || !GOAL_KPIS[goal]) return;
         const localPrefs = GOAL_KPIS[goal].map((key) => LOCAL_TO_REPORT_METRIC[key]);
@@ -271,18 +267,6 @@ export function ReportGeneratorPanel({
       active = false;
     };
   }, [isOpen, clientId]);
-
-  function applyPreset(value: string) {
-    setPreset(value);
-    const days = parseInt(value);
-    if (days === 0) {
-      setStartDate(format(startOfMonth(new Date()), "yyyy-MM-dd"));
-      setEndDate(format(endOfMonth(new Date()), "yyyy-MM-dd"));
-    } else {
-      setStartDate(format(subDays(new Date(), days), "yyyy-MM-dd"));
-      setEndDate(format(new Date(), "yyyy-MM-dd"));
-    }
-  }
 
   async function fetchMessagesStarted(metaAdAccountId?: string | null, metaAccessToken?: string | null) {
     if (!metaAdAccountId || !metaAccessToken) return 0;
@@ -307,7 +291,7 @@ export function ReportGeneratorPanel({
       return { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, phoneCalls: 0, directions: 0, leads: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     }
 
-    const json = await fetchMetaJson<{ data?: any[] }>(`act_${normalizeAccountId(metaAdAccountId)}/insights`, {
+    const json = await fetchMetaJson<{ data?: Array<ReportInsightRow & { reach?: string; frequency?: string }> }>(`act_${normalizeAccountId(metaAdAccountId)}/insights`, {
       fields: "actions,action_values,spend,impressions,inline_link_clicks,reach,frequency",
       level: "account",
       time_range: JSON.stringify({ since: startDate, until: endDate }),
@@ -786,7 +770,7 @@ export function ReportGeneratorPanel({
 
     const metrics = metricsRaw || [];
     const campaigns = campaignsRaw || [];
-    const ads = (adsRaw || []).filter((ad: any) => ad.ad_sets?.campaigns?.client_id === clientId);
+    const ads = (adsRaw || []).filter((ad) => ad.ad_sets?.campaigns?.client_id === clientId);
 
     let conversionMetrics = { spend: 0, impressions: 0, clicks: 0, messagesStarted: 0, instagramProfileVisits: 0, phoneCalls: 0, directions: 0, leads: 0, purchases: 0, purchaseValue: 0, costPerPurchase: 0, reach: 0, frequency: 0 };
     try {
@@ -799,22 +783,20 @@ export function ReportGeneratorPanel({
       }
     }
 
-    const summary = metrics.reduce(
-      (acc: any, item: any) => ({
+    const summary = metrics.reduce<ReportData["summary"]>(
+      (acc, item) => ({
+        ...acc,
         spend: acc.spend + (item.spend || 0),
-        revenue: 0,
         impressions: acc.impressions + (item.impressions || 0),
         clicks: acc.clicks + (item.clicks || 0),
-        conversions: acc.conversions,
-        messagesStarted: acc.messagesStarted,
       }),
-      { spend: 0, revenue: 0, impressions: 0, clicks: 0, conversions: 0, messagesStarted: conversionMetrics.messagesStarted }
+      { spend: 0, revenue: 0, roas: 0, ctr: 0, cpc: 0, cpm: 0, impressions: 0, clicks: 0, conversions: 0, messagesStarted: conversionMetrics.messagesStarted }
     );
 
     summary.spend = conversionMetrics.spend || summary.spend;
     summary.impressions = conversionMetrics.impressions || summary.impressions;
     summary.clicks = conversionMetrics.clicks || summary.clicks;
-    summary.conversions = conversionMetrics.purchases || campaigns.reduce((total: number, campaign: any) => total + (campaign.conversions || 0), 0);
+    summary.conversions = conversionMetrics.purchases || campaigns.reduce((total: number, campaign) => total + (campaign.conversions || 0), 0);
     summary.revenue = conversionMetrics.purchaseValue;
     summary.purchases = conversionMetrics.purchases;
     summary.purchaseValue = conversionMetrics.purchaseValue;
@@ -830,7 +812,7 @@ export function ReportGeneratorPanel({
     summary.leads = conversionMetrics.leads;
 
     let topCampaigns = campaigns
-      .map((campaign: any) => ({
+      .map((campaign) => ({
         name: campaign.name,
         status: campaign.status,
         spend: campaign.spend || 0,
@@ -851,7 +833,7 @@ export function ReportGeneratorPanel({
     }
 
     let topAds = ads
-      .map((ad: any) => ({
+      .map((ad) => ({
         name: ad.name,
         spend: ad.spend || 0,
         impressions: ad.impressions || 0,
@@ -875,9 +857,7 @@ export function ReportGeneratorPanel({
       // Fallback para anuncios salvos localmente se a consulta do periodo falhar.
     }
 
-    const start = new Date(startDate + "T00:00:00");
-    const end = new Date(endDate + "T00:00:00");
-    const periodLabel = `${format(start, "dd MMM yyyy", { locale: ptBR })} ate ${format(end, "dd MMM yyyy", { locale: ptBR })}`;
+    const periodLabel = periodoResolvido.label;
     const socialPresence = await buildSocialPresence(clientRaw);
     const socialProfileViews = socialPresence?.metrics.find((metric) => metric.key === "profileViews")?.value ?? 0;
     summary.instagramProfileVisits = conversionMetrics.instagramProfileVisits || socialProfileViews || 0;
@@ -903,10 +883,54 @@ export function ReportGeneratorPanel({
   }
 
 
-  async function handleGenerate(download: boolean) {
-    setLoading(true);
+  function fecharPrevia() {
+    if (previa) URL.revokeObjectURL(previa.url);
+    setPrevia(null);
+  }
+
+  async function gerarPrevia() {
+    setGerandoPrevia(true);
     try {
       const data = await buildReportData();
+      const blob = await buildReportPdfBlob(data);
+      if (previa) URL.revokeObjectURL(previa.url);
+      setPrevia({ data, blob, url: URL.createObjectURL(blob) });
+    } catch (error) {
+      toast.error(errorMessage(error, "Erro ao montar a prévia"));
+    } finally {
+      setGerandoPrevia(false);
+    }
+  }
+
+  async function salvarModeloDoCliente() {
+    setSalvandoModelo(true);
+    try {
+      const legado = metricasParaOLegado(metricPreferences);
+      // O envio rapido da tela de Clientes so conhece 7, 14 e 30 dias.
+      const periodoLegado = periodo.tipo === "ultimos_dias" && [7, 14, 30].includes(periodo.dias) ? `${periodo.dias}d` : undefined;
+      const modelo: Record<string, unknown> = {
+        ...(modeloDoCliente ?? {}),
+        report_metrics: metricPreferences,
+        ...(periodo.tipo !== "intervalo" ? { periodo } : {}),
+        ...(legado.length ? { metrics: legado } : {}),
+        ...(periodoLegado ? { period: periodoLegado } : {}),
+      };
+      const { error } = await supabase.from("clients").update({ report_template: modelo as Json }).eq("id", clientId);
+      if (error) throw error;
+      setModeloDoCliente(modelo);
+      setUsandoModelo(true);
+      toast.success("Modelo salvo: os próximos relatórios e agendamentos deste cliente já começam assim");
+    } catch (error) {
+      toast.error(errorMessage(error, "Não foi possível salvar o modelo do cliente"));
+    } finally {
+      setSalvandoModelo(false);
+    }
+  }
+
+  async function handleGenerate(download: boolean, pronto?: { data: ReportData; blob: Blob }) {
+    setLoading(true);
+    try {
+      const data = pronto?.data ?? (await buildReportData());
 
       const { data: session } = await supabase.auth.getSession();
       const tenantId = session.session?.user.id;
@@ -915,11 +939,11 @@ export function ReportGeneratorPanel({
       const periodLabel = data.period.label;
       const reportName = `${clientName} - ${periodLabel}`;
 
-      const blob = await buildReportPdfBlob(data);
+      const blob = pronto?.blob ?? (await buildReportPdfBlob(data));
       const pdfBase64 = await blobToBase64(blob);
 
       if (download) {
-        const filename = `relatorio-${clientName.toLowerCase().replace(/\s+/g, "-")}-${startDate}.pdf`;
+        const filename = `relatorio-${clientName.toLowerCase().replace(/\s+/g, "-")}-${data.period.start}.pdf`;
         downloadBlob(blob, filename);
       }
 
@@ -929,8 +953,8 @@ export function ReportGeneratorPanel({
         tenant_id: tenantId,
         client_id: clientId,
         name: reportName,
-        period: { start: startDate, end: endDate, label: periodLabel },
-        data,
+        period: data.period,
+        data: data as unknown as Json,
         status: "ready",
         file_url: null,
         pdf_base64: pdfBase64,
@@ -940,6 +964,7 @@ export function ReportGeneratorPanel({
       if (error) throw error;
 
       toast.success("Relatorio gerado com sucesso!");
+      fecharPrevia();
       onReportCreated?.();
       onClose();
     } catch (error) {
@@ -948,6 +973,8 @@ export function ReportGeneratorPanel({
       setLoading(false);
     }
   }
+
+  const ocupado = loading || gerandoPrevia;
 
   return (
     <Card className="border-primary/20">
@@ -967,62 +994,34 @@ export function ReportGeneratorPanel({
       <CardContent className="space-y-5">
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Periodo</CardTitle>
+            <CardTitle className="text-sm">Período</CardTitle>
+            <p className="mt-1 text-xs text-muted-foreground">Escolha um atalho, uma quantidade de dias ou as datas exatas.</p>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Select value={preset} onValueChange={applyPreset}>
-              <SelectTrigger className="text-sm">
-                <SelectValue placeholder="Selecione o periodo" />
-              </SelectTrigger>
-              <SelectContent>
-                {PERIOD_PRESETS.map((item) => (
-                  <SelectItem key={item.days} value={String(item.days)}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-                <SelectItem value="custom">Personalizado</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-              <div className="space-y-1">
-                <Label className="text-xs">Inicio</Label>
-                <Input
-                  type="date"
-                  value={startDate}
-                  onChange={(event) => {
-                    setStartDate(event.target.value);
-                    setPreset("custom");
-                  }}
-                  className="text-sm"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Fim</Label>
-                <Input
-                  type="date"
-                  value={endDate}
-                  onChange={(event) => {
-                    setEndDate(event.target.value);
-                    setPreset("custom");
-                  }}
-                  className="text-sm"
-                />
-              </div>
-            </div>
+          <CardContent>
+            <SeletorDePeriodo value={periodo} onChange={setPeriodo} />
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm">Preferencias do relatorio</CardTitle>
+          <CardHeader className="flex flex-col gap-3 space-y-0 pb-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+                Métricas do relatório
+                {usandoModelo && (
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary ring-1 ring-primary/20">
+                    Modelo do cliente
+                  </span>
+                )}
+              </CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">Só o que estiver marcado aparece no PDF, na prévia e no link do cliente.</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={salvarModeloDoCliente} disabled={salvandoModelo || ocupado} className="shrink-0">
+              {salvandoModelo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <BookmarkCheck className="mr-2 h-4 w-4" />}
+              Salvar como modelo do cliente
+            </Button>
           </CardHeader>
           <CardContent>
-            <MetricPreferencesBuilder
-              options={REPORT_METRIC_OPTIONS}
-              value={metricPreferences}
-              onChange={(next) => setMetricPreferences(next as ReportMetricPreference[])}
-            />
+            <SeletorDeMetricas value={metricPreferences} onChange={setMetricPreferences} />
           </CardContent>
         </Card>
 
@@ -1106,16 +1105,47 @@ export function ReportGeneratorPanel({
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-2">
-          <Button onClick={() => handleGenerate(false)} disabled={loading} variant="outline">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+          <Button onClick={gerarPrevia} disabled={ocupado} variant="ghost">
+            {gerandoPrevia ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+            Pré-visualizar
+          </Button>
+          <Button onClick={() => handleGenerate(false)} disabled={ocupado} variant="outline">
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
             Salvar
           </Button>
-          <Button onClick={() => handleGenerate(true)} disabled={loading}>
+          <Button onClick={() => handleGenerate(true)} disabled={ocupado}>
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             Salvar e baixar PDF
           </Button>
         </div>
+
+        <Dialog open={!!previa} onOpenChange={(aberto) => !aberto && fecharPrevia()}>
+          <DialogContent className="flex h-[90vh] max-w-4xl flex-col gap-3 p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle>Prévia do relatório</DialogTitle>
+              <DialogDescription className="break-words">
+                {previa?.data.period.label} · é exatamente este PDF que será salvo.
+              </DialogDescription>
+            </DialogHeader>
+            {previa && (
+              <iframe title="Prévia do relatório em PDF" src={previa.url} className="min-h-0 w-full flex-1 rounded-lg border border-border/60 bg-white" />
+            )}
+            <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+              <Button variant="ghost" onClick={fecharPrevia} disabled={loading}>
+                Voltar e ajustar
+              </Button>
+              <Button variant="outline" onClick={() => previa && handleGenerate(false, previa)} disabled={loading}>
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileText className="mr-2 h-4 w-4" />}
+                Salvar
+              </Button>
+              <Button onClick={() => previa && handleGenerate(true, previa)} disabled={loading}>
+                {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                Salvar e baixar PDF
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

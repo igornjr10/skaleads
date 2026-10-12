@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ArrowLeft,
   Megaphone,
   ShieldCheck,
   Bell,
@@ -18,6 +17,7 @@ import { ClientFundingPanel } from "@/components/clients/ClientFundingPanel";
 import { ClientBriefingCard } from "@/components/clients/ClientBriefingCard";
 import { HistoricoComercialCard } from "@/components/clients/HistoricoComercialCard";
 import { ClientMetasCard } from "@/components/clients/ClientMetasCard";
+import { ClientFinanceiroCard } from "@/components/clients/ClientFinanceiroCard";
 import { supabase } from "@/integrations/supabase/client";
 import { loadLatestAudit } from "@/lib/audit/runner";
 import type { AuditReport } from "@/lib/audit/types";
@@ -42,6 +42,13 @@ interface ClientRow {
   responsavel_nome: string | null;
   alvo_resultados_mes: number | null;
   alvo_custo_resultado: number | null;
+  alvo_custo_mensagem?: number | null;
+  alvo_mensagens_mes?: number | null;
+  alvo_visitas_perfil_mes?: number | null;
+  alvo_cpc?: number | null;
+  alvo_faturamento_mes?: number | null;
+  alvo_roas?: number | null;
+  limite_investimento_mes?: number | null;
 }
 
 interface Performance {
@@ -113,7 +120,6 @@ async function loadPerformance(clientId: string): Promise<Performance> {
 
 export default function ClientHub() {
   const { id: clientId } = useParams<{ id: string }>();
-  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [client, setClient] = useState<ClientRow | null>(null);
@@ -164,7 +170,7 @@ export default function ClientHub() {
 
   if (loading) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         <Skeleton className="h-10 w-64" />
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-48" />)}
@@ -188,11 +194,8 @@ export default function ClientHub() {
   const cadastroCompleto = !!client.responsavel_nome && !!client.email && !!client.cnpj;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => navigate("/clients")}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
         <div className="flex items-center gap-3 min-w-0">
           <ClientAvatar name={client.name} logoUrl={client.logo_url} />
           <div className="min-w-0">
@@ -331,8 +334,19 @@ export default function ClientHub() {
       <ClientMetasCard
         clientId={client.id}
         alvos={{ alvo_resultados_mes: client.alvo_resultados_mes, alvo_custo_resultado: client.alvo_custo_resultado }}
-        onSalvo={alvos => setClient(c => (c ? { ...c, ...alvos } : c))}
+        metas={{
+          alvo_custo_mensagem: client.alvo_custo_mensagem ?? null,
+          alvo_mensagens_mes: client.alvo_mensagens_mes ?? null,
+          alvo_visitas_perfil_mes: client.alvo_visitas_perfil_mes ?? null,
+          alvo_cpc: client.alvo_cpc ?? null,
+          alvo_faturamento_mes: client.alvo_faturamento_mes ?? null,
+          alvo_roas: client.alvo_roas ?? null,
+          limite_investimento_mes: client.limite_investimento_mes ?? null,
+        }}
+        onSalvo={mudanca => setClient(c => (c ? { ...c, ...mudanca } : c))}
       />
+
+      <ClientFinanceiroCard clientId={client.id} segmento={client.business_segment} />
 
       <ClientBriefingCard
         clientId={client.id}

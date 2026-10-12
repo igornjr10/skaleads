@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  ChevronLeft,
   Copy,
   Eye,
   EyeOff,
@@ -312,7 +311,7 @@ export default function ClientCadastro() {
 
   if (loading) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-64" />
         <Skeleton className="h-48" />
@@ -329,13 +328,8 @@ export default function ClientCadastro() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link to={`/clients/${clientId}`}>
-            <ChevronLeft className="h-4 w-4" />
-          </Link>
-        </Button>
         <ClientAvatar name={client.name} logoUrl={client.logo_url} />
         <div className="min-w-0">
           <h1 className="text-2xl font-bold truncate">{client.name}</h1>

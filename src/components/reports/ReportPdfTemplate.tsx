@@ -1,6 +1,7 @@
 import { Document, Image, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
 import type { ReportData } from "@/lib/report-types";
 import { itensDoTexto, temAnalise } from "@/lib/report-analise";
+import { linhasDeMetricas } from "@/lib/report-metricas";
 
 function sanitizePdfText(value?: string | null) {
   if (!value) return "";
@@ -47,110 +48,19 @@ function chunkMetrics<T>(items: T[], size: number) {
   return chunks;
 }
 
+// So o que o gestor escolheu, na ordem dele. Antes "visitas pelo anuncio"
+// entrava a forca e as paginas 2 e 3 repetiam CTR/CPC/CPM/compras fixos.
 function getPreferredMetrics(data: ReportData) {
-  const preferences = data.metricPreferences?.length
-    ? data.metricPreferences
-    : ["spend", "impressions", "clicks", "roas", "ctr"];
-  const visiblePreferences = preferences.includes("instagramProfileVisits")
-    ? preferences
-    : [...preferences, "instagramProfileVisits"];
-
-  const registry: Record<string, { label: string; value: string; note: string }> = {
-    spend: {
-      label: "Valor investido",
-      value: fmtCurrency(data.summary.spend),
-      note: "No periodo selecionado",
-    },
-    impressions: {
-      label: "Impressoes totais",
-      value: fmtNum(data.summary.impressions),
-      note: "Entrega acumulada",
-    },
-    clicks: {
-      label: "Total de cliques no link",
-      value: fmtNum(data.summary.clicks),
-      note: "Cliques no link no periodo",
-    },
-    messagesStarted: {
-      label: "Mensagens iniciadas",
-      value: fmtNum(data.summary.messagesStarted || 0),
-      note: "Conversas abertas no periodo",
-    },
-    instagramProfileVisits: {
-      label: "Visitas pelo anuncio",
-      value: fmtNum(data.summary.instagramProfileVisits || 0),
-      note: "Visitas ao perfil vindas das campanhas",
-    },
-    phoneCalls: {
-      label: "Ligacoes",
-      value: fmtNum(data.summary.phoneCalls || 0),
-      note: "Cliques para ligar no periodo",
-    },
-    directions: {
-      label: "Rotas / Como chegar",
-      value: fmtNum(data.summary.directions || 0),
-      note: "Cliques em rotas ou localizacao",
-    },
-    leads: {
-      label: "Leads",
-      value: fmtNum(data.summary.leads || 0),
-      note: "Cadastros e leads gerados",
-    },
-    purchaseValue: {
-      label: "Valor de compras",
-      value: fmtCurrency(data.summary.purchaseValue || 0),
-      note: "Conversao total registrada",
-    },
-    purchases: {
-      label: "Compras",
-      value: fmtNum(data.summary.purchases || 0),
-      note: "Quantidade total de compras",
-    },
-    costPerPurchase: {
-      label: "Custo por compra",
-      value: data.summary.purchases ? fmtCurrency(data.summary.costPerPurchase || 0) : "-",
-      note: "Investimento medio por compra",
-    },
-    roas: {
-      label: "ROAS",
-      value: `${(data.summary.roas || 0).toFixed(2)}x`,
-      note: "Retorno por real investido",
-    },
-    revenue: {
-      label: "Faturamento",
-      value: fmtCurrency(data.summary.revenue || 0),
-      note: "Receita gerada no periodo",
-    },
-    ctr: {
-      label: "CTR",
-      value: fmtPct(data.summary.ctr || 0),
-      note: "Taxa de cliques",
-    },
-    cpc: {
-      label: "CPC",
-      value: fmtCurrency(data.summary.cpc || 0),
-      note: "Custo medio por clique",
-    },
-    cpm: {
-      label: "CPM",
-      value: fmtCurrency(data.summary.cpm || 0),
-      note: "Custo por mil impressoes",
-    },
-    reach: {
-      label: "Alcance",
-      value: fmtNum(data.summary.reach || 0),
-      note: "Pessoas unicas alcancadas",
-    },
-    frequency: {
-      label: "Frequencia",
-      value: (data.summary.frequency || 0).toFixed(2),
-      note: "Exibicoes medias por pessoa",
-    },
-  };
-
-  return visiblePreferences.map((key) => registry[key]).filter(Boolean);
+  return linhasDeMetricas(data.summary, data.metricPreferences).map((linha) => ({
+    key: linha.key,
+    label: sanitizePdfText(linha.label),
+    value: linha.valor,
+    note: sanitizePdfText(linha.ajuda),
+  }));
 }
 
+const METRICAS_DE_CUSTO = new Set<string>(["ctr", "cpc", "cpm", "costPerResult", "costPerMessage", "costPerProfileVisit", "costPerLead", "costPerPurchase"]);
+const METRICAS_DE_RESULTADO = new Set<string>(["results", "messagesStarted", "instagramProfileVisits", "phoneCalls", "directions", "leads", "purchases"]);
 
 // A fonte do design system (`Plus Jakarta Sans`) chega ao PDF so por registro
 // explicito: o react-pdf nao enxerga o CSS da pagina e cai em Helvetica.
@@ -831,13 +741,9 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
   const ads = data.topAds.slice(0, 10);
   const preferredMetrics = getPreferredMetrics(data);
   const metricRows = chunkMetrics(preferredMetrics, 4);
-  const consolidatedMetrics = [
-    ...preferredMetrics,
-    { label: "CTR medio", value: fmtPct(data.summary.ctr), note: "Taxa de clique" },
-    { label: "CPC medio", value: fmtCurrency(data.summary.cpc), note: "Custo por clique" },
-    { label: "CPM medio", value: fmtCurrency(data.summary.cpm), note: "Custo por mil" },
-    { label: "Compras totais", value: fmtNum(data.summary.purchases || data.summary.conversions), note: "Compras registradas" },
-  ];
+  const costMetrics = preferredMetrics.filter((metric) => METRICAS_DE_CUSTO.has(metric.key)).slice(0, 4);
+  const resultMetric = preferredMetrics.find((metric) => METRICAS_DE_RESULTADO.has(metric.key));
+  const consolidatedMetrics = preferredMetrics;
 
   return (
     <Document title={`Relatorio - ${sanitizePdfText(data.client.name)}`} author={sanitizePdfText(data.branding.agencyName) || "Midsam Business"}>
@@ -908,30 +814,17 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                 <Text style={styles.headerChip}>Resumo do periodo</Text>
               </View>
 
-              <View style={styles.metricsRow}>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>CTR medio</Text>
-                  <Text style={styles.metricValue}>{fmtPct(data.summary.ctr)}</Text>
-                  <Text style={styles.metricNote}>Taxa de clique</Text>
+              {costMetrics.length > 0 && (
+                <View style={styles.metricsRow}>
+                  {costMetrics.map((metric, index) => (
+                    <View key={metric.key} style={[styles.metricCell, index === costMetrics.length - 1 && { borderRightWidth: 0 }]}>
+                      <Text style={styles.metricLabel}>{metric.label}</Text>
+                      <Text style={styles.metricValue}>{metric.value}</Text>
+                      <Text style={styles.metricNote}>{metric.note}</Text>
+                    </View>
+                  ))}
                 </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>CPC medio</Text>
-                  <Text style={styles.metricValue}>{fmtCurrency(data.summary.cpc)}</Text>
-                  <Text style={styles.metricNote}>Custo por clique</Text>
-                </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>CPM medio</Text>
-                  <Text style={styles.metricValue}>{fmtCurrency(data.summary.cpm)}</Text>
-                  <Text style={styles.metricNote}>Custo por mil</Text>
-                </View>
-                <View style={[styles.metricCell, { borderRightWidth: 0 }]}>
-                  <Text style={styles.metricLabel}>CPA medio</Text>
-                  <Text style={styles.metricValue}>
-                    {data.summary.purchases ? fmtCurrency(data.summary.costPerPurchase || 0) : "-"}
-                  </Text>
-                  <Text style={styles.metricNote}>Custo por compra</Text>
-                </View>
-              </View>
+              )}
 
               <AdsTable data={data} />
             </View>
@@ -953,11 +846,13 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
                   <Text style={styles.metricValue}>{fmtNum(campaigns.length)}</Text>
                   <Text style={styles.metricNote}>Conjunto priorizado</Text>
                 </View>
-                <View style={styles.metricCell}>
-                  <Text style={styles.metricLabel}>Mensagens iniciadas</Text>
-                  <Text style={styles.metricValue}>{fmtNum(data.summary.messagesStarted || 0)}</Text>
-                  <Text style={styles.metricNote}>Conversas abertas no periodo</Text>
-                </View>
+                {resultMetric && (
+                  <View style={styles.metricCell}>
+                    <Text style={styles.metricLabel}>{resultMetric.label}</Text>
+                    <Text style={styles.metricValue}>{resultMetric.value}</Text>
+                    <Text style={styles.metricNote}>{resultMetric.note}</Text>
+                  </View>
+                )}
                 <View style={styles.metricCell}>
                   <Text style={styles.metricLabel}>Anuncios avaliados</Text>
                   <Text style={styles.metricValue}>{fmtNum(ads.length)}</Text>

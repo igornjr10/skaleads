@@ -247,8 +247,8 @@ export default function Agencia() {
   const { role } = useAuth();
   const isAdmin = veTodosOsClientes(role);
   const {
-    demandas, setDemandas, substituir, remover, clientesDaCarteira, clientePorId,
-    pessoas, pessoaPorId, loading,
+    demandas, setDemandas, substituir, remover, clientesDaCarteira, clientesAtivos, clientePorId,
+    pessoas, pessoaPorId, vinculos, definirVinculos, loading,
   } = useDemandas();
   const [params, setParams] = useSearchParams();
 
@@ -987,6 +987,9 @@ export default function Agencia() {
         clientePorId={clientePorId}
         pessoas={pessoas}
         pessoaPorId={pessoaPorId}
+        vinculos={vinculos}
+        clientesAtivos={clientesAtivos}
+        onVinculos={definirVinculos}
       />
 
       <NovaDemandaDialog
@@ -997,6 +1000,9 @@ export default function Agencia() {
         pessoas={pessoas}
         inicial={registro?.inicial}
         descricaoDialogo={registro?.descricao}
+        vinculos={vinculos}
+        clientesAtivos={clientesAtivos}
+        onVinculos={definirVinculos}
       />
 
       {isAdmin && (

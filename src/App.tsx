@@ -28,7 +28,9 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Rotina = lazy(() => import("./pages/Rotina"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Andromeda = lazy(() => import("./pages/Andromeda"));
-const Nichos = lazy(() => import("./pages/Nichos"));
+const Biblioteca = lazy(() => import("./pages/Biblioteca"));
+const Academia = lazy(() => import("./pages/Academia"));
+const Reunioes = lazy(() => import("./pages/Reunioes"));
 const Grupos = lazy(() => import("./pages/Grupos"));
 const Contratos = lazy(() => import("./pages/Contratos"));
 const ClientAudit = lazy(() => import("./pages/ClientAudit"));
@@ -95,7 +97,11 @@ const App = () => (
                 <Route path="/planner" element={<Planner />} />
                 <Route path="/rotina" element={<Rotina />} />
                 <Route path="/andromeda" element={<Andromeda />} />
-                <Route path="/nichos" element={<Nichos />} />
+                {/* Nichos saiu do menu: o segmento vive no cadastro do cliente. */}
+                <Route path="/nichos" element={<Navigate to="/campaigns" replace />} />
+                <Route path="/biblioteca" element={<Biblioteca />} />
+                <Route path="/academia" element={<Academia />} />
+                <Route path="/reunioes" element={<Reunioes />} />
                 <Route path="/grupos" element={<Grupos />} />
                 <Route path="/contratos" element={<Contratos />} />
                 <Route path="/clients/:id/audit" element={<ClientAudit />} />

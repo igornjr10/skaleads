@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { linhasDeMetricas } from "@/lib/report-metricas";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -44,90 +45,10 @@ function fmtNum(value: number) {
   return value.toLocaleString("pt-BR");
 }
 
+// Mesmo catalogo do PDF e da mensagem do agendamento: o link que o cliente
+// abre mostra exatamente as metricas escolhidas para ele.
 function getPreferredMetrics(data: ReportData) {
-  const preferences = data.metricPreferences?.length
-    ? data.metricPreferences
-    : ["spend", "impressions", "clicks", "roas", "ctr"];
-  const visiblePreferences = preferences.includes("instagramProfileVisits")
-    ? preferences
-    : [...preferences, "instagramProfileVisits"];
-
-  const registry: Record<string, { label: string; value: string }> = {
-    spend: {
-      label: "Valor investido",
-      value: fmtCurrency(data.summary.spend),
-    },
-    impressions: {
-      label: "Impressoes totais",
-      value: fmtNum(data.summary.impressions),
-    },
-    clicks: {
-      label: "Total de cliques no link",
-      value: fmtNum(data.summary.clicks),
-    },
-    messagesStarted: {
-      label: "Mensagens iniciadas",
-      value: fmtNum(data.summary.messagesStarted || 0),
-    },
-    instagramProfileVisits: {
-      label: "Visitas pelo anuncio",
-      value: fmtNum(data.summary.instagramProfileVisits || 0),
-    },
-    phoneCalls: {
-      label: "Ligacoes",
-      value: fmtNum(data.summary.phoneCalls || 0),
-    },
-    directions: {
-      label: "Rotas / Como chegar",
-      value: fmtNum(data.summary.directions || 0),
-    },
-    leads: {
-      label: "Leads",
-      value: fmtNum(data.summary.leads || 0),
-    },
-    purchaseValue: {
-      label: "Valor da conversao da compra",
-      value: fmtCurrency(data.summary.purchaseValue || 0),
-    },
-    purchases: {
-      label: "Compras",
-      value: fmtNum(data.summary.purchases || 0),
-    },
-    costPerPurchase: {
-      label: "Custo por compra",
-      value: data.summary.purchases ? fmtCurrency(data.summary.costPerPurchase || 0) : "-",
-    },
-    roas: {
-      label: "ROAS",
-      value: `${(data.summary.roas || 0).toFixed(2)}x`,
-    },
-    revenue: {
-      label: "Faturamento",
-      value: fmtCurrency(data.summary.revenue || 0),
-    },
-    ctr: {
-      label: "CTR",
-      value: `${(data.summary.ctr || 0).toFixed(2)}%`,
-    },
-    cpc: {
-      label: "CPC",
-      value: fmtCurrency(data.summary.cpc || 0),
-    },
-    cpm: {
-      label: "CPM",
-      value: fmtCurrency(data.summary.cpm || 0),
-    },
-    reach: {
-      label: "Alcance",
-      value: fmtNum(data.summary.reach || 0),
-    },
-    frequency: {
-      label: "Frequencia",
-      value: (data.summary.frequency || 0).toFixed(2),
-    },
-  };
-
-  return visiblePreferences.map((key) => registry[key]).filter(Boolean);
+  return linhasDeMetricas(data.summary, data.metricPreferences).map((m) => ({ label: m.label, value: m.valor }));
 }
 
 export default function ReportShare() {

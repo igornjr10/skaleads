@@ -90,7 +90,7 @@ describe("AppSidebar", () => {
     const destinos = new Set(links.map(l => l.getAttribute("href")));
     for (const url of [
       "/dashboard", "/agencia", "/comercial", "/conversas", "/clients", "/onboarding", "/demandas", "/planner", "/rotina",
-      "/campaigns", "/nichos", "/alerts", "/report-schedules",
+      "/campaigns", "/alerts", "/report-schedules", "/reunioes", "/biblioteca", "/academia",
       "/whatsapp-scheduled", "/automations", "/chat", "/cerebro", "/settings",
     ]) {
       expect(destinos).toContain(url);
@@ -118,6 +118,6 @@ describe("AppSidebar", () => {
 
   it("grupo sem nada liberado some do menu", () => {
     const nav = navPermitida(() => false);
-    expect(nav.map(n => n.title)).toEqual(["Configurações"]);
+    expect(nav.map(n => n.title)).toEqual(["Academia", "Configurações"]);
   });
 });

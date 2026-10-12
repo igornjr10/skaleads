@@ -22,12 +22,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ChevronLeft, Download, Eye, FileText, Link2, Loader2, MessageSquare, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, CalendarClock, Download, Eye, FileText, Link2, Loader2, MessageSquare, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CampoBusca, casaBusca } from "@/components/CampoBusca";
 import type { ReportData } from "@/lib/report-types";
 import { blobToBase64, buildReportPdfBlob, downloadBlob } from "@/lib/report-pdf";
+import { formatReportDate } from "@/lib/report-date";
 
 const ReportGeneratorPanel = lazy(() =>
   import("@/components/reports/ReportGeneratorPanel").then((module) => ({ default: module.ReportGeneratorPanel }))
@@ -43,6 +44,16 @@ interface Report {
   view_count: number;
   created_at: string;
   data: ReportData | null;
+  schedule_id?: string | null;
+  sent_at?: string | null;
+  erro_envio?: string | null;
+}
+
+const COLUNAS_BASE = "id, name, period, status, share_token, share_expires_at, view_count, created_at, data";
+
+/** Linha de falha do agendamento grava `data` vazio: nao da para montar PDF. */
+function temDados(report: Report): report is Report & { data: ReportData } {
+  return Boolean(report.data && (report.data as Partial<ReportData>).summary);
 }
 
 interface Client {
@@ -89,11 +100,11 @@ export default function ClientReports() {
   async function fetchReports() {
     setLoading(true);
     setLoadError(null);
-    const { data, error } = await supabase
-      .from("reports")
-      .select("id, name, period, status, share_token, share_expires_at, view_count, created_at, data")
-      .eq("client_id", clientId!)
-      .order("created_at", { ascending: false });
+    // erro_envio chega com a migration 20261012150000; sem ela, cai na lista antiga.
+    const consulta = (colunas: string) =>
+      supabase.from("reports").select(colunas).eq("client_id", clientId!).order("created_at", { ascending: false });
+    let { data, error } = await consulta(`${COLUNAS_BASE}, schedule_id, sent_at, erro_envio`);
+    if (error?.code === "42703") ({ data, error } = await consulta(`${COLUNAS_BASE}, schedule_id, sent_at`));
 
     if (error) {
       const message = error.message.includes("permission denied")
@@ -103,7 +114,7 @@ export default function ClientReports() {
       toast.error(message);
     }
 
-    const fetched = (data as Report[]) || [];
+    const fetched = (data as unknown as Report[] | null) || [];
     setReports(fetched);
     setLoading(false);
     // Cliente sem nenhum relatorio ainda: abre o painel direto, sem precisar
@@ -112,7 +123,7 @@ export default function ClientReports() {
   }
 
   async function downloadPdf(report: Report) {
-    if (!report.data) {
+    if (!temDados(report)) {
       toast.error("Dados do relatorio nao disponiveis");
       return;
     }
@@ -130,7 +141,7 @@ export default function ClientReports() {
   }
 
   async function sendWhatsapp(report: Report, existingBlob?: Blob) {
-    if (!report.data) {
+    if (!temDados(report)) {
       toast.error("Dados do relatorio nao disponiveis");
       return;
     }
@@ -186,25 +197,37 @@ export default function ClientReports() {
   const visiveis = reports.filter((r) => casaBusca(busca, r.name, r.period?.label));
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/clients">
-              <ChevronLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Relatorios</h1>
-            {client && <p className="text-sm text-muted-foreground">{client.name}</p>}
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary ring-1 ring-primary/20">
+            <FileText className="h-6 w-6" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Relatórios</h1>
+            {client && (
+              <p className="truncate text-sm text-muted-foreground" title={client.name}>
+                {client.name}
+              </p>
+            )}
           </div>
         </div>
-        {!showGenerator && (
-          <Button onClick={() => setShowGenerator(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Relatorio
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {clientId && (
+            <Button variant="outline" asChild>
+              <Link to={`/report-schedules?cliente=${clientId}`}>
+                <CalendarClock className="mr-2 h-4 w-4" />
+                Agendar envio
+              </Link>
+            </Button>
+          )}
+          {!showGenerator && (
+            <Button onClick={() => setShowGenerator(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Novo relatório
+            </Button>
+          )}
+        </div>
       </div>
 
       {showGenerator && client && (
@@ -262,16 +285,33 @@ export default function ClientReports() {
 
             return (
               <Card key={report.id}>
-                <CardContent className="flex items-center gap-4 py-4">
+                <CardContent className="flex flex-wrap items-start gap-3 py-4 sm:flex-nowrap sm:items-center sm:gap-4">
                   <FileText className="h-8 w-8 shrink-0 text-primary" />
 
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{report.name}</p>
+                    <p className="truncate font-medium" title={report.name}>
+                      {report.name}
+                    </p>
                     <p className="text-xs text-muted-foreground">{createdAt}</p>
-                    {report.period?.label && <p className="text-xs text-muted-foreground">{report.period.label}</p>}
+                    {report.period?.label && <p className="break-words text-xs text-muted-foreground">{report.period.label}</p>}
+                    {report.sent_at && (
+                      <p className="text-xs text-primary">Enviado ao cliente em {formatReportDate(report.sent_at)}</p>
+                    )}
+                    {report.erro_envio && (
+                      <p className="flex items-start gap-1 break-words text-xs text-destructive">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        {report.erro_envio}
+                      </p>
+                    )}
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    {report.schedule_id && (
+                      <Badge variant="outline" className="gap-1">
+                        <CalendarClock className="h-3 w-3" />
+                        <span className="hidden sm:inline">Automático</span>
+                      </Badge>
+                    )}
                     <Badge variant={status.variant}>{status.label}</Badge>
 
                     {report.view_count > 0 && (
@@ -288,13 +328,13 @@ export default function ClientReports() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {report.data && (
+                        {temDados(report) && (
                           <DropdownMenuItem onClick={() => downloadPdf(report)}>
                             <Download className="mr-2 h-4 w-4" />
                             Baixar PDF
                           </DropdownMenuItem>
                         )}
-                        {report.data && (client?.whatsapp_number || client?.whatsapp_group_jid) && (
+                        {temDados(report) && (client?.whatsapp_number || client?.whatsapp_group_jid) && (
                           <DropdownMenuItem
                             onClick={() => sendWhatsapp(report)}
                             disabled={sendingId === report.id}
