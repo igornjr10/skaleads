@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { metricasDoModelo } from "@/lib/report-metricas";
 import { MessageSquare, Send, Eye, EyeOff, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -284,7 +285,14 @@ export default function ClientReportDialog({ open, onClose, client }: Props) {
       if (data?.error) throw new Error(data.error);
 
       if (saveTemplate) {
-        await supabase.from("clients").update({ report_template: buildTemplate() }).eq("id", client.id);
+        // Junta com o modelo atual: o gerador e o agendamento guardam ali
+        // report_metrics e periodo, que este envio rapido nao conhece.
+        const atual = (client.report_template && typeof client.report_template === "object" ? client.report_template : {}) as Record<string, unknown>;
+        const novo = buildTemplate();
+        const convertidas = metricasDoModelo({ metrics: novo.metrics });
+        await supabase.from("clients").update({
+          report_template: { ...atual, ...novo, ...(convertidas ? { report_metrics: convertidas } : {}) } as never,
+        }).eq("id", client.id);
         toast.info("Template salvo para este cliente");
       }
 

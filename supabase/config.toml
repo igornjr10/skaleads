@@ -21,3 +21,7 @@ verify_jwt = false
 # Checa por conta propria: x-cron-secret no cron, sessao do usuario no botao Sincronizar.
 [functions.sync-autentique]
 verify_jwt = false
+
+# Checa por conta propria: x-cron-secret no cron, ADM logado no "Rodar agora" da Central.
+[functions.automacoes-operacao]
+verify_jwt = false

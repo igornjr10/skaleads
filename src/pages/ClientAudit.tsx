@@ -17,7 +17,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   AlertTriangle, CheckCircle, XCircle, SkipForward, RefreshCw, FileText,
-  ArrowLeft, ShieldCheck, Zap, LayoutGrid, PaintBucket, DollarSign, Building2,
+  ShieldCheck, Zap, LayoutGrid, PaintBucket, DollarSign, Building2,
   ChevronDown, ChevronUp, Info, Brain, Loader2, Copy, MapPin,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -362,9 +362,6 @@ export default function ClientAudit() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to="/clients"><ArrowLeft className="h-4 w-4" /></Link>
-          </Button>
           <div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-primary" />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { NotificationsBell } from "./NotificationsBell";
@@ -8,6 +9,7 @@ import { RotaPermitida } from "./RotaPermitida";
 import { LogoEmpresa, nomeDaMarca } from "./MarcaEmpresa";
 import { useAuth } from "@/hooks/useAuth";
 import { aplicarCorDaMarca } from "@/lib/marca";
+import { eTelaInterna, telaDeCima } from "@/lib/navegacao";
 
 const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/dashboard":   { title: "Dashboard",        subtitle: "Visão geral das campanhas" },
@@ -24,6 +26,12 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   "/planner":     { title: "Planner",          subtitle: "Calendário e carga por pessoa" },
   "/onboarding":  { title: "Onboarding",       subtitle: "Checklist de cliente novo" },
   "/cerebro":     { title: "Cérebro",          subtitle: "Memória da empresa" },
+  "/reunioes":    { title: "Reuniões",         subtitle: "Agenda, pautas, decisões e ações" },
+  "/biblioteca":  { title: "Biblioteca de ideias", subtitle: "Referências e criativos da equipe" },
+  "/academia":    { title: "Academia",         subtitle: "Treinamento e processos" },
+  "/rotina":      { title: "Rotina",           subtitle: "Quadro semanal por equipe" },
+  "/grupos":      { title: "Grupos",           subtitle: "Grupos de WhatsApp dos clientes" },
+  "/contratos":   { title: "Contratos",        subtitle: "Assinaturas e vigências" },
   "/settings":    { title: "Configurações",    subtitle: "Preferências da plataforma" },
 };
 
@@ -40,6 +48,26 @@ function getPageMeta(pathname: string) {
 function estadoSalvoDaSidebar() {
   const salvo = document.cookie.match(/(?:^|;\s*)sidebar:state=([^;]*)/)?.[1];
   return salvo ? salvo === "true" : true;
+}
+
+// Volta pelo historico do proprio app (a tela anterior reabre com os filtros
+// que tinha); sem historico, sobe um nivel em vez de sair do sistema.
+function BotaoVoltar() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  if (!eTelaInterna(location.pathname)) return null;
+  const temHistorico = location.key !== "default";
+  return (
+    <button
+      type="button"
+      onClick={() => (temHistorico ? navigate(-1) : navigate(telaDeCima(location.pathname)))}
+      className="flex h-8 shrink-0 items-center gap-1.5 rounded-xl px-2 text-sm text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground"
+      aria-label="Voltar"
+    >
+      <ArrowLeft className="h-4 w-4" />
+      <span className="hidden sm:inline">Voltar</span>
+    </button>
+  );
 }
 
 export function AppLayout() {
@@ -69,6 +97,8 @@ export function AppLayout() {
 
             {/* Divider */}
             <div className="h-5 w-px bg-border" />
+
+            <BotaoVoltar />
 
             {/* Page context */}
             <div className="flex items-center gap-2 min-w-0">

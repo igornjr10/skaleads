@@ -23,11 +23,14 @@ const Demandas = lazy(() => import("./pages/Demandas"));
 const Comercial = lazy(() => import("./pages/Comercial"));
 const Conversas = lazy(() => import("./pages/Conversas"));
 const Agencia = lazy(() => import("./pages/Agencia"));
+const CentralAutomacoes = lazy(() => import("./pages/CentralAutomacoes"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Rotina = lazy(() => import("./pages/Rotina"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Andromeda = lazy(() => import("./pages/Andromeda"));
-const Nichos = lazy(() => import("./pages/Nichos"));
+const Biblioteca = lazy(() => import("./pages/Biblioteca"));
+const Academia = lazy(() => import("./pages/Academia"));
+const Reunioes = lazy(() => import("./pages/Reunioes"));
 const Grupos = lazy(() => import("./pages/Grupos"));
 const Contratos = lazy(() => import("./pages/Contratos"));
 const ClientAudit = lazy(() => import("./pages/ClientAudit"));
@@ -77,6 +80,7 @@ const App = () => (
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/financeiro" element={<Financeiro />} />
                 <Route path="/agencia" element={<Agencia />} />
+                <Route path="/agencia/automacoes" element={<CentralAutomacoes />} />
                 <Route path="/demandas" element={<Demandas />} />
                 <Route path="/comercial" element={<Comercial />} />
                 <Route path="/conversas" element={<Conversas />} />
@@ -93,7 +97,11 @@ const App = () => (
                 <Route path="/planner" element={<Planner />} />
                 <Route path="/rotina" element={<Rotina />} />
                 <Route path="/andromeda" element={<Andromeda />} />
-                <Route path="/nichos" element={<Nichos />} />
+                {/* Nichos saiu do menu: o segmento vive no cadastro do cliente. */}
+                <Route path="/nichos" element={<Navigate to="/campaigns" replace />} />
+                <Route path="/biblioteca" element={<Biblioteca />} />
+                <Route path="/academia" element={<Academia />} />
+                <Route path="/reunioes" element={<Reunioes />} />
                 <Route path="/grupos" element={<Grupos />} />
                 <Route path="/contratos" element={<Contratos />} />
                 <Route path="/clients/:id/audit" element={<ClientAudit />} />

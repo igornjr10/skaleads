@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, Link, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,7 +21,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { ChevronLeft, Image, MapPin } from "lucide-react";
+import { Image, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -414,13 +414,10 @@ export default function ClientAudiences() {
   }, [clientId]);
 
   return (
-    <div className="space-y-5 p-6">
+    <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild>
-            <Link to={`/clients/${clientId}/creatives`}><ChevronLeft className="h-4 w-4" /></Link>
-          </Button>
           <div>
             <h1 className="text-2xl font-bold">Análise de Públicos</h1>
             {clientName && <p className="text-sm text-muted-foreground">{clientName}</p>}

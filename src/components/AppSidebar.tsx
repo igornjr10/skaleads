@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LayoutDashboard, Users, Megaphone, Bell, Settings, LogOut, MessageSquare, Activity, ClipboardList, Network, CalendarClock, Repeat, Compass, Send, Sparkles, MessagesSquare, ChevronRight, FileSignature, CircleDollarSign, Building2, Inbox, CalendarDays, Handshake, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Users, Megaphone, Bell, Settings, LogOut, MessageSquare, Activity, ClipboardList, Network, CalendarClock, Repeat, Send, Sparkles, MessagesSquare, ChevronRight, FileSignature, CircleDollarSign, Building2, Inbox, CalendarDays, Handshake, Lightbulb, GraduationCap, Video, type LucideIcon } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import {
   Sidebar,
@@ -60,10 +60,11 @@ const NAV: NavNode[] = [
   {
     title: "Campanhas", url: "/campaigns", icon: Megaphone,
     children: [
-      { title: "Nichos", url: "/nichos", icon: Compass },
       { title: "Alertas", url: "/alerts", icon: Bell },
     ],
   },
+  { title: "Reuniões", url: "/reunioes", icon: Video },
+  { title: "Biblioteca de ideias", url: "/biblioteca", icon: Lightbulb },
   {
     title: "Envios", icon: Send,
     children: [
@@ -79,6 +80,7 @@ const NAV: NavNode[] = [
       { title: "Cérebro", url: "/cerebro", icon: Network },
     ],
   },
+  { title: "Academia", url: "/academia", icon: GraduationCap },
   { title: "Configurações", url: "/settings", icon: Settings },
 ];
 

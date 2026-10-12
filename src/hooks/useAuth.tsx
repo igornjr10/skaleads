@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, ReactNode 
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { type AppRole, type Modulo, modulosEfetivos } from "@/lib/permissoes";
+import { limparEstadosDasTelas } from "@/hooks/useEstadoDaTela";
 
 export interface EmpresaAtual {
   id: string;
@@ -78,6 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     await supabase.auth.signOut();
+    limparEstadosDasTelas();
   }
 
   const modulos = role ? modulosEfetivos(role, personalizados) : [];

@@ -1,3 +1,5 @@
+import type { MetricaRelatorio } from "@/lib/report-metricas";
+
 export interface ReportData {
   generatedAt: string;
   client: {
@@ -62,26 +64,8 @@ export interface ReportData {
     cpm: number;
     status: string;
   }>;
-  metricPreferences?: Array<
-    | "spend"
-    | "impressions"
-    | "clicks"
-    | "messagesStarted"
-    | "instagramProfileVisits"
-    | "phoneCalls"
-    | "directions"
-    | "leads"
-    | "purchaseValue"
-    | "purchases"
-    | "costPerPurchase"
-    | "roas"
-    | "revenue"
-    | "ctr"
-    | "cpc"
-    | "cpm"
-    | "reach"
-    | "frequency"
-  >;
+  /** Metricas escolhidas, na ordem do relatorio. Catalogo em report-metricas.ts. */
+  metricPreferences?: MetricaRelatorio[];
   branding: { primaryColor: string; agencyName: string };
   /** Texto do gestor. Uma linha por item: vira lista no PDF. */
   analysis?: {

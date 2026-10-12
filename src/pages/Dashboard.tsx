@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,7 +9,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp, MessageCircle, Phone, MapPin, UserPlus, Users, Repeat, Heart, Radio, Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { buscarTudo } from "@/lib/buscar-tudo";
+import { errorMessage } from "@/lib/utils";
+import { useEstadoDaTela } from "@/hooks/useEstadoDaTela";
+import { CustoPorMensagemPanel } from "@/components/dashboard/CustoPorMensagemPanel";
+import { AlertTriangle, RefreshCw, ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp, MessageCircle, Phone, MapPin, UserPlus, Users, Repeat, Heart, Radio, Info } from "lucide-react";
 import { subDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { GOAL_KPIS, LOCAL_METRIC_LABELS, goalLabel, type LocalGoal, type LocalMetricKey } from "@/lib/local-business";
@@ -73,6 +80,8 @@ interface Campaign {
   cpc: number;
   cpm: number;
   conversions: number;
+  objective: string | null;
+  messages: number | null;
 }
 
 interface DailyMetric {
@@ -118,9 +127,12 @@ export default function Dashboard() {
   const [clients, setClients] = useState<Client[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetric[]>([]);
+  const [serieBruta, setSerieBruta] = useState<(DailyMetric & { client_id: string })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [client, setClient] = useState<string>("all");
-  const [period, setPeriod] = useState<Period>("30");
+  const [erro, setErro] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
+  const [client, setClient] = useEstadoDaTela<string>("dashboard:cliente", "all");
+  const [period, setPeriod] = useEstadoDaTela<Period>("dashboard:periodo", "30");
   const [reachFreq, setReachFreq] = useState<ReachFrequency | null>(null);
   const [social, setSocial] = useState<SocialPresence | null>(null);
   const [richLoading, setRichLoading] = useState(false);
@@ -128,60 +140,89 @@ export default function Dashboard() {
   const clientId = client === "all" ? undefined : client;
   const periodDays = Number(period);
 
-  // Load clients once
   useEffect(() => {
     supabase
       .from("clients")
       .select("id, name, primary_goal")
       .eq("status", "active")
       .order("name")
-      .then(({ data }) => setClients(data ?? []));
+      .then(({ data }) => {
+        const lista = data ?? [];
+        setClients(lista);
+        // Cliente lembrado da sessao que saiu da carteira (ou foi arquivado) volta para "todos".
+        if (client !== "all" && data && !lista.some(c => c.id === client)) setClient("all");
+      });
+    // So na entrada da tela.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Load campaigns + daily metrics when client/period changes
+  // Campanhas e serie diaria paginadas: com muitos clientes a soma passava de
+  // 1000 linhas, o PostgREST cortava calado e o painel mostrava numero menor.
   useEffect(() => {
+    let ativo = true;
     async function load() {
       setLoading(true);
+      setErro(null);
+      try {
+        const startDate = format(subDays(new Date(), periodDays * 2), "yyyy-MM-dd");
+        const [campData, metricsData] = await Promise.all([
+          buscarTudo<Campaign>((de, ate) => {
+            let q = supabase.from("campaigns")
+              .select("id, client_id, name, status, objective, spend, impressions, clicks, ctr, cpc, cpm, conversions, messages")
+              .order("spend", { ascending: false }).order("id");
+            if (clientId) q = q.eq("client_id", clientId);
+            return q.range(de, ate) as never;
+          }),
+          buscarTudo<DailyMetric & { client_id: string }>((de, ate) => {
+            let q = supabase.from("campaign_daily_metrics")
+              .select("client_id, date, spend, impressions, clicks, messages, calls, directions, leads, profile_visits")
+              .gte("date", startDate)
+              .order("date").order("client_id");
+            if (clientId) q = q.eq("client_id", clientId);
+            return q.range(de, ate) as never;
+          }),
+        ]);
+        if (!ativo) return;
+        setCampaigns(campData);
+        setSerieBruta(metricsData);
 
-      // Campaigns
-      let campQuery = supabase.from("campaigns").select("*").order("spend", { ascending: false });
-      if (clientId) campQuery = campQuery.eq("client_id", clientId);
-      const { data: campData } = await campQuery;
-      setCampaigns((campData as Campaign[]) ?? []);
-
-      // Daily metrics: fetch 2x period to compute deltas
-      const startDate = format(subDays(new Date(), periodDays * 2), "yyyy-MM-dd");
-      let metricsQuery = supabase
-        .from("campaign_daily_metrics")
-        .select("date, spend, impressions, clicks, messages, calls, directions, leads, profile_visits")
-        .gte("date", startDate)
-        .order("date");
-      if (clientId) metricsQuery = metricsQuery.eq("client_id", clientId);
-      const { data: metricsData } = await metricsQuery;
-
-      // Aggregate multi-client rows per day
-      const byDate = new Map<string, DailyMetric>();
-      for (const r of (metricsData ?? []) as DailyMetric[]) {
-        const existing = byDate.get(r.date);
-        if (existing) {
-          existing.spend += r.spend;
-          existing.impressions += r.impressions;
-          existing.clicks += r.clicks;
-          existing.messages += r.messages || 0;
-          existing.calls += r.calls || 0;
-          existing.directions += r.directions || 0;
-          existing.leads += r.leads || 0;
-          existing.profile_visits += r.profile_visits || 0;
-        } else {
-          byDate.set(r.date, { ...r });
+        const byDate = new Map<string, DailyMetric>();
+        for (const r of metricsData) {
+          const linha = {
+            date: r.date,
+            spend: Number(r.spend) || 0,
+            impressions: Number(r.impressions) || 0,
+            clicks: Number(r.clicks) || 0,
+            messages: Number(r.messages) || 0,
+            calls: Number(r.calls) || 0,
+            directions: Number(r.directions) || 0,
+            leads: Number(r.leads) || 0,
+            profile_visits: Number(r.profile_visits) || 0,
+          };
+          const existing = byDate.get(r.date);
+          if (existing) {
+            existing.spend += linha.spend;
+            existing.impressions += linha.impressions;
+            existing.clicks += linha.clicks;
+            existing.messages += linha.messages;
+            existing.calls += linha.calls;
+            existing.directions += linha.directions;
+            existing.leads += linha.leads;
+            existing.profile_visits += linha.profile_visits;
+          } else {
+            byDate.set(r.date, linha);
+          }
         }
+        setDailyMetrics([...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)));
+      } catch (e) {
+        if (ativo) setErro(errorMessage(e, "Não foi possível carregar os dados do dashboard"));
+      } finally {
+        if (ativo) setLoading(false);
       }
-      setDailyMetrics([...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)));
-
-      setLoading(false);
     }
     load();
-  }, [clientId, periodDays]);
+    return () => { ativo = false; };
+  }, [clientId, periodDays, tentativa]);
 
   // Alcance/frequência e presença social: busca ao vivo na Meta, só com 1 cliente selecionado
   useEffect(() => {
@@ -250,28 +291,15 @@ export default function Dashboard() {
     };
   }, [dailyMetrics, periodDays]);
 
-  // KPI metrics from campaigns (lifetime) + deltas from daily series
-  const campAgg = useMemo(() => {
-    return campaigns.reduce(
-      (acc, c) => ({
-        spend: acc.spend + c.spend,
-        impressions: acc.impressions + c.impressions,
-        clicks: acc.clicks + c.clicks,
-      }),
-      { spend: 0, impressions: 0, clicks: 0 }
-    );
-  }, [campaigns]);
-
+  // Os KPIs vem so da serie diaria do periodo. Antes, sem serie, caiam no
+  // total das campanhas (outra janela) e misturavam periodos.
   const kpiMetrics = {
-    spend: currentAgg.spend || campAgg.spend,
-    impressions: currentAgg.impressions || campAgg.impressions,
-    clicks: currentAgg.clicks || campAgg.clicks,
-    ctr: currentAgg.impressions ? (currentAgg.clicks / currentAgg.impressions) * 100
-      : campAgg.impressions ? (campAgg.clicks / campAgg.impressions) * 100 : 0,
-    cpc: currentAgg.clicks ? currentAgg.spend / currentAgg.clicks
-      : campAgg.clicks ? campAgg.spend / campAgg.clicks : 0,
-    cpm: currentAgg.impressions ? (currentAgg.spend / currentAgg.impressions) * 1000
-      : campAgg.impressions ? (campAgg.spend / campAgg.impressions) * 1000 : 0,
+    spend: currentAgg.spend,
+    impressions: currentAgg.impressions,
+    clicks: currentAgg.clicks,
+    ctr: currentAgg.impressions ? (currentAgg.clicks / currentAgg.impressions) * 100 : 0,
+    cpc: currentAgg.clicks ? currentAgg.spend / currentAgg.clicks : 0,
+    cpm: currentAgg.impressions ? (currentAgg.spend / currentAgg.impressions) * 1000 : 0,
   };
 
   const prevCtr = prevAgg.impressions ? (prevAgg.clicks / prevAgg.impressions) * 100 : 0;
@@ -393,14 +421,33 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <div className="p-8 text-center text-sm text-muted-foreground">Carregando...</div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+            {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+          </div>
+          <Skeleton className="h-40 rounded-2xl" />
+          <Skeleton className="h-72 rounded-2xl" />
+        </div>
+      ) : erro ? (
+        <Card className="border-destructive/40 shadow-card">
+          <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
+            <div>
+              <p className="font-medium">Não deu para carregar o dashboard</p>
+              <p className="mt-1 text-sm text-muted-foreground">{erro}</p>
+            </div>
+            <Button variant="outline" onClick={() => setTentativa(t => t + 1)}>
+              <RefreshCw className="mr-1.5 h-4 w-4" /> Tentar de novo
+            </Button>
+          </CardContent>
+        </Card>
       ) : !hasData ? (
         <Card className="shadow-card">
           <CardContent className="p-12 text-center space-y-2">
             <p className="text-sm text-muted-foreground">Nenhum dado encontrado.</p>
             <p className="text-xs text-muted-foreground">
               Conecte um cliente ao Meta Ads em{" "}
-              <a href="/clients" className="text-primary underline">Clientes</a>
+              <Link to="/clients" className="text-primary underline">Clientes</Link>
               {" "}e sincronize para ver os dados aqui.
             </p>
           </CardContent>
@@ -476,6 +523,8 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
+
+          <CustoPorMensagemPanel campanhas={campaigns} dias={serieBruta} clienteId={clientId} />
 
           {/* Alcance e presença social (apenas com 1 cliente selecionado) */}
           {clientId && (

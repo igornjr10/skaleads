@@ -138,3 +138,31 @@
     @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-glow;
   }
 }
+
+/*
+ * Correcoes globais de layout (sem mexer em components/ui):
+ * - lista de abas com muitas abas quebra linha em vez de vazar da tela;
+ * - dialog centralizado nao encosta nas bordas do celular e rola quando o
+ *   conteudo e maior que a tela (antes botoes do rodape ficavam fora).
+ */
+[role="tablist"] {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 2.5rem;
+  max-width: 100%;
+}
+
+[role="dialog"][class*="left-[50%]"],
+[role="alertdialog"][class*="left-[50%]"] {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 639px) {
+  [role="dialog"][class*="left-[50%]"],
+  [role="alertdialog"][class*="left-[50%]"] {
+    width: calc(100vw - 1.5rem);
+    border-radius: 1rem;
+    padding: 1.25rem;
+  }
+}
