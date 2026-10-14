@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { CalendarClock, Loader2, Shuffle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,10 @@ import type { ClienteResumo, Pessoa } from "@/hooks/useDemandas";
 import { errorMessage } from "@/lib/utils";
 import { rotuloPapel } from "@/lib/permissoes";
 import {
-  CATEGORIAS, PRIORIDADES, RECORRENCIAS, type ClienteDaDemanda, type Demanda, type VinculosDemandas, paraDemanda,
+  CATEGORIAS, PRIORIDADES, RECORRENCIAS, type ClienteDaDemanda, type Demanda, type VinculosDemandas,
+  atalhosDeInicio, hojeISO, paraDemanda,
 } from "@/lib/demandas";
+import { useDistribuicao } from "@/hooks/useDistribuicao";
 
 const SEM = "sem";
 
@@ -31,6 +33,7 @@ const VAZIO = {
   clientes: [] as string[],
   corresponsaveis: [] as string[],
   recorrencia: SEM,
+  inicia_em: "",
 };
 
 export interface DemandaInicial {
@@ -62,6 +65,7 @@ export function NovaDemandaDialog({
   const { user } = useAuth();
   const [form, setForm] = useState({ ...VAZIO, prazo: prazoInicial ?? "" });
   const [salvando, setSalvando] = useState(false);
+  const { regraDe } = useDistribuicao(open);
 
   // Quem abre e o pai (botao ou dia do calendario): o form zera a cada abertura.
   useEffect(() => {
@@ -83,11 +87,16 @@ export function NovaDemandaDialog({
   // Um cliente so continua em client_id (como sempre foi); varios vao para task_clientes.
   const idsClientes = multi ? form.clientes : form.client_id === SEM ? [] : [form.client_id];
   const corresponsaveis = form.corresponsaveis.filter(id => id !== principal);
-
+  const regra = regraDe(form.categoria);
+  const distribuiSozinha = !principal && !!regra && (regra.pessoas.length > 0 || regra.gestor_do_cliente);
+  const hoje = hojeISO();
+  const programada = !!form.inicia_em && form.inicia_em > hoje;
+  const atalhos = atalhosDeInicio();
   async function criar(e: React.FormEvent) {
     e.preventDefault();
     if (!form.titulo.trim()) return toast.error("A demanda precisa de um título");
     if (!user) return;
+    if (programada && form.prazo && form.prazo < form.inicia_em) return toast.error("O prazo não pode ser antes do dia em que a demanda chega");
     setSalvando(true);
     const { data, error } = await supabase
       .from("tasks")
@@ -102,6 +111,8 @@ export function NovaDemandaDialog({
         assigned_to: principal,
         created_by: user.id,
         ...(multi && form.recorrencia !== SEM ? { recorrencia: form.recorrencia } : {}),
+        // So vai quando programada: sem a migration a coluna nao existe.
+        ...(programada ? { inicia_em: form.inicia_em } : {}),
       })
       .select("*")
       .single();
@@ -132,7 +143,13 @@ export function NovaDemandaDialog({
     setSalvando(false);
     onCreated(criada);
     onOpenChange(false);
-    toast.success(idsClientes.length > 1 ? `Demanda criada para ${idsClientes.length} clientes` : "Demanda criada");
+    const quem = criada.assigned_to ? pessoas.find(p => p.id === criada.assigned_to)?.nome : null;
+    const partes = [
+      idsClientes.length > 1 ? `Demanda criada para ${idsClientes.length} clientes` : "Demanda criada",
+      criada.distribuida_auto && quem ? `distribuída para ${quem}` : null,
+      programada ? `chega em ${form.inicia_em.split("-").reverse().slice(0, 2).join("/")}` : null,
+    ];
+    toast.success(partes.filter(Boolean).join(" · "));
   }
 
   const opcoesPessoas = pessoas.map(p => ({ value: p.id, label: p.nome, detalhe: rotuloPapel(p.role) }));
@@ -143,7 +160,7 @@ export function NovaDemandaDialog({
         <form onSubmit={criar} className="space-y-3">
           <DialogHeader>
             <DialogTitle>Nova demanda</DialogTitle>
-            <DialogDescription>{descricaoDialogo ?? "Quem recebe é avisado no sino. Você acompanha e aprova quando ela voltar para revisão."}</DialogDescription>
+            <DialogDescription>{descricaoDialogo ?? "Quem recebe é avisado no sino e no WhatsApp. Você acompanha e aprova quando ela voltar para revisão."}</DialogDescription>
           </DialogHeader>
 
           <div>
@@ -158,23 +175,23 @@ export function NovaDemandaDialog({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="min-w-0">
-              <Label>{multi ? "Responsável principal" : "Responsável"}</Label>
+              <Label>{multi ? "Líder (responsável principal)" : "Responsável"}</Label>
               <Select value={form.assigned_to} onValueChange={v => setForm({ ...form, assigned_to: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={SEM}>Sem responsável</SelectItem>
+                  <SelectItem value={SEM}>{regra ? "Distribuir automaticamente" : "Sem responsável"}</SelectItem>
                   {pessoas.map(p => <SelectItem key={p.id} value={p.id}>{p.nome} · {rotuloPapel(p.role)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             {multi ? (
               <div className="min-w-0">
-                <Label>Responsáveis secundários</Label>
+                <Label>Executores</Label>
                 <SeletorMultiplo
                   opcoes={opcoesPessoas.filter(o => o.value !== principal)}
                   valor={corresponsaveis}
                   onChange={v => setForm({ ...form, corresponsaveis: v })}
-                  placeholder="Ninguém além do principal"
+                  placeholder="Só o líder executa"
                   busca="Buscar pessoa..."
                 />
               </div>
@@ -226,6 +243,48 @@ export function NovaDemandaDialog({
                 </SelectContent>
               </Select>
             </div>
+            {distribuiSozinha && (
+              <p className="flex items-start gap-1.5 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2 text-[11px] text-muted-foreground sm:col-span-2">
+                <Shuffle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                {regra!.gestor_do_cliente
+                  ? "Vai para o gestor do cliente; sem gestor, para quem da equipe desta categoria estiver com menos demandas abertas."
+                  : "Vai para quem da equipe desta categoria estiver com menos demandas abertas."}
+              </p>
+            )}
+            <div className="min-w-0 sm:col-span-2">
+              <Label>Começa em</Label>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                {atalhos.map(a => {
+                  const ativo = a.data ? form.inicia_em === a.data : !programada;
+                  return (
+                    <Button
+                      key={a.id}
+                      type="button"
+                      size="sm"
+                      variant={ativo ? "secondary" : "outline"}
+                      className="h-8"
+                      onClick={() => setForm({ ...form, inicia_em: a.data ?? "" })}
+                    >
+                      {a.label}
+                    </Button>
+                  );
+                })}
+                <Input
+                  type="date"
+                  min={hoje}
+                  aria-label="Outra data de início"
+                  className="h-8 w-40"
+                  value={form.inicia_em}
+                  onChange={e => setForm({ ...form, inicia_em: e.target.value })}
+                />
+              </div>
+              {programada && (
+                <p className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  Fica em Programadas e só chega (com aviso) para quem executa nesse dia, às 7h.
+                </p>
+              )}
+            </div>
             <div>
               <Label>Prazo</Label>
               <Input type="date" value={form.prazo} onChange={e => setForm({ ...form, prazo: e.target.value })} />
@@ -246,7 +305,7 @@ export function NovaDemandaDialog({
                 </Select>
                 {form.recorrencia !== SEM && (
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    Ao concluir, a próxima abre sozinha com os mesmos clientes e responsáveis, a partir do prazo desta.
+                    Ao concluir, a próxima abre sozinha com os mesmos clientes e responsáveis, a partir do prazo desta, e chega com a mesma antecedência.
                   </p>
                 )}
               </div>

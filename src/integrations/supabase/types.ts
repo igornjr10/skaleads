@@ -3349,6 +3349,9 @@ export type Database = {
           prioridade: string
           recorrencia: string | null
           recorrencia_origem: string | null
+          inicia_em: string | null
+          liberada_em: string | null
+          distribuida_auto: boolean
           status: string
           titulo: string
           updated_at: string
@@ -3371,6 +3374,9 @@ export type Database = {
           prioridade?: string
           recorrencia?: string | null
           recorrencia_origem?: string | null
+          inicia_em?: string | null
+          liberada_em?: string | null
+          distribuida_auto?: boolean
           status?: string
           titulo: string
           updated_at?: string
@@ -3393,6 +3399,9 @@ export type Database = {
           prioridade?: string
           recorrencia?: string | null
           recorrencia_origem?: string | null
+          inicia_em?: string | null
+          liberada_em?: string | null
+          distribuida_auto?: boolean
           status?: string
           titulo?: string
           updated_at?: string

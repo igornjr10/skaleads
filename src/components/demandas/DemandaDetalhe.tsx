@@ -23,7 +23,7 @@ import {
   CATEGORIAS, PRIORIDADES, RECORRENCIAS, SEM_VINCULOS, STATUS_DEMANDA,
   type ClienteDaDemanda, type Demanda, type ItemChecklist, type VinculosDemandas,
   categoriaLabel, corresponsaveisDe, idsDosClientes, novoItemChecklist, paraBanco, paraDemanda, prioridadeMeta,
-  progressoChecklist, recorrenciaLabel, statusMeta,
+  estaProgramada, progressoChecklist, recorrenciaLabel, rotuloInicio, statusMeta,
 } from "@/lib/demandas";
 
 const SEM = "sem";
@@ -194,6 +194,8 @@ export function DemandaDetalhe({
       prazo_hora: rascunho!.prazo ? rascunho!.prazo_hora || null : null,
       assigned_to: rascunho!.assigned_to,
       ...(multi ? { recorrencia: rascunho!.recorrencia ?? null } : {}),
+      // So quando mudou: sem a migration a coluna nao existe.
+      ...((rascunho!.inicia_em || null) !== (demanda!.inicia_em || null) ? { inicia_em: rascunho!.inicia_em || null } : {}),
     }, "Demanda atualizada");
     setSalvando(false);
   }
@@ -307,6 +309,8 @@ export function DemandaDetalhe({
           <DialogDescription className="break-words">
             {resumoClientes} · {categoriaLabel(demanda.categoria)} · pedida por {nome(demanda.created_by)}
             {recorrencia && ` · ${recorrencia.toLowerCase()}`}
+            {estaProgramada(demanda) && ` · programada, ${rotuloInicio(demanda.inicia_em)}`}
+            {demanda.distribuida_auto && " · distribuída automaticamente"}
             {demanda.concluida_at && ` · concluída em ${format(parseISO(demanda.concluida_at), "dd/MM/yyyy")}`}
           </DialogDescription>
         </DialogHeader>
@@ -322,7 +326,7 @@ export function DemandaDetalhe({
             </Select>
           </div>
           <div className="min-w-0">
-            <Label>{multi ? "Responsável principal" : "Responsável"}</Label>
+            <Label>{multi ? "Líder (responsável principal)" : "Responsável"}</Label>
             <Select
               value={rascunho.assigned_to ?? SEM}
               onValueChange={v => setRascunho({ ...rascunho, assigned_to: v === SEM ? null : v })}
@@ -337,18 +341,18 @@ export function DemandaDetalhe({
           </div>
           {multi && (
             <div className="min-w-0 sm:col-span-2">
-              <Label>Responsáveis secundários</Label>
+              <Label>Executores</Label>
               {podeEditarTudo ? (
                 <SeletorMultiplo
                   opcoes={opcoesPessoas.filter(o => o.value !== rascunho.assigned_to)}
                   valor={rascCorres.filter(id => id !== rascunho.assigned_to)}
                   onChange={setRascCorres}
-                  placeholder="Ninguém além do principal"
+                  placeholder="Só o líder executa"
                   busca="Buscar pessoa..."
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {corresponsaveisAtuais.length ? corresponsaveisAtuais.map(nome).join(", ") : "Ninguém além do principal"}
+                  {corresponsaveisAtuais.length ? corresponsaveisAtuais.map(nome).join(", ") : "Só o líder executa"}
                 </p>
               )}
             </div>
@@ -454,6 +458,16 @@ export function DemandaDetalhe({
                       />
                     </div>
                   </div>
+                  {(demanda.status !== "concluida" || demanda.inicia_em) && (
+                    <div className="min-w-0">
+                      <Label>Começa em <span className="font-normal text-muted-foreground">(programar)</span></Label>
+                      <Input
+                        type="date"
+                        value={rascunho.inicia_em ?? ""}
+                        onChange={e => setRascunho({ ...rascunho, inicia_em: e.target.value || null })}
+                      />
+                    </div>
+                  )}
                   {multi && (
                     <div className="min-w-0 sm:col-span-2">
                       <Label>Repetir</Label>
@@ -487,6 +501,9 @@ export function DemandaDetalhe({
                     <span className="inline-flex items-center gap-1.5 sm:col-span-2"><Repeat className="h-3.5 w-3.5" /> Repete: <strong className="text-foreground">{recorrencia}</strong></span>
                   )}
                   <span>Prioridade: <strong className="text-foreground">{prioridadeMeta(demanda.prioridade).label}</strong></span>
+                  {demanda.inicia_em && (
+                    <span>Começa em: <strong className="text-foreground">{format(parseISO(demanda.inicia_em), "dd/MM/yyyy")}</strong></span>
+                  )}
                   <span>Prazo: <strong className="text-foreground">{demanda.prazo ? `${format(parseISO(demanda.prazo), "dd/MM/yyyy")}${demanda.prazo_hora ? ` às ${demanda.prazo_hora.slice(0, 5)}` : ""}` : "—"}</strong></span>
                 </div>
                 <p className="whitespace-pre-wrap rounded-xl border border-border/60 bg-background/40 px-3 py-2 text-muted-foreground">
