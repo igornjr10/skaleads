@@ -3013,6 +3013,7 @@ export type Database = {
           done_at: string | null
           done_by: string | null
           id: string
+          lembrete_auto_at: string | null
           lembrete_wa_at: string | null
           mover_para: string | null
           observacao: string | null
@@ -3027,6 +3028,7 @@ export type Database = {
           done_at?: string | null
           done_by?: string | null
           id?: string
+          lembrete_auto_at?: string | null
           lembrete_wa_at?: string | null
           mover_para?: string | null
           observacao?: string | null
@@ -3041,6 +3043,7 @@ export type Database = {
           done_at?: string | null
           done_by?: string | null
           id?: string
+          lembrete_auto_at?: string | null
           lembrete_wa_at?: string | null
           mover_para?: string | null
           observacao?: string | null
@@ -3072,6 +3075,8 @@ export type Database = {
           equipe_id: string | null
           horario_limite: string | null
           id: string
+          lembrete_auto: boolean
+          lembrete_minutos_antes: number | null
           periodicidade: string
           prioridade: string
           titulo: string
@@ -3091,6 +3096,8 @@ export type Database = {
           equipe_id?: string | null
           horario_limite?: string | null
           id?: string
+          lembrete_auto?: boolean
+          lembrete_minutos_antes?: number | null
           periodicidade?: string
           prioridade?: string
           titulo: string
@@ -3110,6 +3117,8 @@ export type Database = {
           equipe_id?: string | null
           horario_limite?: string | null
           id?: string
+          lembrete_auto?: boolean
+          lembrete_minutos_antes?: number | null
           periodicidade?: string
           prioridade?: string
           titulo?: string
@@ -3340,6 +3349,9 @@ export type Database = {
           prioridade: string
           recorrencia: string | null
           recorrencia_origem: string | null
+          inicia_em: string | null
+          liberada_em: string | null
+          distribuida_auto: boolean
           status: string
           titulo: string
           updated_at: string
@@ -3362,6 +3374,9 @@ export type Database = {
           prioridade?: string
           recorrencia?: string | null
           recorrencia_origem?: string | null
+          inicia_em?: string | null
+          liberada_em?: string | null
+          distribuida_auto?: boolean
           status?: string
           titulo: string
           updated_at?: string
@@ -3384,6 +3399,9 @@ export type Database = {
           prioridade?: string
           recorrencia?: string | null
           recorrencia_origem?: string | null
+          inicia_em?: string | null
+          liberada_em?: string | null
+          distribuida_auto?: boolean
           status?: string
           titulo?: string
           updated_at?: string

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertTriangle, CalendarClock, Columns3, Hourglass, Inbox, ListChecks, Plus, Repeat, Rows3, Search, User as UserIcon, Users } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarPlus, Columns3, Crown, Hourglass, Inbox, ListChecks, Plus, Repeat, Rows3, Search, Send, Shuffle, Users, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -10,19 +10,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { ClientAvatar } from "@/components/ClientAvatar";
 import { DemandaDetalhe } from "@/components/demandas/DemandaDetalhe";
+import { DistribuicaoDialog } from "@/components/demandas/DistribuicaoDialog";
 import { NovaDemandaDialog } from "@/components/demandas/NovaDemandaDialog";
 import { useAuth } from "@/hooks/useAuth";
 import { useDemandas } from "@/hooks/useDemandas";
 import { useEstadoDaTela } from "@/hooks/useEstadoDaTela";
 import { errorMessage } from "@/lib/utils";
-import { veTodosOsClientes } from "@/lib/permissoes";
+import { rotuloPapel, veTodosOsClientes } from "@/lib/permissoes";
 import {
   CATEGORIAS, PRIORIDADES, STATUS_DEMANDA, type Demanda,
-  categoriaLabel, corresponsaveisDe, estaAberta, estaAtrasada, estaCom, hojeISO, idsDosClientes, paraDemanda,
-  prioridadeMeta, progressoChecklist, progressoClientes, rotuloPrazo, statusMeta,
+  cargaPorPessoa, categoriaLabel, corresponsaveisDe, estaAberta, estaAtrasada, estaCom, estaProgramada, hojeISO,
+  idsDosClientes, paraDemanda, prioridadeMeta, progressoChecklist, progressoClientes, rotuloInicio, rotuloPrazo, statusMeta,
 } from "@/lib/demandas";
 
 type Escopo = "comigo" | "pedidas" | "todas";
+type Modo = "quadro" | "lista" | "equipe";
 
 const TODOS = "todos";
 const SEM = "sem";
@@ -42,7 +44,10 @@ export default function Demandas() {
 
   // Filtros sobrevivem a abrir um cliente e voltar.
   const [escopo, setEscopo] = useEstadoDaTela<Escopo>("demandas:escopo", isAdmin ? "todas" : "comigo");
-  const [modo, setModo] = useEstadoDaTela<"quadro" | "lista">("demandas:modo", "quadro");
+  const [modoSalvo, setModo] = useEstadoDaTela<Modo>("demandas:modo", isAdmin ? "equipe" : "quadro");
+  const modo: Modo = modoSalvo === "equipe" && !isAdmin ? "quadro" : modoSalvo;
+  const [verProgramadas, setVerProgramadas] = useState(false);
+  const [distribuindo, setDistribuindo] = useState(false);
   const [busca, setBusca] = useEstadoDaTela("demandas:busca", "");
   const [responsavel, setResponsavel] = useEstadoDaTela("demandas:responsavel", TODOS);
   const [cliente, setCliente] = useEstadoDaTela("demandas:cliente", TODOS);
@@ -75,7 +80,8 @@ export default function Demandas() {
     }
   }
 
-  const visiveis = useMemo(() => {
+  // Todos os filtros menos o de programada: a visao Equipe conta as programadas a parte.
+  const filtradas = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return demandas.filter(d => {
       const clientesDela = idsDosClientes(d, vinculos);
@@ -94,16 +100,29 @@ export default function Demandas() {
     });
   }, [demandas, escopo, responsavel, cliente, categoria, prioridade, busca, clientePorId, user?.id, vinculos]);
 
+  const visiveis = useMemo(() => filtradas.filter(d => estaProgramada(d, hoje) === verProgramadas), [filtradas, verProgramadas, hoje]);
+
   const resumo = useMemo(() => {
-    const abertas = demandas.filter(estaAberta);
+    const abertas = demandas.filter(d => estaAberta(d) && !estaProgramada(d, hoje));
     const minha = (d: Demanda) => estaCom(d, user?.id, vinculos);
     return {
+      programadas: demandas.filter(d => estaProgramada(d, hoje) && (isAdmin || minha(d) || d.created_by === user?.id)).length,
       atrasadas: abertas.filter(d => (isAdmin || minha(d)) && estaAtrasada(d, hoje)).length,
       hoje: abertas.filter(d => minha(d) && d.prazo === hoje).length,
       revisar: demandas.filter(d => d.status === "revisao" && (d.created_by === user?.id || isAdmin)).length,
       comigo: abertas.filter(minha).length,
     };
   }, [demandas, hoje, isAdmin, user?.id, vinculos]);
+
+  const vista: Modo = verProgramadas && modo === "equipe" ? "lista" : modo;
+  const nomeDe = (id: string | null) => (id ? pessoaPorId.get(id)?.nome ?? "—" : "Sistema");
+
+  const carga = useMemo(() => cargaPorPessoa(filtradas, vinculos, hoje), [filtradas, vinculos, hoje]);
+
+  function verDaPessoa(id: string | null) {
+    setResponsavel(id ?? SEM);
+    setModo("lista");
+  }
 
   function podeMover(d: Demanda) {
     return isAdmin || d.created_by === user?.id || estaCom(d, user?.id, vinculos);
@@ -134,10 +153,11 @@ export default function Demandas() {
     const outros = corresponsaveisDe(d, vinculos).map(id => pessoaPorId.get(id)?.nome ?? "—");
     return (
       <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-        <UserIcon className="h-3 w-3 shrink-0" />
-        <span className="truncate">{resp?.nome ?? "Sem responsável"}</span>
+        <Crown className="h-3 w-3 shrink-0 text-amber-400" aria-label="Líder" />
+        <span className="truncate" title="Líder">{resp?.nome ?? "Sem responsável"}</span>
+        {d.distribuida_auto && <Shuffle className="h-3 w-3 shrink-0 text-primary" aria-label="Distribuída automaticamente" />}
         {outros.length > 0 && (
-          <span className="flex shrink-0 -space-x-1.5" title={`Também: ${outros.join(", ")}`}>
+          <span className="flex shrink-0 -space-x-1.5" title={`Executores: ${outros.join(", ")}`}>
             {outros.slice(0, 3).map((n, i) => (
               <span key={i} className="flex h-5 w-5 items-center justify-center rounded-full border border-card bg-primary/15 text-[9px] font-semibold text-primary">
                 {iniciais(n)}
@@ -217,9 +237,18 @@ export default function Demandas() {
               <Hourglass className="h-3 w-3" /> Cliente
             </Badge>
           )}
+          {estaProgramada(d, hoje) && (
+            <Badge variant="outline" className="gap-1 border-primary/40 text-[10px] text-primary">
+              <CalendarPlus className="h-3 w-3" /> {rotuloInicio(d.inicia_em)}
+            </Badge>
+          )}
         </div>
         <Clientes d={d} />
         <Equipe d={d} />
+        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground/80">
+          <Send className="h-3 w-3 shrink-0" />
+          <span className="truncate">Pediu: {nomeDe(d.created_by)}</span>
+        </div>
       </button>
     );
   }
@@ -247,7 +276,7 @@ export default function Demandas() {
           </div>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
             {[
               { label: "Atrasadas", valor: resumo.atrasadas, alerta: resumo.atrasadas > 0 },
               { label: "Para hoje", valor: resumo.hoje, alerta: false },
@@ -259,10 +288,26 @@ export default function Demandas() {
                 <div className="whitespace-nowrap text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
               </div>
             ))}
+            <button
+              type="button"
+              onClick={() => setVerProgramadas(v => !v)}
+              title={verProgramadas ? "Voltar para as que já chegaram" : "Ver as que ainda vão chegar"}
+              className={`min-w-[88px] rounded-2xl border px-3 py-2.5 text-center transition-colors ${verProgramadas ? "border-primary/50 bg-primary/10" : "border-border/60 bg-card/60 hover:border-primary/40"}`}
+            >
+              <div className={`text-xl font-semibold tabular-nums sm:text-2xl ${verProgramadas ? "text-primary" : ""}`}>{resumo.programadas}</div>
+              <div className="whitespace-nowrap text-[10px] uppercase tracking-wide text-muted-foreground">Programadas</div>
+            </button>
           </div>
-          <Button onClick={() => setCriando(true)} className="shrink-0">
-            <Plus className="mr-1.5 h-4 w-4" /> Nova demanda
-          </Button>
+          <div className="flex shrink-0 gap-2">
+            {isAdmin && (
+              <Button variant="outline" onClick={() => setDistribuindo(true)} title="Quem recebe as demandas criadas sem responsável">
+                <Shuffle className="mr-1.5 h-4 w-4" /> Distribuição
+              </Button>
+            )}
+            <Button onClick={() => setCriando(true)}>
+              <Plus className="mr-1.5 h-4 w-4" /> Nova demanda
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -326,6 +371,11 @@ export default function Demandas() {
             </Button>
           )}
           <div className="flex rounded-xl border border-border/60 p-0.5">
+            {isAdmin && (
+              <Button variant={modo === "equipe" ? "secondary" : "ghost"} size="sm" onClick={() => setModo("equipe")} className="gap-1.5">
+                <UsersRound className="h-4 w-4" /> Equipe
+              </Button>
+            )}
             <Button variant={modo === "quadro" ? "secondary" : "ghost"} size="sm" onClick={() => setModo("quadro")} className="gap-1.5">
               <Columns3 className="h-4 w-4" /> Quadro
             </Button>
@@ -336,11 +386,89 @@ export default function Demandas() {
         </div>
       </div>
 
+      {verProgramadas && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-primary/30 bg-primary/5 px-4 py-2.5 text-sm">
+          <span className="flex items-center gap-2">
+            <CalendarPlus className="h-4 w-4 text-primary" />
+            Programadas: chegam para quem executa (com aviso) no dia marcado, às 7h.
+          </span>
+          <Button variant="ghost" size="sm" onClick={() => setVerProgramadas(false)}>Voltar para as de agora</Button>
+        </div>
+      )}
+
       {loading ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           {[1, 2, 3, 4, 5].map(i => <Skeleton key={i} className="h-64 rounded-2xl" />)}
         </div>
-      ) : modo === "quadro" ? (
+      ) : vista === "equipe" ? (
+        <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+          {carga.map(c => {
+            const pessoa = c.id ? pessoaPorId.get(c.id) : null;
+            const nomePessoa = c.id ? pessoa?.nome ?? "—" : "Sem responsável";
+            return (
+              <div key={c.id ?? SEM} className={`flex min-w-0 flex-col gap-3 rounded-2xl border p-4 ${c.atrasadas > 0 ? "border-destructive/40 bg-destructive/[0.03]" : "border-border/60 bg-card/60"}`}>
+                <div className="flex items-center gap-3">
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${c.id ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                    {c.id ? iniciais(nomePessoa) : "?"}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate font-semibold">{nomePessoa}</div>
+                    <div className="text-[11px] text-muted-foreground">
+                      {pessoa ? rotuloPapel(pessoa.role) : "Fila sem dono"} · {c.abertas.length} aberta{c.abertas.length === 1 ? "" : "s"}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="shrink-0 text-xs" onClick={() => verDaPessoa(c.id)}>Ver todas</Button>
+                </div>
+                <div className="grid grid-cols-4 gap-1.5 text-center">
+                  {[
+                    { label: "Atrasadas", valor: c.atrasadas, cor: c.atrasadas ? "text-destructive" : "" },
+                    { label: "Hoje", valor: c.hoje, cor: c.hoje ? "text-amber-400" : "" },
+                    { label: "Revisão", valor: c.revisao, cor: "" },
+                    { label: "Programadas", valor: c.programadas, cor: c.programadas ? "text-primary" : "" },
+                  ].map(k => (
+                    <div key={k.label} className="rounded-xl border border-border/50 bg-background/40 px-1 py-1.5">
+                      <div className={`text-base font-semibold tabular-nums ${k.cor}`}>{k.valor}</div>
+                      <div className="truncate text-[9px] uppercase tracking-wide text-muted-foreground">{k.label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-1">
+                  {c.abertas.slice(0, 5).map(d => {
+                    const st = statusMeta(d.status);
+                    const atrasada = estaAtrasada(d, hoje);
+                    const lider = d.assigned_to === c.id;
+                    return (
+                      <button
+                        key={d.id}
+                        type="button"
+                        onClick={() => setAberta(d)}
+                        className="flex w-full min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-background/60"
+                      >
+                        <span className={`h-2 w-2 shrink-0 rounded-full ${d.prioridade === "urgente" ? "bg-red-500" : d.prioridade === "alta" ? "bg-amber-400" : d.prioridade === "media" ? "bg-sky-400" : "bg-slate-500"}`} title={prioridadeMeta(d.prioridade).label} />
+                        <span className="min-w-0 flex-1 truncate text-xs" title={d.titulo}>{d.titulo}</span>
+                        {c.id && !lider && <span className="shrink-0 text-[10px] text-muted-foreground">executa</span>}
+                        <span className={`shrink-0 text-[11px] tabular-nums ${atrasada ? "font-medium text-destructive" : "text-muted-foreground"}`}>{d.prazo ? rotuloPrazo(d).split(" · ")[0] : "—"}</span>
+                        <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${st.cor}`}>{st.label}</span>
+                      </button>
+                    );
+                  })}
+                  {c.abertas.length > 5 && (
+                    <button type="button" onClick={() => verDaPessoa(c.id)} className="w-full px-2 pt-1 text-left text-[11px] text-primary hover:underline">
+                      + {c.abertas.length - 5} demanda{c.abertas.length - 5 === 1 ? "" : "s"}
+                    </button>
+                  )}
+                  {c.abertas.length === 0 && <p className="px-2 py-2 text-[11px] text-muted-foreground">Nada aberto agora.</p>}
+                </div>
+              </div>
+            );
+          })}
+          {carga.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-border/60 px-4 py-10 text-center text-sm text-muted-foreground md:col-span-2 2xl:col-span-3">
+              Nenhuma demanda aberta com esses filtros.
+            </div>
+          )}
+        </div>
+      ) : vista === "quadro" ? (
         // Colunas com largura minima: com o menu aberto, cinco colunas espremidas cortavam titulo e etiquetas.
         <div className="-mx-1 overflow-x-auto px-1 pb-2">
           <div className="grid auto-cols-[minmax(250px,1fr)] grid-flow-col gap-3">
@@ -365,43 +493,50 @@ export default function Demandas() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border/60">
-          <div className="hidden grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)] gap-3 border-b border-border/60 bg-card/40 px-4 py-2.5 text-[11px] uppercase tracking-wide text-muted-foreground lg:grid">
-            <span>Demanda</span><span>Categoria</span><span>Cliente</span><span>Responsável</span><span>Prazo</span><span>Status</span>
+          <div className="hidden gap-3 border-b border-border/60 bg-card/40 px-4 py-2.5 text-[11px] uppercase tracking-wide text-muted-foreground lg:grid lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.9fr)]">
+            <span>Demanda</span><span>Cliente</span><span>Pediu</span><span>Líder · executores</span><span>{verProgramadas ? "Chega / prazo" : "Prazo"}</span><span>Status</span>
           </div>
           {visiveis.map(d => {
             const st = statusMeta(d.status);
             const atrasada = estaAtrasada(d, hoje);
             const ids = idsDosClientes(d, vinculos);
             const prog = progressoClientes(d, vinculos);
-            const outros = corresponsaveisDe(d, vinculos).length;
+            const outros = corresponsaveisDe(d, vinculos).map(nomeDe);
             return (
               <button
                 key={d.id}
                 type="button"
                 onClick={() => setAberta(d)}
-                className="grid w-full grid-cols-1 gap-1.5 border-b border-border/40 px-4 py-3 text-left transition-colors last:border-0 hover:bg-card/60 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,0.9fr)] lg:items-center lg:gap-3"
+                className="grid w-full grid-cols-1 gap-1.5 border-b border-border/40 px-4 py-3 text-left transition-colors last:border-0 hover:bg-card/60 lg:items-center lg:gap-3 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1.4fr)_minmax(0,0.8fr)_minmax(0,0.9fr)]"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <Badge variant="outline" className={`shrink-0 text-[10px] ${prioridadeMeta(d.prioridade).cor}`}>{prioridadeMeta(d.prioridade).label}</Badge>
                   <span className="truncate text-sm font-medium" title={d.titulo}>{d.titulo}</span>
                   {d.recorrencia && <Repeat className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
+                  <span className="hidden shrink-0 text-[11px] text-muted-foreground xl:inline">· {categoriaLabel(d.categoria)}</span>
                 </div>
-                <span className="truncate text-xs text-muted-foreground">{categoriaLabel(d.categoria)}</span>
                 <span className="truncate text-xs text-muted-foreground">
                   {ids.length === 0 ? "—" : ids.length === 1 ? clientePorId.get(ids[0])?.name ?? "—" : `${ids.length} clientes · ${prog.feitos}/${prog.total} feitos`}
                 </span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {d.assigned_to ? pessoaPorId.get(d.assigned_to)?.nome ?? "—" : "Sem responsável"}
-                  {outros > 0 && ` +${outros}`}
+                <span className="truncate text-xs text-muted-foreground"><span className="lg:hidden">Pediu: </span>{nomeDe(d.created_by)}</span>
+                <span className="flex min-w-0 items-center gap-1 text-xs" title={outros.length ? `Executores: ${outros.join(", ")}` : undefined}>
+                  <Crown className="h-3 w-3 shrink-0 text-amber-400" />
+                  <span className="truncate font-medium">{d.assigned_to ? nomeDe(d.assigned_to) : "Sem responsável"}</span>
+                  {d.distribuida_auto && <Shuffle className="h-3 w-3 shrink-0 text-primary" aria-label="Distribuída automaticamente" />}
+                  {outros.length > 0 && <span className="truncate text-muted-foreground">· {outros.join(", ")}</span>}
                 </span>
                 <span className={`text-xs ${atrasada ? "font-medium text-destructive" : "text-muted-foreground"}`}>
-                  {d.prazo ? rotuloPrazo(d) : "—"}
+                  {verProgramadas && d.inicia_em ? `${rotuloInicio(d.inicia_em)} · ` : ""}{d.prazo ? rotuloPrazo(d) : "—"}
                 </span>
                 <span><span className={`whitespace-nowrap rounded-lg px-2 py-0.5 text-[11px] font-semibold ring-1 ${st.cor}`}>{st.label}</span></span>
               </button>
             );
           })}
-          {visiveis.length === 0 && <div className="px-4 py-10 text-center text-sm text-muted-foreground">Nenhuma demanda com esses filtros.</div>}
+          {visiveis.length === 0 && (
+            <div className="px-4 py-10 text-center text-sm text-muted-foreground">
+              {verProgramadas ? "Nenhuma demanda programada." : "Nenhuma demanda com esses filtros."}
+            </div>
+          )}
         </div>
       )}
 
@@ -418,6 +553,8 @@ export default function Demandas() {
         clientesAtivos={clientesAtivos}
         onVinculos={definirVinculos}
       />
+
+      {isAdmin && <DistribuicaoDialog open={distribuindo} onOpenChange={setDistribuindo} pessoas={pessoas} />}
 
       <NovaDemandaDialog
         open={criando}

@@ -116,3 +116,41 @@ export function descreverRegra(regra: RegraRotina): string {
   if (regra.periodicidade === "mensal") return `Todo dia ${regra.dia_mes} do mês`;
   return regra.periodicidade;
 }
+
+/** Escolha de lembrete automatico no formulario; "8h" e "off" nao dependem do horario limite. */
+export const LEMBRETE_OPCOES = [
+  { id: "off", label: "Sem lembrete automático", minutos: null, precisaHorario: false },
+  { id: "8h", label: "Às 8h do dia", minutos: null, precisaHorario: false },
+  { id: "15", label: "15 min antes do prazo", minutos: 15, precisaHorario: true },
+  { id: "30", label: "30 min antes do prazo", minutos: 30, precisaHorario: true },
+  { id: "60", label: "1 h antes do prazo", minutos: 60, precisaHorario: true },
+  { id: "120", label: "2 h antes do prazo", minutos: 120, precisaHorario: true },
+] as const;
+
+export type LembreteOpcao = (typeof LEMBRETE_OPCOES)[number]["id"];
+
+export function lembreteDaRotina(r: { lembrete_auto?: boolean | null; lembrete_minutos_antes?: number | null }): LembreteOpcao {
+  if (!r.lembrete_auto) return "off";
+  if (r.lembrete_minutos_antes == null) return "8h";
+  return LEMBRETE_OPCOES.find((o) => o.minutos === r.lembrete_minutos_antes)?.id ?? "30";
+}
+
+/** O que gravar no banco. Sem horario limite, "antes do prazo" vira 8h, como o cron faria. */
+export function lembreteParaBanco(opcao: LembreteOpcao, horarioLimite: string | null | undefined) {
+  const o = LEMBRETE_OPCOES.find((x) => x.id === opcao) ?? LEMBRETE_OPCOES[0];
+  if (o.id === "off") return { lembrete_auto: false, lembrete_minutos_antes: null };
+  return { lembrete_auto: true, lembrete_minutos_antes: o.precisaHorario && horarioLimite ? o.minutos : null };
+}
+
+/** "Às 8h do dia" ou "30 min antes das 17:00". */
+export function descreverLembrete(r: {
+  lembrete_auto?: boolean | null;
+  lembrete_minutos_antes?: number | null;
+  horario_limite?: string | null;
+}): string | null {
+  if (!r.lembrete_auto) return null;
+  if (r.lembrete_minutos_antes == null || !r.horario_limite) return "Às 8h do dia";
+  const m = r.lembrete_minutos_antes;
+  const quanto = m >= 60 && m % 60 === 0 ? `${m / 60} h` : `${m} min`;
+  return `${quanto} antes das ${r.horario_limite.slice(0, 5)}`;
+}

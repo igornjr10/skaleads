@@ -1,7 +1,7 @@
 // Shared Claude Service for all AI Edge Functions
 // Features: retry, caching, rate limiting, token logging
 // Com OPENAI_API_KEY configurada, as chamadas vao para a OpenAI.
-import { limiteDeTokens, provedorLLM } from "./llm.ts";
+import { erroDoProvedor, limiteDeTokens, provedorLLM } from "./llm.ts";
 
 interface CacheEntry {
   data: string;
@@ -80,8 +80,8 @@ async function callOpenAI(
       ],
     }),
   });
+  if (!response.ok) throw await erroDoProvedor(ia, response);
   const data = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(`${ia.nome} API error: ${data?.error?.message ?? response.statusText}`);
   const content = data?.choices?.[0]?.message?.content;
   if (typeof content !== "string" || !content.trim()) throw new Error(`${ia.nome} respondeu sem texto`);
   return {
@@ -165,191 +165,6 @@ async function callClaudeWithRetry(
   }
 
   throw lastError || new Error("Falha ao chamar Claude após retries");
-}
-
-export async function analyzeCreatives(
-  tenantId: string,
-  creatives: { copy: string; visual_description: string; metrics: Record<string, number> }[],
-  context?: string
-): Promise<ClaudeResponse> {
-  if (!checkRateLimit(tenantId)) {
-    throw new Error(`Taxa limite excedida para tenant ${tenantId}`);
-  }
-
-  const creativesJson = creatives
-    .map(c => `- ${c.copy}\n  Descrição visual: ${c.visual_description}\n  Métricas: ${JSON.stringify(c.metrics)}`)
-    .join("\n\n");
-
-  const prompt = `Analise os 5 criativos vencedores de anúncios abaixo e identifique padrões:
-
-${creativesJson}
-
-Por favor:
-1. Identifique 3 padrões principais (ângulos, ganchos, CTAs)
-2. Sugira 3 novos criativos baseados nesses padrões
-3. Justifique cada sugestão explicando qual padrão ela segue`;
-
-  const cacheKey = generateCacheKey(prompt, context);
-  
-  // Check cache
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return {
-      content: cached.data,
-      tokens: cached.tokens,
-      cost: (cached.tokens.input * TOKEN_COST.input) + (cached.tokens.output * TOKEN_COST.output),
-      cached: true,
-    };
-  }
-
-  const systemPrompt = `Você é um especialista em marketing digital e análise criativa de anúncios.
-Responda em português brasileiro profissional e acionável.
-Foque em insights práticos que possam ser implementados imediatamente.`;
-
-  const result = await callClaudeWithRetry(prompt, systemPrompt);
-  
-  // Store in cache
-  cache.set(cacheKey, {
-    data: result.content,
-    timestamp: Date.now(),
-    tokens: result.tokens,
-  });
-
-  const cost = (result.tokens.input * TOKEN_COST.input) + (result.tokens.output * TOKEN_COST.output);
-  return {
-    content: result.content,
-    tokens: result.tokens,
-    cost,
-    cached: false,
-  };
-}
-
-export async function generateCopy(
-  tenantId: string,
-  clientInfo: { name: string; industry?: string },
-  objective: string,
-  tone: "professional" | "casual" | "urgent" | "inspirational",
-  briefing: string,
-  context?: string
-): Promise<ClaudeResponse> {
-  if (!checkRateLimit(tenantId)) {
-    throw new Error(`Taxa limite excedida para tenant ${tenantId}`);
-  }
-
-  const toneDescriptions: Record<string, string> = {
-    professional: "Profissional, confiante, baseado em dados",
-    casual: "Descontraído, amigável, conversacional",
-    urgent: "Senso de urgência, FOMO, ação imediata",
-    inspirational: "Inspirador, aspiracional, emocional",
-  };
-
-  const prompt = `Gere copy para anúncios Meta Ads baseado nos seguintes detalhes:
-
-Cliente: ${clientInfo.name}
-Indústria: ${clientInfo.industry || "Não especificada"}
-Objetivo: ${objective}
-Tom: ${toneDescriptions[tone]}
-Briefing: ${briefing}
-
-Por favor, gere:
-1. 5 variações de headline (máx 30 caracteres cada)
-2. 3 variações de primary text (máx 125 caracteres cada)
-3. 3 variações de description (máx 30 caracteres cada)
-
-Para cada variação, indique o estilo usado (ex: "FOMO", "Benefit-driven", "Social Proof", etc).
-Formato: use markdown com listas e **negrito** para destaques.`;
-
-  const cacheKey = generateCacheKey(prompt, context);
-  
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return {
-      content: cached.data,
-      tokens: cached.tokens,
-      cost: (cached.tokens.input * TOKEN_COST.input) + (cached.tokens.output * TOKEN_COST.output),
-      cached: true,
-    };
-  }
-
-  const systemPrompt = `Você é um copywriter especialista em publicidade digital em português.
-Crie copy persuasivo, claro e acionável.
-Leve em conta o tom solicitado e adapte a mensagem para máxima conversão.`;
-
-  const result = await callClaudeWithRetry(prompt, systemPrompt);
-  
-  cache.set(cacheKey, {
-    data: result.content,
-    timestamp: Date.now(),
-    tokens: result.tokens,
-  });
-
-  const cost = (result.tokens.input * TOKEN_COST.input) + (result.tokens.output * TOKEN_COST.output);
-  return {
-    content: result.content,
-    tokens: result.tokens,
-    cost,
-    cached: false,
-  };
-}
-
-export async function summarizeReport(
-  tenantId: string,
-  period: { start: string; end: string },
-  metrics: Record<string, number>,
-  context?: string
-): Promise<ClaudeResponse> {
-  if (!checkRateLimit(tenantId)) {
-    throw new Error(`Taxa limite excedida para tenant ${tenantId}`);
-  }
-
-  const metricsText = Object.entries(metrics)
-    .map(([key, value]) => `- ${key}: ${typeof value === 'number' ? value.toFixed(2) : value}`)
-    .join("\n");
-
-  const prompt = `Gere um resumo executivo profissional (4-6 linhas em português) para um relatório de campanhas de publicidade.
-
-Período: ${period.start} a ${period.end}
-Métricas:
-${metricsText}
-
-O resumo deve:
-1. Destacar o que funcionou bem
-2. Apontar um problema que precisa de atenção
-3. Fazer uma recomendação principal e acionável
-
-Responda apenas com o parágrafo do resumo, sem títulos ou formatação extra.`;
-
-  const cacheKey = generateCacheKey(prompt, context);
-  
-  const cached = cache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return {
-      content: cached.data,
-      tokens: cached.tokens,
-      cost: (cached.tokens.input * TOKEN_COST.input) + (cached.tokens.output * TOKEN_COST.output),
-      cached: true,
-    };
-  }
-
-  const systemPrompt = `Você é um analista experiente em publicidade digital.
-Escreva resumos executivos concisos, profissionais e acionáveis em português brasileiro.
-Seja direto e evite jargão desnecessário.`;
-
-  const result = await callClaudeWithRetry(prompt, systemPrompt);
-  
-  cache.set(cacheKey, {
-    data: result.content,
-    timestamp: Date.now(),
-    tokens: result.tokens,
-  });
-
-  const cost = (result.tokens.input * TOKEN_COST.input) + (result.tokens.output * TOKEN_COST.output);
-  return {
-    content: result.content,
-    tokens: result.tokens,
-    cost,
-    cached: false,
-  };
 }
 
 export async function prioritizeAuditActions(

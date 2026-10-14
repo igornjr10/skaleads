@@ -3,6 +3,9 @@ import { format } from "date-fns";
 import {
   type Demanda,
   agruparPorResponsavel,
+  atalhosDeInicio,
+  cargaPorPessoa,
+  estaProgramada,
   diasDaSemana,
   diasDoMes,
   estaAtrasada,
@@ -129,5 +132,60 @@ describe("vinculos de demanda", () => {
   it("progresso por cliente", () => {
     expect(progressoClientes({ id: "t1" }, v)).toEqual({ feitos: 1, total: 2 });
     expect(progressoClientes({ id: "t2" }, v)).toEqual({ feitos: 0, total: 0 });
+  });
+});
+
+describe("estaProgramada", () => {
+  it("inicio no futuro e aberta", () => {
+    expect(estaProgramada({ status: "a_fazer", inicia_em: "2026-10-16" }, "2026-10-14")).toBe(true);
+  });
+  it("chega no dia de inicio", () => {
+    expect(estaProgramada({ status: "a_fazer", inicia_em: "2026-10-14" }, "2026-10-14")).toBe(false);
+  });
+  it("sem inicio ou concluida nao e programada", () => {
+    expect(estaProgramada({ status: "a_fazer", inicia_em: null }, "2026-10-14")).toBe(false);
+    expect(estaProgramada({ status: "concluida", inicia_em: "2026-10-20" }, "2026-10-14")).toBe(false);
+  });
+});
+
+describe("atalhosDeInicio", () => {
+  it("amanha, daqui a 2 dias e a proxima segunda", () => {
+    const [agora, amanha, dois, segunda] = atalhosDeInicio(new Date(2026, 9, 14)); // quarta
+    expect(agora.data).toBeNull();
+    expect(amanha.data).toBe("2026-10-15");
+    expect(dois.data).toBe("2026-10-16");
+    expect(segunda.data).toBe("2026-10-19");
+  });
+});
+
+describe("cargaPorPessoa", () => {
+  const hoje = "2026-10-14";
+  const v: VinculosDemandas = {
+    disponivel: true,
+    clientes: new Map(),
+    corresponsaveis: new Map([["c1", ["bia"]]]),
+  };
+  const lista = [
+    demanda({ id: "a1", assigned_to: "ana", prazo: "2026-10-10" }),
+    demanda({ id: "a2", assigned_to: "ana", prazo: hoje, status: "revisao" }),
+    demanda({ id: "c1", assigned_to: "ana", prazo: "2026-10-20" }),
+    demanda({ id: "p1", assigned_to: "bia", inicia_em: "2026-10-16" }),
+    demanda({ id: "x1", assigned_to: "bia", status: "concluida" }),
+    demanda({ id: "s1", assigned_to: null }),
+  ];
+  const carga = cargaPorPessoa(lista, v, hoje);
+  const de = (id: string | null) => carga.find(c => c.id === id)!;
+
+  it("conta atrasadas, de hoje e em revisao; corresponsavel tambem carrega", () => {
+    expect(de("ana")).toMatchObject({ atrasadas: 1, hoje: 1, revisao: 1, programadas: 0 });
+    expect(de("ana").abertas.map(d => d.id)).toEqual(["a1", "a2", "c1"]);
+    expect(de("bia").abertas.map(d => d.id)).toEqual(["c1"]);
+  });
+  it("programada soma a parte e concluida nao entra", () => {
+    expect(de("bia").programadas).toBe(1);
+  });
+  it("sem responsavel vai para a chave null; quem tem atrasada vem primeiro", () => {
+    expect(de(null).abertas.map(d => d.id)).toEqual(["s1"]);
+    expect(carga[0].id).toBe("ana");
   });
 });

@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  descreverLembrete,
   descreverRegra,
+  lembreteDaRotina,
+  lembreteParaBanco,
   diaEfetivoDoMes,
   inicioDaSemana,
   isoLocal,
@@ -153,5 +156,26 @@ describe("inicioDaSemana", () => {
     expect(isoLocal(inicioDaSemana(new Date(2026, 9, 7, 15)))).toBe("2026-10-05");
     expect(isoLocal(inicioDaSemana(new Date(2026, 9, 11)))).toBe("2026-10-05");
     expect(isoLocal(inicioDaSemana(new Date(2026, 9, 5)))).toBe("2026-10-05");
+  });
+});
+
+describe("lembrete automatico", () => {
+  it("le o que esta no banco", () => {
+    expect(lembreteDaRotina({ lembrete_auto: false, lembrete_minutos_antes: 30 })).toBe("off");
+    expect(lembreteDaRotina({ lembrete_auto: true, lembrete_minutos_antes: null })).toBe("8h");
+    expect(lembreteDaRotina({ lembrete_auto: true, lembrete_minutos_antes: 60 })).toBe("60");
+  });
+
+  it("antes do prazo sem horario limite vira 8h", () => {
+    expect(lembreteParaBanco("30", "17:00")).toEqual({ lembrete_auto: true, lembrete_minutos_antes: 30 });
+    expect(lembreteParaBanco("30", "")).toEqual({ lembrete_auto: true, lembrete_minutos_antes: null });
+    expect(lembreteParaBanco("off", "17:00")).toEqual({ lembrete_auto: false, lembrete_minutos_antes: null });
+  });
+
+  it("descreve para o card", () => {
+    expect(descreverLembrete({ lembrete_auto: false })).toBeNull();
+    expect(descreverLembrete({ lembrete_auto: true, lembrete_minutos_antes: 120, horario_limite: "17:00:00" })).toBe("2 h antes das 17:00");
+    expect(descreverLembrete({ lembrete_auto: true, lembrete_minutos_antes: 15, horario_limite: "09:00" })).toBe("15 min antes das 09:00");
+    expect(descreverLembrete({ lembrete_auto: true, lembrete_minutos_antes: null, horario_limite: "09:00" })).toBe("Às 8h do dia");
   });
 });

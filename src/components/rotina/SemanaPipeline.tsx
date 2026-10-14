@@ -13,7 +13,7 @@ import {
 } from "@dnd-kit/core";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Clock, GripVertical, Loader2, Pencil, Plus, Repeat } from "lucide-react";
+import { BellRing, Clock, GripVertical, Loader2, Pencil, Plus, Repeat } from "lucide-react";
 import { WhatsAppIcon } from "@/components/icons/WhatsAppIcon";
 import { ClientAvatar } from "@/components/ClientAvatar";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   STATUS_OCORRENCIA,
+  descreverLembrete,
   descreverRegra,
   isoLocal,
   prioridadeDe,
@@ -43,6 +44,8 @@ export interface RotinaRow {
   data_pontual: string | null;
   horario_limite: string | null;
   ativa: boolean;
+  lembrete_auto?: boolean;
+  lembrete_minutos_antes?: number | null;
 }
 
 export interface ExecucaoRow {
@@ -53,6 +56,7 @@ export interface ExecucaoRow {
   status: StatusOcorrencia;
   mover_para: string | null;
   lembrete_wa_at: string | null;
+  lembrete_auto_at?: string | null;
   done_at: string | null;
   done_by: string | null;
   observacao: string | null;
@@ -85,6 +89,8 @@ interface Props {
   onEditar: (rotina: RotinaRow) => void;
   onNova: (dataISO: string) => void;
   onLembrete: (oc: Ocorrencia) => void;
+  /** Abre a demanda inteira; o card mostra so o resumo. */
+  onAbrir: (oc: Ocorrencia) => void;
 }
 
 export function chaveOcorrencia(oc: { rotina: { id: string }; dataRef: string }) {
@@ -286,13 +292,16 @@ function CartaoConteudo({
             <GripVertical className="h-3.5 w-3.5" />
           </button>
         )}
-        <p
-          className={`min-w-0 flex-1 text-[13px] font-medium leading-snug ${
+        <button
+          type="button"
+          onClick={() => props.onAbrir(oc)}
+          title="Ver a demanda"
+          className={`min-w-0 flex-1 break-words text-left text-[13px] font-medium leading-snug hover:text-primary hover:underline ${
             status === "concluida" ? "text-muted-foreground line-through" : ""
           }`}
         >
           {rotina.titulo}
-        </p>
+        </button>
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
@@ -309,6 +318,16 @@ function CartaoConteudo({
           <Badge variant="outline" className="gap-0.5 px-1.5 py-0 text-[10px] text-muted-foreground">
             <Clock className="h-2.5 w-2.5" />
             {rotina.horario_limite.slice(0, 5)}
+          </Badge>
+        )}
+        {rotina.lembrete_auto && (
+          <Badge
+            variant="outline"
+            className="gap-0.5 px-1.5 py-0 text-[10px] text-muted-foreground"
+            title={`Lembrete automático: ${descreverLembrete(rotina)?.toLowerCase()}`}
+          >
+            <BellRing className="h-2.5 w-2.5" />
+            auto
           </Badge>
         )}
         {remanejada && (
@@ -336,7 +355,7 @@ function CartaoConteudo({
               disabled={!liberado}
               onValueChange={(v) => props.onStatus(oc, v as StatusOcorrencia)}
             >
-              <SelectTrigger className={`h-7 flex-1 rounded-lg px-2 text-[11px] ${statusInfo.classe}`}>
+              <SelectTrigger className={`h-7 min-w-0 flex-1 rounded-lg px-2 text-[11px] ${statusInfo.classe}`}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

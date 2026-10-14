@@ -49,12 +49,17 @@ import {
   type Ocorrencia,
   type RotinaRow,
 } from "@/components/rotina/SemanaPipeline";
+import { RotinaDetalhe } from "@/components/rotina/RotinaDetalhe";
 import { useAuth } from "@/hooks/useAuth";
 import { errorMessage } from "@/lib/utils";
 import {
   DIAS_SEMANA,
+  LEMBRETE_OPCOES,
   PRIORIDADES,
   descreverRegra,
+  lembreteDaRotina,
+  lembreteParaBanco,
+  type LembreteOpcao,
   inicioDaSemana,
   isoLocal,
   ocorrenciasNoIntervalo,
@@ -73,7 +78,7 @@ interface Equipe {
   ordem: number;
 }
 
-const COLUNAS_EXECUCAO = "id, rotina_id, data_ref, done, status, mover_para, lembrete_wa_at, done_at, done_by, observacao";
+const COLUNAS_EXECUCAO = "id, rotina_id, data_ref, done, status, mover_para, lembrete_wa_at, lembrete_auto_at, done_at, done_by, observacao";
 
 interface ClienteResumo {
   id: string;
@@ -106,6 +111,7 @@ const FORM_VAZIO = {
   dia_mes: "1",
   data_pontual: "",
   horario_limite: "",
+  lembrete: "off" as LembreteOpcao,
   ativa: true,
 };
 
@@ -137,6 +143,9 @@ export default function Rotina() {
   const [criando, setCriando] = useState(false);
   const [form, setForm] = useState(FORM_VAZIO);
   const [salvando, setSalvando] = useState(false);
+  // Guarda so a chave: a ocorrencia e remontada do estado atual, entao o painel
+  // acompanha o status e a observacao que mudam enquanto ele esta aberto.
+  const [aberta, setAberta] = useState<{ rotinaId: string; dataRef: string; coluna: string } | null>(null);
 
   const hoje = useMemo(() => new Date(), []);
   const dataSelISO = isoLocal(dataSel);
@@ -523,6 +532,23 @@ export default function Rotina() {
     }
   }
 
+  function salvarObservacaoDaOcorrencia(oc: Ocorrencia, texto: string) {
+    if (!podeDarBaixa(oc.rotina)) return;
+    gravarOcorrencia(oc, { observacao: texto || null }, "Nao foi possivel salvar a observacao");
+  }
+
+  const ocorrenciaAberta = useMemo<Ocorrencia | null>(() => {
+    if (!aberta) return null;
+    const rotina = rotinas.find((r) => r.id === aberta.rotinaId);
+    if (!rotina) return null;
+    return {
+      rotina,
+      dataRef: aberta.dataRef,
+      coluna: aberta.coluna,
+      execucao: execPorChave.get(`${aberta.rotinaId}|${aberta.dataRef}`),
+    };
+  }, [aberta, rotinas, execPorChave]);
+
   function abrirNova(dataISO?: string) {
     const equipe = equipeSel === TODAS_EQUIPES ? SEM_EQUIPE : equipeSel;
     setForm(
@@ -547,6 +573,7 @@ export default function Rotina() {
       dia_mes: String(rotina.dia_mes ?? 1),
       data_pontual: rotina.data_pontual ?? "",
       horario_limite: rotina.horario_limite?.slice(0, 5) ?? "",
+      lembrete: lembreteDaRotina(rotina),
       ativa: rotina.ativa,
     });
     setEditando(rotina);
@@ -577,6 +604,7 @@ export default function Rotina() {
       dias_semana: form.periodicidade === "semanal" ? [...form.dias_semana].sort((a, b) => a - b) : null,
       dia_mes: form.periodicidade === "mensal" ? Number(form.dia_mes) : null,
       horario_limite: form.horario_limite || null,
+      ...lembreteParaBanco(form.lembrete, form.horario_limite),
       ativa: form.ativa,
     };
 
@@ -844,6 +872,7 @@ export default function Rotina() {
           onEditar={abrirEdicao}
           onNova={abrirNova}
           onLembrete={enviarLembrete}
+          onAbrir={(oc) => setAberta({ rotinaId: oc.rotina.id, dataRef: oc.dataRef, coluna: oc.coluna })}
         />
       ) : modo === "dia" ? (
         <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
@@ -872,13 +901,16 @@ export default function Rotina() {
 
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span
-                          className={`text-sm font-medium ${
+                        <button
+                          type="button"
+                          title="Ver a demanda"
+                          onClick={() => setAberta({ rotinaId: rotina.id, dataRef: dataSelISO, coluna: dataSelISO })}
+                          className={`text-left text-sm font-medium hover:text-primary hover:underline ${
                             baixa?.done ? "text-muted-foreground line-through" : ""
                           }`}
                         >
                           {rotina.titulo}
-                        </span>
+                        </button>
                         <Badge variant="outline" className="text-[10px]">
                           {descreverRegra(rotina)}
                         </Badge>
@@ -1227,6 +1259,30 @@ export default function Rotina() {
               </div>
             )}
 
+            <div>
+              <Label>Lembrete automático no WhatsApp</Label>
+              <Select value={form.lembrete} onValueChange={(v) => setForm({ ...form, lembrete: v as LembreteOpcao })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LEMBRETE_OPCOES.map((o) => (
+                    <SelectItem key={o.id} value={o.id} disabled={o.precisaHorario && !form.horario_limite}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {form.lembrete === "off"
+                  ? "Ninguém é lembrado sozinho; dá para mandar na hora pelo WhatsApp do card."
+                  : form.assigned_to === SEM_RESPONSAVEL
+                  ? "Escolha um responsável: o lembrete vai para o WhatsApp dele."
+                  : "Vai para o WhatsApp do responsável em cada dia da demanda, só se ainda não estiver concluída."}
+                {!form.horario_limite && " Os lembretes antes do prazo pedem um horário limite."}
+              </p>
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label>Responsável</Label>
@@ -1360,6 +1416,24 @@ export default function Rotina() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <RotinaDetalhe
+        oc={ocorrenciaAberta}
+        onFechar={() => setAberta(null)}
+        nomeDaPessoa={(id) => pessoaPorId.get(id)?.nome}
+        nomeDaEquipe={(id) => equipes.find((e) => e.id === id)?.nome}
+        clientePorId={clientePorId}
+        podeGerenciar={podeGerenciar}
+        podeDarBaixa={podeDarBaixa}
+        lembreteEnviando={lembreteEnviando}
+        onStatus={mudarStatus}
+        onObservacao={salvarObservacaoDaOcorrencia}
+        onLembrete={enviarLembrete}
+        onEditar={(rotina) => {
+          setAberta(null);
+          abrirEdicao(rotina);
+        }}
+      />
     </div>
   );
 }

@@ -32,6 +32,12 @@ export interface Demanda {
   /** Modelo recorrente: concluir abre a proxima (o banco cria). */
   recorrencia?: string | null;
   recorrencia_origem?: string | null;
+  /** Programada: so chega para quem executa nesta data (yyyy-MM-dd). */
+  inicia_em?: string | null;
+  /** Quando chegou para quem executa; nulo = programada que ainda nao chegou. */
+  liberada_em?: string | null;
+  /** O responsavel saiu da distribuicao automatica, nao de quem pediu. */
+  distribuida_auto?: boolean;
 }
 
 /** Cliente de demanda com varios clientes, com o "feito" de cada um. */
@@ -77,6 +83,8 @@ export function progressoClientes(d: Pick<Demanda, "id">, v: VinculosDemandas) {
 }
 
 export const RECORRENCIAS = [
+  { id: "diaria", label: "Todo dia" },
+  { id: "dias_uteis", label: "Dias úteis (seg a sex)" },
   { id: "semanal", label: "Toda semana" },
   { id: "quinzenal", label: "A cada 15 dias" },
   { id: "mensal", label: "Todo mês" },
@@ -147,6 +155,73 @@ export function estaAberta(d: Pick<Demanda, "status">) {
 
 export function estaAtrasada(d: Pick<Demanda, "status" | "prazo">, hoje = hojeISO()) {
   return estaAberta(d) && !!d.prazo && d.prazo < hoje;
+}
+
+/** Programada que ainda nao chegou para quem executa. */
+export function estaProgramada(d: Pick<Demanda, "status" | "inicia_em">, hoje = hojeISO()) {
+  return estaAberta(d) && !!d.inicia_em && d.inicia_em > hoje;
+}
+
+/** Atalhos do "comeca em": hoje, amanha, daqui a 2 dias, proxima segunda. */
+export function atalhosDeInicio(agora = new Date()) {
+  const segunda = addDays(startOfWeek(agora, { weekStartsOn: 1 }), 7);
+  return [
+    { id: "agora", label: "Agora", data: null as string | null },
+    { id: "amanha", label: "Amanhã", data: hojeISO(addDays(agora, 1)) },
+    { id: "2dias", label: "Daqui a 2 dias", data: hojeISO(addDays(agora, 2)) },
+    { id: "segunda", label: "Próxima segunda", data: hojeISO(segunda) },
+  ];
+}
+
+/** "chega em 16/10". */
+export function rotuloInicio(inicia: string | null | undefined) {
+  if (!inicia) return null;
+  const [, m, dia] = inicia.split("-");
+  return `chega em ${dia}/${m}`;
+}
+
+export interface CargaDaPessoa {
+  id: string | null;
+  abertas: Demanda[];
+  atrasadas: number;
+  hoje: number;
+  revisao: number;
+  programadas: number;
+}
+
+/**
+ * Carga de cada pessoa para a lideranca: principal ou corresponsavel conta.
+ * Programadas ficam fora de `abertas` (ainda nao chegaram) e somam a parte.
+ * A chave null junta as abertas sem ninguem.
+ */
+export function cargaPorPessoa(lista: Demanda[], v: VinculosDemandas, hoje = hojeISO()): CargaDaPessoa[] {
+  const mapa = new Map<string | null, CargaDaPessoa>();
+  const de = (id: string | null) => {
+    let c = mapa.get(id);
+    if (!c) {
+      c = { id, abertas: [], atrasadas: 0, hoje: 0, revisao: 0, programadas: 0 };
+      mapa.set(id, c);
+    }
+    return c;
+  };
+  for (const d of lista) {
+    if (!estaAberta(d)) continue;
+    const equipe = [d.assigned_to, ...corresponsaveisDe(d, v)].filter((x): x is string => !!x);
+    for (const id of equipe.length ? equipe : [null]) {
+      const c = de(id);
+      if (estaProgramada(d, hoje)) {
+        c.programadas += 1;
+        continue;
+      }
+      c.abertas.push(d);
+      if (estaAtrasada(d, hoje)) c.atrasadas += 1;
+      if (d.prazo === hoje) c.hoje += 1;
+      if (d.status === "revisao") c.revisao += 1;
+    }
+  }
+  for (const c of mapa.values()) c.abertas = ordenarPorPrazo(c.abertas);
+  // Quem tem atrasada primeiro, depois quem esta mais carregado.
+  return [...mapa.values()].sort((a, b) => b.atrasadas - a.atrasadas || b.abertas.length - a.abertas.length);
 }
 
 /** "12/10" ou "12/10 · 14:30". */

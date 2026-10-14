@@ -3,18 +3,18 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatNumber, formatPercent } from "@/lib/format";
-import { StatusBadge } from "@/components/StatusBadge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buscarTudo } from "@/lib/buscar-tudo";
 import { errorMessage } from "@/lib/utils";
 import { useEstadoDaTela } from "@/hooks/useEstadoDaTela";
-import { CustoPorMensagemPanel } from "@/components/dashboard/CustoPorMensagemPanel";
+import { CampanhasDoCliente } from "@/components/dashboard/CampanhasDoCliente";
+import { PainelClientes } from "@/components/dashboard/PainelClientes";
+import { montarPainel } from "@/lib/painel-clientes";
+import type { CampanhaEntrada } from "@/lib/analise-campanhas";
 import { AlertTriangle, RefreshCw, ArrowDown, ArrowUp, DollarSign, Eye, MousePointerClick, Percent, Target, TrendingUp, MessageCircle, Phone, MapPin, UserPlus, Users, Repeat, Heart, Radio, Info } from "lucide-react";
 import { subDays, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -28,6 +28,8 @@ interface Client {
   id: string;
   name: string;
   primary_goal: string | null;
+  logo_url: string | null;
+  alvo_custo_resultado: number | null;
 }
 
 const LOCAL_METRIC_ICONS: Record<LocalMetricKey, typeof MessageCircle> = {
@@ -96,12 +98,6 @@ interface DailyMetric {
   profile_visits: number;
 }
 
-interface SeriesPoint {
-  label: string;
-  spend: number;
-  clicks: number;
-}
-
 function aggregateMetrics(rows: DailyMetric[]) {
   return rows.reduce(
     (acc, r) => ({
@@ -143,7 +139,7 @@ export default function Dashboard() {
   useEffect(() => {
     supabase
       .from("clients")
-      .select("id, name, primary_goal")
+      .select("id, name, primary_goal, logo_url, alvo_custo_resultado")
       .eq("status", "active")
       .order("name")
       .then(({ data }) => {
@@ -280,12 +276,11 @@ export default function Dashboard() {
   }, [clientId, periodDays]);
 
   // Split daily metrics into current vs previous period for delta calculation
-  const { currentSeries, currentAgg, prevAgg } = useMemo(() => {
+  const { currentAgg, prevAgg } = useMemo(() => {
     const cutoff = format(subDays(new Date(), periodDays), "yyyy-MM-dd");
     const current = dailyMetrics.filter((d) => d.date >= cutoff);
     const prev = dailyMetrics.filter((d) => d.date < cutoff);
     return {
-      currentSeries: current,
       currentAgg: aggregateMetrics(current),
       prevAgg: aggregateMetrics(prev),
     };
@@ -382,14 +377,11 @@ export default function Dashboard() {
     socialStat("eng", "Engajamento", social.engagement, Heart, "engajamento");
   }
 
-  // Chart series
-  const chartSeries: SeriesPoint[] = useMemo(() => {
-    return currentSeries.map((d) => ({
-      label: format(new Date(d.date + "T00:00:00"), "dd/MM", { locale: ptBR }),
-      spend: d.spend,
-      clicks: d.clicks,
-    }));
-  }, [currentSeries]);
+  const painel = useMemo(() => {
+    if (clientId) return [];
+    const inicio = format(subDays(new Date(), periodDays), "yyyy-MM-dd");
+    return montarPainel(clients, serieBruta, campaigns as unknown as CampanhaEntrada[], inicio);
+  }, [clientId, clients, serieBruta, campaigns, periodDays]);
 
   const hasData = campaigns.length > 0 || dailyMetrics.length > 0;
 
@@ -398,7 +390,7 @@ export default function Dashboard() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Visão geral das suas campanhas Meta Ads</p>
+          <p className="text-sm text-muted-foreground">{clientId ? "Resultados e campanhas do cliente" : "Como cada cliente está, o que precisa de atenção e a campanha que mais entrega"}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Select value={client} onValueChange={setClient}>
@@ -485,6 +477,8 @@ export default function Dashboard() {
             ))}
           </div>
 
+          {clientId ? null : <PainelClientes linhas={painel} dias={periodDays} onAbrir={setClient} />}
+
           {/* Resultados locais */}
           <Card className="shadow-card">
             <CardHeader className="pb-3">
@@ -523,8 +517,6 @@ export default function Dashboard() {
               </div>
             </CardContent>
           </Card>
-
-          <CustoPorMensagemPanel campanhas={campaigns} dias={serieBruta} clienteId={clientId} />
 
           {/* Alcance e presença social (apenas com 1 cliente selecionado) */}
           {clientId && (
@@ -573,93 +565,7 @@ export default function Dashboard() {
             </Card>
           )}
 
-          {/* Chart */}
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Evolução: gasto e cliques</CardTitle>
-              <CardDescription>Últimos {period} dias</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {chartSeries.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Sincronize os dados para ver o gráfico de evolução.
-                </p>
-              ) : (
-                <div className="h-72 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={chartSeries} margin={{ left: 10, right: 10, top: 10 }}>
-                      <defs>
-                        <linearGradient id="spendFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(217 91% 60%)" stopOpacity={0.5} />
-                          <stop offset="100%" stopColor="hsl(217 91% 60%)" stopOpacity={0} />
-                        </linearGradient>
-                        <linearGradient id="clicksFill" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="hsl(28 100% 65%)" stopOpacity={0.4} />
-                          <stop offset="100%" stopColor="hsl(28 100% 65%)" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                      <Tooltip
-                        contentStyle={{
-                          background: "hsl(var(--popover))",
-                          border: "1px solid hsl(var(--border))",
-                          borderRadius: 8,
-                          fontSize: 12,
-                        }}
-                        formatter={(value: number, name: string) =>
-                          name === "spend" ? [formatCurrency(value), "Gasto"] : [formatNumber(value), "Cliques"]
-                        }
-                      />
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                      <Area yAxisId="left" type="monotone" dataKey="spend" name="Gasto"
-                        stroke="hsl(217 91% 60%)" strokeWidth={2} fill="url(#spendFill)" />
-                      <Area yAxisId="right" type="monotone" dataKey="clicks" name="Cliques"
-                        stroke="hsl(28 100% 65%)" strokeWidth={2} fill="url(#clicksFill)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Campaigns table */}
-          <Card className="shadow-card">
-            <CardHeader>
-              <CardTitle>Campanhas</CardTitle>
-              <CardDescription>{campaigns.length} campanha(s)</CardDescription>
-            </CardHeader>
-            <CardContent className="px-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Gasto</TableHead>
-                    <TableHead className="text-right">Impressões</TableHead>
-                    <TableHead className="text-right">Cliques</TableHead>
-                    <TableHead className="text-right">CTR</TableHead>
-                    <TableHead className="text-right">CPC</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {campaigns.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell><StatusBadge status={c.status} /></TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(c.spend)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatNumber(c.impressions)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatNumber(c.clicks)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatPercent(c.ctr)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatCurrency(c.cpc)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          {clientId && <CampanhasDoCliente campanhas={campaigns as unknown as CampanhaEntrada[]} />}
         </>
       )}
     </div>
