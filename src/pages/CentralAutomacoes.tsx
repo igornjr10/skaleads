@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { ArrowLeft, Bot, Check, History, Loader2, MessageCircle, Play, ShieldCheck, X } from "lucide-react";
+import { ArrowLeft, Bell, BellOff, Bot, Check, Clock, History, Loader2, MessageCircle, Play, Repeat, ShieldCheck, UserPlus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,8 +19,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { veTodosOsClientes } from "@/lib/permissoes";
 import { errorMessage } from "@/lib/utils";
 import {
-  type Campo, type ChaveAutomacao, type ConfigAutomacao, type ItemCatalogo,
-  CATALOGO, FASES_ONBOARDING, ROTULO_AUTOMACAO, configEfetiva,
+  type Campo, type Canal, type ChaveAutomacao, type ConfigAutomacao, type ItemCatalogo,
+  CATALOGO, FASES_ONBOARDING, ROTULO_AUTOMACAO, configEfetiva, temWhatsapp,
 } from "@/lib/automacoes";
 
 interface Pessoa { id: string; nome: string }
@@ -60,8 +59,9 @@ function SeletorPessoas({ pessoas, valor, onChange, vazio, disabled }: {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" disabled={disabled} className="h-9 w-full justify-start truncate font-normal">
-          {nomes.length ? nomes.join(", ") : <span className="text-muted-foreground">{vazio}</span>}
+        <Button type="button" variant="outline" disabled={disabled} className="h-8 w-full min-w-0 justify-start font-normal">
+          <UserPlus className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          {nomes.length ? <span className="truncate">{nomes.join(", ")}</span> : <span className="truncate text-muted-foreground">{vazio}</span>}
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="max-h-72 w-64 overflow-y-auto p-1">
@@ -79,6 +79,82 @@ function SeletorPessoas({ pessoas, valor, onChange, vazio, disabled }: {
   );
 }
 
+const ROTULO_CANAL: Record<Canal, string> = { nao: "Não", sino: "Sino", whatsapp: "Sino + WhatsApp" };
+
+function SeletorCanal({ valor, onChange, canais, disabled }: {
+  valor: Canal;
+  onChange: (c: Canal) => void;
+  canais: Canal[];
+  disabled: boolean;
+}) {
+  const soWhatsapp = !canais.includes("sino");
+  return (
+    <div className="inline-flex shrink-0 rounded-lg border border-border/60 bg-background p-0.5">
+      {canais.map(c => {
+        const ativo = valor === c;
+        const Icone = c === "nao" ? BellOff : c === "sino" ? Bell : MessageCircle;
+        const rotulo = c === "whatsapp" && soWhatsapp ? "WhatsApp" : ROTULO_CANAL[c];
+        return (
+          <button
+            key={c}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(c)}
+            title={rotulo}
+            aria-pressed={ativo}
+            className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+              ativo
+                ? c === "whatsapp" ? "bg-emerald-500/15 font-medium text-emerald-600 dark:text-emerald-400"
+                  : c === "sino" ? "bg-primary/10 font-medium text-primary" : "bg-muted font-medium text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icone className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">{rotulo}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CampoDuracao({ campo, valor, onChange, disabled }: {
+  campo: Extract<Campo, { tipo: "duracao" }>;
+  valor: number | "" | undefined;
+  onChange: (horas: number | "") => void;
+  disabled: boolean;
+}) {
+  const horas = typeof valor === "number" ? valor : null;
+  const [unidade, setUnidade] = useState<"horas" | "dias">(horas && horas >= 24 && horas % 24 === 0 ? "dias" : "horas");
+  const fator = unidade === "dias" ? 24 : 1;
+  const exibido = horas === null ? "" : Math.round((horas / fator) * 10) / 10;
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="text-muted-foreground">{campo.rotulo}</span>
+        <Input
+          type="number"
+          min={campo.podeZero ? 0 : 1}
+          max={Math.floor(campo.maxHoras / fator)}
+          step={unidade === "dias" ? 0.5 : 1}
+          disabled={disabled}
+          className="h-8 w-20"
+          value={exibido}
+          onChange={e => onChange(e.target.value === "" ? "" : Math.min(campo.maxHoras, Math.max(0, Math.round(Number(e.target.value) * fator))))}
+        />
+        <Select disabled={disabled} value={unidade} onValueChange={v => setUnidade(v as "horas" | "dias")}>
+          <SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="horas">horas</SelectItem>
+            {campo.maxHoras >= 24 && <SelectItem value="dias">dias</SelectItem>}
+          </SelectContent>
+        </Select>
+      </div>
+      {campo.dica && <p className="text-[11px] text-muted-foreground">{campo.dica}</p>}
+    </div>
+  );
+}
+
 function CampoConfig({ campo, config, setConfig, pessoas, disabled }: {
   campo: Campo;
   config: Record<string, unknown>;
@@ -86,20 +162,33 @@ function CampoConfig({ campo, config, setConfig, pessoas, disabled }: {
   pessoas: Pessoa[];
   disabled: boolean;
 }) {
+  if (campo.tipo === "duracao") {
+    return (
+      <CampoDuracao
+        campo={campo}
+        disabled={disabled}
+        valor={config[campo.chave] as number | "" | undefined}
+        onChange={v => setConfig({ ...config, [campo.chave]: v })}
+      />
+    );
+  }
   if (campo.tipo === "numero") {
     return (
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-muted-foreground">{campo.rotulo}</span>
-        <Input
-          type="number"
-          min={campo.min}
-          max={campo.max}
-          disabled={disabled}
-          className="h-8 w-20"
-          value={(config[campo.chave] as number | undefined) ?? ""}
-          onChange={e => setConfig({ ...config, [campo.chave]: e.target.value === "" ? "" : Number(e.target.value) })}
-        />
-        {campo.sufixo && <span className="text-muted-foreground">{campo.sufixo}</span>}
+      <div className="space-y-1">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-muted-foreground">{campo.rotulo}</span>
+          <Input
+            type="number"
+            min={campo.min}
+            max={campo.max}
+            disabled={disabled}
+            className="h-8 w-20"
+            value={(config[campo.chave] as number | undefined) ?? ""}
+            onChange={e => setConfig({ ...config, [campo.chave]: e.target.value === "" ? "" : Number(e.target.value) })}
+          />
+          {campo.sufixo && <span className="text-muted-foreground">{campo.sufixo}</span>}
+        </div>
+        {campo.dica && <p className="text-[11px] text-muted-foreground">{campo.dica}</p>}
       </div>
     );
   }
@@ -119,20 +208,6 @@ function CampoConfig({ campo, config, setConfig, pessoas, disabled }: {
           <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
           <SelectContent>{campo.opcoes.map(o => <SelectItem key={o.valor} value={o.valor}>{o.rotulo}</SelectItem>)}</SelectContent>
         </Select>
-      </div>
-    );
-  }
-  if (campo.tipo === "pessoas") {
-    return (
-      <div className="space-y-1">
-        <Label className="text-xs text-muted-foreground">{campo.rotulo}</Label>
-        <SeletorPessoas
-          pessoas={pessoas}
-          disabled={disabled}
-          vazio={campo.vazio}
-          valor={(config[campo.chave] as string[]) ?? []}
-          onChange={v => setConfig({ ...config, [campo.chave]: v })}
-        />
       </div>
     );
   }
@@ -173,6 +248,67 @@ function CampoConfig({ campo, config, setConfig, pessoas, disabled }: {
   );
 }
 
+function QuemRecebe({ item, config, setConfig, pessoas, disabled }: {
+  item: ItemCatalogo;
+  config: Record<string, unknown>;
+  setConfig: (c: Record<string, unknown>) => void;
+  pessoas: Pessoa[];
+  disabled: boolean;
+}) {
+  const canais = item.canais ?? (["nao", "sino", "whatsapp"] as Canal[]);
+  const destinos = (config.destinos ?? {}) as Record<string, Canal>;
+  const extras = (config.copiar_para as string[] | undefined) ?? [];
+  const canalExtras = (config.copiar_canal as Canal | undefined) ?? canais[canais.length - 1];
+  const ninguem = item.destinos.every(d => (destinos[d.papel] ?? "nao") === "nao") && !extras.length;
+  return (
+    <div className="space-y-2">
+      {item.destinos.map(d => (
+        <div key={d.papel} className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm">{d.rotulo}</div>
+            {d.dica && <div className="text-[11px] leading-tight text-muted-foreground">{d.dica}</div>}
+          </div>
+          <SeletorCanal
+            canais={canais}
+            disabled={disabled}
+            valor={destinos[d.papel] ?? "nao"}
+            onChange={c => setConfig({ ...config, destinos: { ...destinos, [d.papel]: c } })}
+          />
+        </div>
+      ))}
+      <div className="flex items-center justify-between gap-2 border-t border-border/50 pt-2">
+        <div className="min-w-0 flex-1">
+          <SeletorPessoas
+            pessoas={pessoas}
+            disabled={disabled}
+            vazio="Outras pessoas (opcional)"
+            valor={extras}
+            onChange={v => setConfig({ ...config, copiar_para: v })}
+          />
+        </div>
+        <SeletorCanal
+          canais={canais.filter(c => c !== "nao")}
+          disabled={disabled || !extras.length}
+          valor={canalExtras}
+          onChange={c => setConfig({ ...config, copiar_canal: c })}
+        />
+      </div>
+      {ninguem && <p className="text-[11px] text-amber-600 dark:text-amber-400">Ninguém vai receber este aviso. Escolha pelo menos um destino.</p>}
+    </div>
+  );
+}
+
+function Bloco({ titulo, icone: Icone, children }: { titulo: string; icone: typeof Clock; children: ReactNode }) {
+  return (
+    <div className="space-y-2.5 rounded-xl border border-border/60 bg-muted/20 p-3">
+      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <Icone className="h-3.5 w-3.5" /> {titulo}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function CardAutomacao({ item, inicial, pessoas, podeEditar, onSalvo }: {
   item: ItemCatalogo;
   inicial: ConfigAutomacao;
@@ -184,6 +320,8 @@ function CardAutomacao({ item, inicial, pessoas, podeEditar, onSalvo }: {
   const [salvando, setSalvando] = useState(false);
   useEffect(() => setCfg(inicial), [inicial]);
   const mudou = JSON.stringify(cfg) !== JSON.stringify(inicial);
+  const setConfig = (config: Record<string, unknown>) =>
+    setCfg({ ...cfg, config, whatsapp: item.destinos.length ? temWhatsapp(config) : cfg.whatsapp });
 
   async function salvar(proximo = cfg) {
     setSalvando(true);
@@ -197,6 +335,9 @@ function CardAutomacao({ item, inicial, pessoas, podeEditar, onSalvo }: {
     onSalvo();
   }
 
+  const camposQuando = item.campos.filter(c => c.tipo !== "onboarding" && !(c.tipo === "sim_nao" && c.chave === "exigir_aprovacao"));
+  const camposEtapas = item.campos.filter(c => !camposQuando.includes(c));
+
   return (
     <Card className={`shadow-card transition-opacity ${cfg.ativa ? "" : "opacity-70"}`}>
       <CardContent className="space-y-3 p-4">
@@ -205,6 +346,16 @@ function CardAutomacao({ item, inicial, pessoas, podeEditar, onSalvo }: {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{item.titulo}</span>
               {item.alteraDados && <Badge variant="outline" className="text-[10px]">altera dados</Badge>}
+              {item.usaRotina && (
+                <Badge variant="outline" className="gap-1 border-sky-500/40 text-[10px] text-sky-600 dark:text-sky-400">
+                  <Repeat className="h-3 w-3" /> cruza com a Rotina
+                </Badge>
+              )}
+              {cfg.whatsapp && item.destinos.length > 0 && (
+                <Badge variant="outline" className="gap-1 border-emerald-500/40 text-[10px] text-emerald-600 dark:text-emerald-400">
+                  <MessageCircle className="h-3 w-3" /> WhatsApp
+                </Badge>
+              )}
             </div>
             <p className="mt-0.5 text-xs text-muted-foreground">{item.descricao}</p>
           </div>
@@ -215,32 +366,46 @@ function CardAutomacao({ item, inicial, pessoas, podeEditar, onSalvo }: {
             aria-label={`Ativar ${item.titulo}`}
           />
         </div>
-        <div className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-2">
-          <span><strong className="font-medium text-foreground">Quem recebe:</strong> {item.quem}</span>
-          <span><strong className="font-medium text-foreground">Quando:</strong> {item.quando}</span>
-        </div>
-        {item.campos.length > 0 && (
-          <div className="space-y-2.5 rounded-xl border border-border/60 bg-muted/20 p-3">
-            {item.campos.map((c, i) => (
-              <CampoConfig key={i} campo={c} config={cfg.config} setConfig={config => setCfg({ ...cfg, config })} pessoas={pessoas} disabled={!podeEditar} />
+
+        <Bloco titulo="Quando avisar" icone={Clock}>
+          <p className="text-xs text-muted-foreground">{item.quando}</p>
+          {camposQuando.map((c, i) => (
+            <CampoConfig key={i} campo={c} config={cfg.config} setConfig={setConfig} pessoas={pessoas} disabled={!podeEditar} />
+          ))}
+        </Bloco>
+
+        {camposEtapas.length > 0 && (
+          <Bloco titulo="Etapas" icone={ShieldCheck}>
+            {camposEtapas.map((c, i) => (
+              <CampoConfig key={i} campo={c} config={cfg.config} setConfig={setConfig} pessoas={pessoas} disabled={!podeEditar} />
             ))}
+          </Bloco>
+        )}
+
+        <Bloco titulo="Quem recebe" icone={Users}>
+          {item.destinos.length ? (
+            <QuemRecebe item={item} config={cfg.config} setConfig={setConfig} pessoas={pessoas} disabled={!podeEditar} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{item.quemFixo}</p>
+          )}
+        </Bloco>
+
+        {item.exemplo && (
+          <div className="rounded-xl border border-dashed border-border/70 px-3 py-2 text-xs">
+            <div className="mb-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">Exemplo do aviso</div>
+            <div className="font-medium">🔔 {item.exemplo.titulo}</div>
+            <div className="text-muted-foreground">{item.exemplo.corpo}</div>
           </div>
         )}
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          {item.whatsapp ? (
-            <label className="flex items-center gap-2 text-sm">
-              <Switch checked={cfg.whatsapp} disabled={!podeEditar} onCheckedChange={v => setCfg({ ...cfg, whatsapp: v })} />
-              <MessageCircle className="h-4 w-4 text-emerald-500" /> Também no WhatsApp
-            </label>
-          ) : (
-            <span className="text-xs text-muted-foreground">Só no sino</span>
-          )}
-          {podeEditar && mudou && (
+
+        {podeEditar && mudou && (
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setCfg(inicial)} disabled={salvando}>Descartar</Button>
             <Button size="sm" onClick={() => salvar()} disabled={salvando}>
               {salvando && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />} Salvar
             </Button>
-          )}
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -305,7 +470,7 @@ export default function CentralAutomacoes() {
           <div className="min-w-0">
             <h1 className="text-3xl font-bold tracking-tight">Central de automações</h1>
             <p className="text-sm text-muted-foreground">
-              Rodam sozinhas a cada 15 minutos, das 8h às 20h. Avisos vão para o sino e, se ligado, para o WhatsApp de cada pessoa.
+              Rodam sozinhas a cada 15 minutos, das 8h às 20h. Em cada uma você escolhe quando avisar e quem recebe: só no sino ou também no WhatsApp.
             </p>
           </div>
         </div>

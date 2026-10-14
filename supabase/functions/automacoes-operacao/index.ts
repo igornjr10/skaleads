@@ -47,14 +47,33 @@ async function todos<T>(path: string): Promise<T[]> {
 async function dadosDaEmpresa(companyId: string, hoje: string, minuto: number): Promise<{ dados: DadosOperacao; whatsapp: Map<string, string> }> {
   const inicioMes = `${hoje.slice(0, 7)}-01`;
   const doisDiasAtras = new Date(Date.now() - 2 * 86_400_000).toISOString();
-  const [tarefas, clientes, membros] = await Promise.all([
-    todos<any>(
-      `tasks?company_id=eq.${companyId}&or=(status.neq.concluida,concluida_at.gte.${doisDiasAtras})` +
-        `&select=id,titulo,status,categoria,prazo,prazo_hora,assigned_to,created_by,client_id,updated_at,concluida_at,created_at,aguardando_cliente,onboarding_fase&order=id`
-    ),
+  const ontem = new Date(Date.parse(`${hoje}T12:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  const filtroTarefas = `tasks?company_id=eq.${companyId}&or=(status.neq.concluida,concluida_at.gte.${doisDiasAtras})&order=id&select=`;
+  const camposTarefa = "id,titulo,status,categoria,prazo,prazo_hora,assigned_to,created_by,client_id,updated_at,concluida_at,created_at,aguardando_cliente,onboarding_fase";
+  const [tarefas, clientes, membros, rotinas] = await Promise.all([
+    // Programada/distribuicao vem de outra migration: sem as colunas, segue sem elas.
+    todos<any>(`${filtroTarefas}${camposTarefa},inicia_em,liberada_em,distribuida_auto`).catch(() => todos<any>(`${filtroTarefas}${camposTarefa}`)),
     todos<any>(`clients?company_id=eq.${companyId}&status=neq.archived&select=id,name,status,created_at,alvo_resultados_mes,alvo_custo_resultado&order=id`),
     db<any[]>(`user_companies?company_id=eq.${companyId}&select=user_id,whatsapp`),
+    todos<any>(
+      `rotinas?company_id=eq.${companyId}&ativa=eq.true&assigned_to=not.is.null` +
+        `&select=id,titulo,assigned_to,client_id,horario_limite,periodicidade,dias_semana,dia_mes,data_pontual&order=id`
+    ).catch(() => []),
   ]);
+
+  const tarefaIds = tarefas.filter(t => t.status !== "concluida").map(t => t.id);
+  const rotinaIds = rotinas.map(r => r.id);
+  const [corresp, execucoesRotina] = await Promise.all([
+    Promise.all(emLotes(tarefaIds).map(l => db<any[]>(`task_corresponsaveis?task_id=in.(${l.join(",")})&select=task_id,user_id`)))
+      .then(r => r.flat()).catch(() => []),
+    Promise.all(emLotes(rotinaIds).map(l => db<any[]>(
+      `rotina_execucoes?rotina_id=in.(${l.join(",")})&or=(data_ref.in.(${ontem},${hoje}),mover_para.in.(${ontem},${hoje}))` +
+        `&select=rotina_id,data_ref,done,status,mover_para`
+    ))).then(r => r.flat()).catch(() => []),
+  ]);
+  const corrPor = new Map<string, string[]>();
+  for (const c of corresp) corrPor.set(c.task_id, [...(corrPor.get(c.task_id) ?? []), c.user_id]);
+  for (const t of tarefas) t.corresponsaveis = corrPor.get(t.id) ?? [];
 
   const ids = membros.map(m => m.user_id);
   const clienteIds = clientes.map(c => c.id);
@@ -90,6 +109,8 @@ async function dadosDaEmpresa(companyId: string, hoje: string, minuto: number): 
       carteira: carteira.filter(a => ativos.has(a.user_id)),
       metricas,
       faseResponsaveis,
+      rotinas,
+      execucoesRotina,
     },
     whatsapp: new Map(membros.filter(m => m.whatsapp).map(m => [m.user_id, m.whatsapp])),
   };
@@ -158,7 +179,8 @@ async function processarEmpresa(companyId: string, siteUrl: string) {
     }
   }
 
-  const doSino = aEnviar.filter(a => a.user_id);
+  const paraPessoas = aEnviar.filter(a => a.user_id);
+  const doSino = paraPessoas.filter(a => !a.semSino);
   for (const lote of emLotes(doSino, 200)) {
     await db("notifications", {
       method: "POST",
@@ -168,7 +190,7 @@ async function processarEmpresa(companyId: string, siteUrl: string) {
   }
 
   let enviados = 0;
-  for (const a of doSino.filter(x => x.whatsapp)) {
+  for (const a of paraPessoas.filter(x => x.whatsapp)) {
     const numero = numeroParaEnvio(whatsapp.get(a.user_id!));
     let canal: string;
     if (!numero) canal = "sem_numero";
