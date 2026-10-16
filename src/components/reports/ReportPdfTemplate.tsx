@@ -1,4 +1,6 @@
+import { createContext, useContext, useMemo } from "react";
 import { Document, Image, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
+import { type TemaRelatorio, PALETA_PADRAO, misturar, temaDaPaleta } from "@/lib/identidade-relatorio";
 import type { ReportData } from "@/lib/report-types";
 import { itensDoTexto, temAnalise } from "@/lib/report-analise";
 import { linhasDeMetricas } from "@/lib/report-metricas";
@@ -81,12 +83,17 @@ Font.register({
 // picotado no relatorio do cliente.
 Font.registerHyphenationCallback((palavra) => [palavra]);
 
-const styles = StyleSheet.create({
+function criarEstilos(t: TemaRelatorio) {
+  const suave = misturar(t.fundo, "#ffffff", 0.5);
+  const cinzaEscuro = misturar(t.texto, "#ffffff", 0.2);
+  const cinza = misturar(t.texto, "#ffffff", 0.35);
+  const cinzaClaro = misturar(t.texto, "#ffffff", 0.55);
+  return StyleSheet.create({
   page: {
     fontFamily: "Plus Jakarta Sans",
     fontSize: 9,
-    color: "#0f172a",
-    backgroundColor: "#eef4f8",
+    color: t.texto,
+    backgroundColor: t.fundo,
     padding: 24,
   },
   shell: {
@@ -104,7 +111,7 @@ const styles = StyleSheet.create({
   },
   agencyKicker: {
     fontSize: 9,
-    color: "#94a3b8",
+    color: cinzaClaro,
     letterSpacing: 1.2,
     marginBottom: 20,
   },
@@ -137,7 +144,7 @@ const styles = StyleSheet.create({
     width: 54,
     height: 3,
     borderRadius: 999,
-    backgroundColor: "#2563eb",
+    backgroundColor: t.primaria,
     marginBottom: 18,
   },
   coverTitle: {
@@ -148,12 +155,12 @@ const styles = StyleSheet.create({
   },
   coverSub: {
     fontSize: 12,
-    color: "#6b7280",
+    color: cinza,
     marginBottom: 18,
   },
   coverMeta: {
     fontSize: 10,
-    color: "#1f2937",
+    color: t.texto,
     textAlign: "center",
     lineHeight: 1.5,
     maxWidth: 360,
@@ -161,23 +168,23 @@ const styles = StyleSheet.create({
   coverPill: {
     marginTop: 22,
     borderWidth: 1,
-    borderColor: "#dbe4ee",
+    borderColor: t.borda,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 16,
     fontSize: 9,
-    color: "#64748b",
+    color: cinza,
   },
   reportCard: {
     borderWidth: 1,
-    borderColor: "#dbe7f3",
+    borderColor: t.borda,
     borderRadius: 16,
     overflow: "hidden",
     boxShadow: "0 8 24 rgba(15, 23, 42, 0.04)",
   },
   reportCardTop: {
     height: 4,
-    backgroundColor: "#2563eb",
+    backgroundColor: t.primaria,
   },
   reportCardBody: {
     padding: 18,
@@ -196,7 +203,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "#2563eb",
+    backgroundColor: t.primaria,
     color: "#ffffff",
     textAlign: "center",
     fontSize: 11,
@@ -210,13 +217,13 @@ const styles = StyleSheet.create({
   },
   sectionSub: {
     fontSize: 8,
-    color: "#64748b",
+    color: cinza,
     marginTop: 3,
   },
   headerChip: {
     fontSize: 8,
-    color: "#2563eb",
-    backgroundColor: "#eef5ff",
+    color: t.primaria,
+    backgroundColor: t.tinta,
     borderRadius: 999,
     paddingVertical: 6,
     paddingHorizontal: 11,
@@ -231,11 +238,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 6,
     borderRightWidth: 1,
-    borderRightColor: "#edf2f7",
+    borderRightColor: t.borda,
   },
   metricLabel: {
     fontSize: 8,
-    color: "#475569",
+    color: cinzaEscuro,
     textAlign: "center",
     marginBottom: 7,
   },
@@ -246,7 +253,7 @@ const styles = StyleSheet.create({
   },
   metricNote: {
     fontSize: 7,
-    color: "#94a3b8",
+    color: cinzaClaro,
     marginTop: 5,
   },
   blockTitle: {
@@ -257,21 +264,21 @@ const styles = StyleSheet.create({
   },
   tableWrap: {
     borderWidth: 1,
-    borderColor: "#dbe7f3",
+    borderColor: t.borda,
     borderRadius: 12,
     overflow: "hidden",
   },
   tableHeader: {
     flexDirection: "row",
-    backgroundColor: "#f7fafc",
+    backgroundColor: suave,
     borderBottomWidth: 1,
-    borderBottomColor: "#dbe7f3",
+    borderBottomColor: t.borda,
     paddingVertical: 10,
     paddingHorizontal: 12,
   },
   tableHeaderCell: {
     fontSize: 7,
-    color: "#64748b",
+    color: cinza,
     fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   tableRow: {
@@ -279,14 +286,14 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#eef2f7",
+    borderBottomColor: t.borda,
   },
   tableRowAlt: {
-    backgroundColor: "#fcfdff",
+    backgroundColor: suave,
   },
   tableCell: {
     fontSize: 7.5,
-    color: "#1f2937",
+    color: t.texto,
   },
   adCell: {
     flexDirection: "row",
@@ -304,8 +311,8 @@ const styles = StyleSheet.create({
     height: 34,
     borderRadius: 6,
     marginRight: 8,
-    backgroundColor: "#e2e8f0",
-    color: "#475569",
+    backgroundColor: t.borda,
+    color: cinzaEscuro,
     alignItems: "center",
     justifyContent: "center",
     fontSize: 8,
@@ -316,7 +323,7 @@ const styles = StyleSheet.create({
   },
   adTypeText: {
     fontSize: 6.5,
-    color: "#64748b",
+    color: cinza,
     marginTop: 2,
   },
   statusCell: {
@@ -325,22 +332,22 @@ const styles = StyleSheet.create({
   },
   statusPill: {
     fontSize: 7,
-    color: "#2563eb",
-    backgroundColor: "#eff6ff",
+    color: t.primaria,
+    backgroundColor: t.tinta,
     borderRadius: 999,
     paddingVertical: 4,
     paddingHorizontal: 8,
   },
   helperText: {
     fontSize: 9,
-    color: "#64748b",
+    color: cinza,
     textAlign: "center",
     marginTop: 12,
   },
   socialCard: {
     borderWidth: 1,
-    borderColor: "#dbe7f3",
-    backgroundColor: "#f8fbfd",
+    borderColor: t.borda,
+    backgroundColor: suave,
     borderRadius: 14,
     padding: 14,
     marginBottom: 16,
@@ -362,13 +369,13 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 21,
     marginRight: 10,
-    backgroundColor: "#e2e8f0",
+    backgroundColor: t.borda,
     alignItems: "center",
     justifyContent: "center",
   },
   socialLogoFallbackText: {
     fontSize: 11,
-    color: "#475569",
+    color: cinzaEscuro,
     fontFamily: "Plus Jakarta Sans", fontWeight: 700,
   },
   socialProfileName: {
@@ -377,7 +384,7 @@ const styles = StyleSheet.create({
   },
   socialProfileMeta: {
     fontSize: 8,
-    color: "#64748b",
+    color: cinza,
     marginTop: 2,
   },
   socialMetricsRow: {
@@ -386,12 +393,12 @@ const styles = StyleSheet.create({
   socialMetricCell: {
     flex: 1,
     borderRightWidth: 1,
-    borderRightColor: "#e2e8f0",
+    borderRightColor: t.borda,
     paddingHorizontal: 8,
   },
   socialMetricLabel: {
     fontSize: 7.5,
-    color: "#64748b",
+    color: cinza,
     marginBottom: 4,
   },
   socialMetricValue: {
@@ -400,7 +407,7 @@ const styles = StyleSheet.create({
   },
   socialMetricSource: {
     fontSize: 6.5,
-    color: "#94a3b8",
+    color: cinzaClaro,
     marginTop: 4,
   },
   colWide: {
@@ -424,11 +431,13 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 7,
-    color: "#94a3b8",
+    color: cinzaClaro,
   },
-});
+  });
+}
 
 function Footer({ agency }: { agency: string; page?: number }) {
+  const { styles } = useEstilos();
   return (
     <View style={styles.footer} fixed>
       <Text style={styles.footerText}>{sanitizePdfText(agency) || "Midsam Business"}  |  Relatorio executivo</Text>
@@ -437,11 +446,26 @@ function Footer({ agency }: { agency: string; page?: number }) {
   );
 }
 
-const analysisStyles = StyleSheet.create({
+export function estilosDo(t: TemaRelatorio) {
+  return { tema: t, styles: criarEstilos(t), analysisStyles: criarEstilosAnalise(t) };
+}
+
+const EstilosPdf = createContext<ReturnType<typeof estilosDo> | null>(null);
+
+function useEstilos() {
+  const e = useContext(EstilosPdf);
+  if (!e) throw new Error("ReportPdfTemplate fora do provider de estilos");
+  return e;
+}
+
+function criarEstilosAnalise(t: TemaRelatorio) {
+  const cinzaEscuro = misturar(t.texto, "#ffffff", 0.2);
+  const cinza = misturar(t.texto, "#ffffff", 0.35);
+  return StyleSheet.create({
   featured: {
     flexDirection: "row",
     borderWidth: 1,
-    borderColor: "#dbe7f3",
+    borderColor: t.borda,
     borderRadius: 12,
     padding: 12,
     marginBottom: 16,
@@ -458,7 +482,7 @@ const analysisStyles = StyleSheet.create({
   },
   featuredKicker: {
     fontSize: 7.5,
-    color: "#2563eb",
+    color: t.primaria,
     letterSpacing: 1,
     marginBottom: 4,
   },
@@ -469,7 +493,7 @@ const analysisStyles = StyleSheet.create({
   },
   featuredReason: {
     fontSize: 8,
-    color: "#475569",
+    color: cinzaEscuro,
     marginBottom: 10,
   },
   featuredMetrics: {
@@ -493,13 +517,13 @@ const analysisStyles = StyleSheet.create({
   bullet: {
     width: 10,
     fontSize: 9,
-    color: "#2563eb",
+    color: t.primaria,
   },
   itemText: {
     flex: 1,
     fontSize: 9,
     lineHeight: 1.45,
-    color: "#1e293b",
+    color: t.texto,
   },
   shot: {
     marginBottom: 14,
@@ -513,20 +537,29 @@ const analysisStyles = StyleSheet.create({
   },
   shotCaption: {
     fontSize: 8,
-    color: "#64748b",
+    color: cinza,
     marginTop: 6,
     textAlign: "center",
   },
-});
+  });
+}
 
 const BLOCOS_ANALISE = [
   { key: "highlights", title: "Destaques do periodo", color: "#059669" },
   { key: "attention", title: "Pontos de atencao", color: "#d97706" },
-  { key: "nextSteps", title: "Proximos passos", color: "#2563eb" },
-  { key: "notes", title: "Observacoes do gestor", color: "#64748b" },
+  { key: "nextSteps", title: "Proximos passos", color: "primaria" },
+  { key: "notes", title: "Observacoes do gestor", color: "neutra" },
 ] as const;
 
+/** Verde e ambar dizem bom/ruim e ficam; o resto segue a assessoria. */
+function corDoBloco(cor: string, t: TemaRelatorio) {
+  if (cor === "primaria") return t.primaria;
+  if (cor === "neutra") return misturar(t.texto, "#ffffff", 0.35);
+  return cor;
+}
+
 function AnalysisPage({ data }: { data: ReportData }) {
+  const { tema, styles, analysisStyles } = useEstilos();
   const destaque = data.featuredAd;
   if (!temAnalise(data.analysis) && !destaque) return null;
 
@@ -573,10 +606,10 @@ function AnalysisPage({ data }: { data: ReportData }) {
               if (!itens.length) return null;
               return (
                 <View key={bloco.key} style={analysisStyles.block} wrap={false}>
-                  <Text style={[analysisStyles.blockHeading, { color: bloco.color }]}>{bloco.title}</Text>
+                  <Text style={[analysisStyles.blockHeading, { color: corDoBloco(bloco.color, tema) }]}>{bloco.title}</Text>
                   {itens.map((item, i) => (
                     <View key={i} style={analysisStyles.item}>
-                      <Text style={[analysisStyles.bullet, { color: bloco.color }]}>-</Text>
+                      <Text style={[analysisStyles.bullet, { color: corDoBloco(bloco.color, tema) }]}>-</Text>
                       <Text style={analysisStyles.itemText}>{sanitizePdfText(item)}</Text>
                     </View>
                   ))}
@@ -592,6 +625,7 @@ function AnalysisPage({ data }: { data: ReportData }) {
 }
 
 function ScreenshotPages({ data }: { data: ReportData }) {
+  const { styles, analysisStyles } = useEstilos();
   const prints = data.screenshots ?? [];
   if (!prints.length) return null;
   const paginas = chunkMetrics(prints, 2);
@@ -619,6 +653,7 @@ function ScreenshotPages({ data }: { data: ReportData }) {
 }
 
 function SummaryTable({ data }: { data: ReportData }) {
+  const { styles } = useEstilos();
   const campaigns = data.topCampaigns.slice(0, 10);
 
   return (
@@ -654,6 +689,7 @@ function SummaryTable({ data }: { data: ReportData }) {
 }
 
 function AdsTable({ data }: { data: ReportData }) {
+  const { styles } = useEstilos();
   const ads = data.topAds.slice(0, 10);
 
   return (
@@ -699,6 +735,7 @@ function AdsTable({ data }: { data: ReportData }) {
 }
 
 function SocialPresenceCard({ data }: { data: ReportData }) {
+  const { styles } = useEstilos();
   if (!data.socialPresence?.enabled) return null;
 
   const profile = data.socialPresence;
@@ -736,6 +773,9 @@ function SocialPresenceCard({ data }: { data: ReportData }) {
 }
 
 export function ReportPdfTemplate({ data }: { data: ReportData }) {
+  const paleta = data.branding.identidade?.paleta ?? PALETA_PADRAO;
+  const estilos = useMemo(() => estilosDo(temaDaPaleta(paleta)), [paleta]);
+  const { styles } = estilos;
   const introText = `Relatorio gerado dos dados analisados entre ${data.period.label}.`;
   const campaigns = data.topCampaigns.slice(0, 10);
   const ads = data.topAds.slice(0, 10);
@@ -747,6 +787,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
 
   return (
     <Document title={`Relatorio - ${sanitizePdfText(data.client.name)}`} author={sanitizePdfText(data.branding.agencyName) || "Midsam Business"}>
+      <EstilosPdf.Provider value={estilos}>
       <Page size="A4" style={styles.page}>
         <View style={styles.shell}>
           <View style={styles.cover}>
@@ -886,6 +927,7 @@ export function ReportPdfTemplate({ data }: { data: ReportData }) {
 
       <ScreenshotPages data={data} />
       <AnalysisPage data={data} />
+      </EstilosPdf.Provider>
     </Document>
   );
 }

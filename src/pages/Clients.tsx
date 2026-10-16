@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAssessorias } from "@/hooks/useAssessorias";
 import {
   Plus,
   Link2,
@@ -124,6 +125,8 @@ interface Client {
   city: string | null;
   state: string | null;
   address: string | null;
+  assessoria_id?: string | null;
+  nome_relatorio?: string | null;
   service_radius_km: number | null;
   primary_goal: string | null;
   meta_balance_cents: number | null;
@@ -281,6 +284,11 @@ export default function Clients() {
   const [newWhatsappGroupJid, setNewWhatsappGroupJid] = useState("");
   const [newManagerId, setNewManagerId] = useState("");
   const [newCompanyId, setNewCompanyId] = useState("");
+  const [newAssessoriaId, setNewAssessoriaId] = useState("");
+  const [newNomeRelatorio, setNewNomeRelatorio] = useState("");
+  const { assessorias, disponivel: assessoriasNoAr } = useAssessorias();
+  // ?editar=<id> vem do editor de relatorios, para completar o cadastro.
+  const [searchParams, setSearchParams] = useSearchParams();
   const [waGroups, setWaGroups] = useState<{ id: string; subject: string }[] | null>(null);
   const [loadingWaGroups, setLoadingWaGroups] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -419,6 +427,18 @@ export default function Clients() {
   useEffect(() => {
     load();
   }, []);
+
+  const idParaEditar = searchParams.get("editar");
+  useEffect(() => {
+    if (!idParaEditar || !clients.length) return;
+    const alvo = clients.find((c) => c.id === idParaEditar);
+    if (alvo) openEditDialog(alvo);
+    const proximos = new URLSearchParams(searchParams);
+    proximos.delete("editar");
+    setSearchParams(proximos, { replace: true });
+    // So quando o link chega ou a lista carrega.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idParaEditar, clients.length]);
 
   const gestorPorId = useMemo(() => {
     return new Map(gestores.map((gestor) => [gestor.user_id, gestor]));
@@ -786,6 +806,8 @@ export default function Clients() {
     setNewWhatsappGroupJid("");
     setNewManagerId("");
     setNewCompanyId("");
+    setNewAssessoriaId("");
+    setNewNomeRelatorio("");
   }
 
   async function loadWaGroups() {
@@ -826,6 +848,8 @@ export default function Clients() {
     setNewWhatsappGroupJid(client.whatsapp_group_jid ?? "");
     setNewManagerId(client.manager_id ?? "");
     setNewCompanyId(client.company_id ?? "");
+    setNewAssessoriaId(client.assessoria_id ?? "");
+    setNewNomeRelatorio(client.nome_relatorio ?? "");
     setCreateOpen(true);
     loadWaGroups();
   }
@@ -846,6 +870,8 @@ export default function Clients() {
       whatsapp_group_jid: newWhatsappGroupJid || null,
       manager_id: newManagerId || null,
       company_id: newCompanyId || null,
+      // So depois da migration das assessorias: antes, a coluna nao existe.
+      ...(assessoriasNoAr ? { assessoria_id: newAssessoriaId || null, nome_relatorio: newNomeRelatorio.trim() || null } : {}),
     };
     const { error } = editClient
       ? await supabase.from("clients").update(payload).eq("id", editClient.id)
@@ -1358,6 +1384,25 @@ export default function Clients() {
                     <Label htmlFor="address">Endereço</Label>
                     <Input id="address" value={newAddress} onChange={(event) => setNewAddress(event.target.value)} placeholder="Rua, número, bairro" />
                   </div>
+                  {assessoriasNoAr && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label>Assessoria responsável</Label>
+                        <Select value={newAssessoriaId || "nenhuma"} onValueChange={(v) => setNewAssessoriaId(v === "nenhuma" ? "" : v)}>
+                          <SelectTrigger><SelectValue placeholder="Escolha a assessoria" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="nenhuma">Nenhuma (escolher no relatório)</SelectItem>
+                            {assessorias.map((a) => <SelectItem key={a.id} value={a.id}>{a.nome}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-[11px] text-muted-foreground">Define a logo e as cores dos relatórios.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="nomeRelatorio">Nome no relatório <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+                        <Input id="nomeRelatorio" value={newNomeRelatorio} onChange={(event) => setNewNomeRelatorio(event.target.value)} placeholder={newName || "Igual ao nome do cliente"} />
+                      </div>
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="logoUrl">Foto ou logo (URL)</Label>
                     <Input id="logoUrl" value={newLogoUrl} onChange={(event) => setNewLogoUrl(event.target.value)} placeholder="https://..." />

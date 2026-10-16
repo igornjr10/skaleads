@@ -1501,6 +1501,8 @@ export type Database = {
       clients: {
         Row: {
           address: string | null
+          assessoria_id: string | null
+          nome_relatorio: string | null
           alvo_cpc: number | null
           alvo_custo_mensagem: number | null
           alvo_custo_resultado: number | null
@@ -1560,6 +1562,8 @@ export type Database = {
         }
         Insert: {
           address?: string | null
+          assessoria_id?: string | null
+          nome_relatorio?: string | null
           alvo_cpc?: number | null
           alvo_custo_mensagem?: number | null
           alvo_custo_resultado?: number | null
@@ -1619,6 +1623,8 @@ export type Database = {
         }
         Update: {
           address?: string | null
+          assessoria_id?: string | null
+          nome_relatorio?: string | null
           alvo_cpc?: number | null
           alvo_custo_mensagem?: number | null
           alvo_custo_resultado?: number | null

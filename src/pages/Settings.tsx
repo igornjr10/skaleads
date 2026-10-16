@@ -15,6 +15,7 @@ import {
 import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert, QrCode, RotateCw, Power, Trash2 } from "lucide-react";
 import { EquipeCard } from "@/components/settings/EquipeCard";
 import { EmpresaCard } from "@/components/settings/EmpresaCard";
+import { AssessoriasCard } from "@/components/settings/AssessoriasCard";
 import { PAPEIS, rotuloPapel } from "@/lib/permissoes";
 import { META_APP_ID } from "@/lib/env";
 
@@ -330,6 +331,7 @@ export default function Settings() {
       </Card>
 
       {gereEquipe && <EmpresaCard />}
+      {gereEquipe && <AssessoriasCard />}
       {gereEquipe && <EquipeCard />}
 
       {isOwner && (

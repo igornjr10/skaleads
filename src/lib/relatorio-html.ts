@@ -3,6 +3,8 @@
 // fixa; o corpo e uma lista de blocos que o gestor monta, edita e reordena.
 // A IA (Edge Function relatorio-ia) so preenche os blocos padrao a partir de prints.
 
+import { type IdentidadeRelatorio, type TemaRelatorio, PALETA_PADRAO, misturar, temaDaPaleta } from "./identidade-relatorio";
+
 export interface MetricasRelatorio {
   investimento: number | null;
   alcance: number | null;
@@ -51,6 +53,8 @@ export type BlocoDo<T extends TipoBloco> = Extract<Bloco, { tipo: T }>;
 
 export interface RelatorioDados {
   agencia: { nome: string; logo_url: string | null };
+  /** Assessoria e cores usadas na geracao. Ausente = relatorio antigo, que segue no azul padrao. */
+  identidade?: IdentidadeRelatorio;
   cliente: { nome: string; logo_url: string | null };
   local: string;
   periodo: string;
@@ -134,7 +138,7 @@ export const MODELOS_DE_BLOCO: Array<{ chave: string; rotulo: string; descricao:
   {
     chave: "resumo",
     rotulo: "Resumo em destaque",
-    descricao: "Faixa azul com o recado principal",
+    descricao: "Faixa na cor da assessoria com o recado principal",
     criar: () => ({ id: novoId(), tipo: "resumo", olho: "Resumo", titulo: "", texto: "" }),
   },
 ];
@@ -222,6 +226,7 @@ export function normalizarRelatorio(bruto: unknown): RelatorioDados {
   }
   return {
     agencia: d.agencia ?? { nome: "Agência", logo_url: null },
+    ...(d.identidade?.paleta ? { identidade: d.identidade as IdentidadeRelatorio } : {}),
     cliente: d.cliente ?? { nome: "Cliente", logo_url: null },
     local: d.local ?? "",
     periodo: d.periodo ?? "",
@@ -288,76 +293,80 @@ function iniciais(nome: string): string {
   return nome.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]!.toUpperCase()).join("");
 }
 
-const CSS = `
+function css(t: TemaRelatorio) {
+  // Cinzas puxados da cor de texto: no tema vermelho nao sobra cinza azulado.
+  const cinza = misturar(t.texto, "#ffffff", 0.3);
+  const cinzaClaro = misturar(t.texto, "#ffffff", 0.5);
+  return `
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#0f1b33;background:#fff;-webkit-font-smoothing:antialiased}
+body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:${t.texto};background:#fff;-webkit-font-smoothing:antialiased}
 h1,h2,.num,.marca,.resumo p{font-family:Sora,Inter,system-ui,sans-serif}
 .wrap{max-width:760px;margin:0 auto;padding:0 28px}
-.hero{position:relative;overflow:hidden;color:#fff;background:radial-gradient(120% 80% at 10% 20%,#0d3fa3 0%,#0a2a6e 38%,#071633 75%)}
+.hero{position:relative;overflow:hidden;color:#fff;background:radial-gradient(120% 80% at 10% 20%,${t.capa1} 0%,${t.capa2} 38%,${t.capa3} 75%)}
 .hero:before{content:"";position:absolute;right:-180px;top:20px;width:520px;height:420px;border:34px solid rgba(255,255,255,.06);border-radius:50%}
-.topo{position:relative;background:rgba(3,10,30,.55);border-bottom:1px solid rgba(255,255,255,.06)}
+.topo{position:relative;background:${t.topo};border-bottom:1px solid rgba(255,255,255,.06)}
 .topo .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-top:20px;padding-bottom:20px}
 .marca{display:flex;align-items:center;gap:12px;font-weight:700;font-size:15px;letter-spacing:.02em;text-transform:uppercase}
-.marca .logo{width:36px;height:36px;border-radius:9px;background:#1757d6;display:grid;place-items:center;overflow:hidden;font-size:13px}
+.marca .logo{width:36px;height:36px;border-radius:9px;background:${t.primaria};display:grid;place-items:center;overflow:hidden;font-size:13px}
 .marca .logo img{width:100%;height:100%;object-fit:cover}
 .topo .dir{display:flex;align-items:center;gap:12px}
 .pill{border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:7px 14px;font-size:13px;white-space:nowrap}
-.avatar{width:34px;height:34px;border-radius:50%;border:2px solid rgba(255,255,255,.8);overflow:hidden;display:grid;place-items:center;font-size:11px;font-weight:700;background:#0b1f4d}
+.avatar{width:34px;height:34px;border-radius:50%;border:2px solid rgba(255,255,255,.8);overflow:hidden;display:grid;place-items:center;font-size:11px;font-weight:700;background:${t.avatar}}
 .avatar img{width:100%;height:100%;object-fit:cover}
 .hero-corpo{position:relative;padding-top:64px;padding-bottom:72px}
 .para{display:inline-block;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);border-radius:999px;padding:9px 18px;font-size:15px}
 .para b{font-family:Sora,Inter,sans-serif;margin-left:4px}
-.local{margin-top:26px;font-size:13px;font-weight:600;color:#c9d6ef}
+.local{margin-top:26px;font-size:13px;font-weight:600;color:${t.sobreCapa}}
 .hero h1{margin-top:14px;font-size:24px;line-height:1.3;font-weight:700}
-.hero .sub{margin-top:14px;max-width:520px;color:#d7e1f5;font-size:16px;line-height:1.55}
+.hero .sub{margin-top:14px;max-width:520px;color:${t.sobreCapaSuave};font-size:16px;line-height:1.55}
 .vidro{margin-top:44px;display:grid;grid-template-columns:1fr 1fr;border-radius:14px;overflow:hidden;background:rgba(255,255,255,.12);backdrop-filter:blur(8px)}
 .vidro div{padding:20px 18px;border-right:1px solid rgba(255,255,255,.08);border-bottom:1px solid rgba(255,255,255,.08)}
 .vidro div:nth-child(2n){border-right:0}
 .vidro .num{display:block;font-size:20px;font-weight:700}
-.vidro small{display:block;margin-top:6px;font-size:12px;color:#d7e1f5}
+.vidro small{display:block;margin-top:6px;font-size:12px;color:${t.sobreCapaSuave}}
 section.bloco{padding:56px 0}
-section.alt{background:#f3f7fd}
+section.alt{background:${t.fundo}}
 section.cont{padding-top:0}
 section.fim{padding-bottom:56px}
 section.meio{padding-bottom:0}
-.olho{font-size:12px;font-weight:600;color:#1f5fd1}
-h2{margin-top:10px;font-size:22px;font-weight:700;color:#0f1b33;line-height:1.3}
-.intro{margin-top:14px;color:#56637a;font-size:16px;line-height:1.6;max-width:560px}
+.olho{font-size:12px;font-weight:600;color:${t.primaria}}
+h2{margin-top:10px;font-size:22px;font-weight:700;color:${t.texto};line-height:1.3}
+.intro{margin-top:14px;color:${cinza};font-size:16px;line-height:1.6;max-width:560px}
 .intro p+p,.intro ul+p,.intro p+ul{margin-top:10px}
 .intro ul{padding-left:0;list-style:none}
 .intro li{position:relative;padding-left:18px;margin-top:6px}
-.intro li:before{content:"";position:absolute;left:2px;top:.62em;width:7px;height:7px;border-radius:50%;background:#1f5fd1}
-.intro .hl{color:#173b8c;font-weight:600}
+.intro li:before{content:"";position:absolute;left:2px;top:.62em;width:7px;height:7px;border-radius:50%;background:${t.primaria}}
+.intro .hl{color:${t.forte};font-weight:600}
 .texto .intro{max-width:none}
 .cards{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.card{border:1px solid #e3e8f1;border-radius:16px;padding:24px 20px;background:#fff}
-.card .num{display:block;font-size:24px;font-weight:700;color:#173b8c}
-.card .rot{display:block;margin-top:10px;font-size:14px;color:#4a566d}
-.card .exp{display:block;margin-top:8px;font-size:12px;line-height:1.5;color:#8a94a6}
-.lista{margin-top:16px;border:1px solid #e3e8f1;border-radius:16px;overflow:hidden;background:#fff}
-.lista div{padding:18px 18px;border-bottom:1px solid #e3e8f1}
+.card{border:1px solid ${t.borda};border-radius:16px;padding:24px 20px;background:#fff}
+.card .num{display:block;font-size:24px;font-weight:700;color:${t.forte}}
+.card .rot{display:block;margin-top:10px;font-size:14px;color:${cinza}}
+.card .exp{display:block;margin-top:8px;font-size:12px;line-height:1.5;color:${cinzaClaro}}
+.lista{margin-top:16px;border:1px solid ${t.borda};border-radius:16px;overflow:hidden;background:#fff}
+.lista div{padding:18px 18px;border-bottom:1px solid ${t.borda}}
 .lista div:last-child{border-bottom:0}
-.lista small{display:block;font-size:13px;color:#56637a}
+.lista small{display:block;font-size:13px;color:${cinza}}
 .lista b{display:block;margin-top:4px;font-family:Sora,Inter,sans-serif;font-size:16px}
 .dados .lista{margin-top:28px}
 .campeao{text-align:center}
 .campeao .intro{margin-left:auto;margin-right:auto}
 .campeao h2{max-width:600px;margin-left:auto;margin-right:auto}
-.tela{margin:32px auto 0;width:280px;max-width:100%;aspect-ratio:9/16;border-radius:18px;overflow:hidden;background:#0f1b33;box-shadow:0 24px 50px rgba(15,27,51,.18)}
+.tela{margin:32px auto 0;width:280px;max-width:100%;aspect-ratio:9/16;border-radius:18px;overflow:hidden;background:${t.texto};box-shadow:0 24px 50px rgba(15,27,51,.18)}
 .tela img{width:100%;height:100%;object-fit:cover;display:block}
 .mini{margin:20px auto 0;display:flex;justify-content:center;gap:10px;flex-wrap:wrap}
-.mini div{width:86px;min-height:96px;text-align:left;border:1px solid #e3e8f1;border-radius:10px;background:#fff;padding:12px 8px}
-.mini .num{display:block;font-size:16px;font-weight:700;color:#173b8c}
-.mini small{display:block;margin-top:6px;font-size:11px;line-height:1.35;color:#56637a}
+.mini div{width:86px;min-height:96px;text-align:left;border:1px solid ${t.borda};border-radius:10px;background:#fff;padding:12px 8px}
+.mini .num{display:block;font-size:16px;font-weight:700;color:${t.forte}}
+.mini small{display:block;margin-top:6px;font-size:11px;line-height:1.35;color:${cinza}}
 figure{margin-top:28px}
-figure img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid #e3e8f1;box-shadow:0 14px 34px rgba(15,27,51,.10);background:#fff}
-figcaption{margin-top:10px;font-size:13px;line-height:1.5;color:#56637a;text-align:center}
-.resumo{background:linear-gradient(160deg,#0b3a97 0%,#0a2a6e 55%,#081d4d 100%);color:#fff;text-align:center;padding:56px 0 64px}
-.resumo .olho{color:#7fb0ff}
+figure img{display:block;width:100%;height:auto;border-radius:14px;border:1px solid ${t.borda};box-shadow:0 14px 34px rgba(15,27,51,.10);background:#fff}
+figcaption{margin-top:10px;font-size:13px;line-height:1.5;color:${cinza};text-align:center}
+.resumo{background:linear-gradient(160deg,${t.capa1} 0%,${t.capa2} 55%,${t.capa3} 100%);color:#fff;text-align:center;padding:56px 0 64px}
+.resumo .olho{color:${t.destaque}}
 .resumo h2{color:#fff}
 .resumo p.txt{margin-top:16px;font-size:22px;line-height:1.5;font-weight:600}
-.resumo .hl{color:#6fa8ff}
-footer{padding:28px 0;text-align:center;font-size:12px;color:#8a94a6}
+.resumo .hl{color:${t.destaque}}
+footer{padding:28px 0;text-align:center;font-size:12px;color:${cinzaClaro}}
 @media (max-width:520px){
   .wrap{padding:0 18px}
   .topo .pill{display:none}
@@ -365,6 +374,7 @@ footer{padding:28px 0;text-align:center;font-size:12px;color:#8a94a6}
   .cards{grid-template-columns:1fr}
   .resumo p.txt{font-size:18px}
 }`;
+}
 
 function celula(num: string, rot: string) {
   return `<div><span class="num">${esc(num)}</span><small>${esc(rot)}</small></div>`;
@@ -497,6 +507,11 @@ function corpo(d: RelatorioDados): string {
   return secoes.join("\n");
 }
 
+/** Tema que pinta o relatorio: o gravado nele ou, se antigo, o azul padrao. */
+export function temaDoRelatorio(d: Pick<RelatorioDados, "identidade">): TemaRelatorio {
+  return temaDaPaleta(d.identidade?.paleta ?? PALETA_PADRAO);
+}
+
 export function montarRelatorioHtml(d: RelatorioDados): string {
   const titulo = `Relatório ${d.cliente.nome}${d.periodo ? ` · ${d.periodo}` : ""}`;
   return `<!doctype html>
@@ -507,7 +522,7 @@ export function montarRelatorioHtml(d: RelatorioDados): string {
 <title>${esc(titulo)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@600;700&display=swap" rel="stylesheet">
-<style>${CSS}</style>
+<style>${css(temaDoRelatorio(d))}</style>
 </head>
 <body>
 ${hero(d)}

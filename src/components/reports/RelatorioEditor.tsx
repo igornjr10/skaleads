@@ -53,16 +53,20 @@ import {
   type RelatorioDados,
 } from "@/lib/relatorio-html";
 import { BlocoEditor, CampoNumero, ZonaDeImagens } from "./BlocoEditor";
+import { IdentidadeCard } from "./IdentidadeCard";
+import { useAssessorias } from "@/hooks/useAssessorias";
+import {
+  type Assessoria, type ClienteDoRelatorio,
+  identidadeDa, localDoCliente, nomeNoRelatorio, reconhecerCliente, resolverAssessoria,
+} from "@/lib/identidade-relatorio";
 
 const MAX_PRINTS_IA = 8;
 
-interface Cliente {
-  id: string;
-  name: string;
-  logo_url: string | null;
-  city: string | null;
-  state: string | null;
-}
+type Cliente = ClienteDoRelatorio;
+
+const COLUNAS_CLIENTE = "id, name, nome_relatorio, logo_url, city, state, business_segment, assessoria_id";
+// Antes da migration das assessorias essas duas colunas nao existem.
+const COLUNAS_CLIENTE_LEGADO = "id, name, logo_url, city, state, business_segment";
 
 const CAMPOS_METRICA: Array<{ chave: keyof MetricasRelatorio; rotulo: string }> = [
   { chave: "investimento", rotulo: "Investimento (R$)" },
@@ -132,30 +136,95 @@ export function RelatorioEditor() {
   const [salvando, setSalvando] = useState(false);
   const [exportando, setExportando] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  const { assessorias } = useAssessorias();
+  // Assessoria escolhida so para este relatorio; o cadastro do cliente nao muda.
+  const [escolhidaId, setEscolhidaId] = useState<string | null>(null);
+  const [conflitoIgnorado, setConflitoIgnorado] = useState<string | null>(null);
+  const [salvandoPadrao, setSalvandoPadrao] = useState(false);
 
   const cliente = clientes.find((c) => c.id === clienteId);
+  const resolucaoBruta = useMemo(
+    () => resolverAssessoria({ assessorias, escolhidaId, doClienteId: cliente?.assessoria_id, texto: observacoes }),
+    [assessorias, escolhidaId, cliente?.assessoria_id, observacoes],
+  );
+  const resolucao = resolucaoBruta.conflito?.id === conflitoIgnorado ? { ...resolucaoBruta, conflito: null } : resolucaoBruta;
+  // Relatorio aberto pinta com a identidade dele; antes de abrir, com a resolvida.
+  const selecionadaId = dados ? dados.identidade?.assessoria_id ?? null : resolucao.assessoria?.id ?? null;
+  const sugestaoCliente = useMemo(
+    () => (clienteId || !observacoes.trim() ? null : reconhecerCliente(observacoes, clientes)),
+    [clienteId, observacoes, clientes],
+  );
   const html = useMemo(() => (dados ? montarRelatorioHtml(dados) : ""), [dados]);
 
   useEffect(() => {
-    supabase
-      .from("clients")
-      .select("id, name, logo_url, city, state")
-      .eq("status", "active")
-      .order("name")
-      .then(({ data }) => setClientes((data as Cliente[]) ?? []));
+    const buscar = (colunas: string) => supabase.from("clients").select(colunas).eq("status", "active").order("name");
+    buscar(COLUNAS_CLIENTE).then(async ({ data, error }) => {
+      const linhas = error ? (await buscar(COLUNAS_CLIENTE_LEGADO)).data : data;
+      setClientes((linhas as unknown as Cliente[]) ?? []);
+    });
   }, []);
 
+  /** Nome, logo e cores da assessoria no relatorio; sem assessoria, a marca da empresa no azul padrao. */
+  function comIdentidade(d: RelatorioDados, a: Assessoria | null): RelatorioDados {
+    if (!a) {
+      const { identidade: _sem, ...resto } = d;
+      return { ...resto, agencia: { nome: empresa?.nome_exibicao || empresa?.name || "Agência", logo_url: empresa?.logo_url ?? null } };
+    }
+    return { ...d, agencia: { nome: a.nome, logo_url: a.logo_url }, identidade: identidadeDa(a) };
+  }
+
+  /** Antes de gerar: com assessorias cadastradas, precisa de uma definida e sem conflito pendente. */
+  function identidadeProntaParaGerar(): boolean {
+    if (!assessorias.length) return true;
+    if (!resolucao.assessoria) {
+      toast.error("Escolha a assessoria deste relatório em Identidade do relatório");
+      return false;
+    }
+    if (resolucao.conflito) {
+      toast.error(`O texto cita ${resolucao.conflito.nome}. Confirme a assessoria antes de gerar.`);
+      return false;
+    }
+    return true;
+  }
+
+  function escolherAssessoria(id: string) {
+    const a = assessorias.find((x) => x.id === id) ?? null;
+    setEscolhidaId(id);
+    setConflitoIgnorado(null);
+    if (dados) editar((d) => comIdentidade(d, a));
+  }
+
+  async function salvarComoPadrao() {
+    if (!cliente || !selecionadaId) return;
+    setSalvandoPadrao(true);
+    const { error } = await supabase.from("clients").update({ assessoria_id: selecionadaId } as never).eq("id", cliente.id);
+    setSalvandoPadrao(false);
+    if (error) return toast.error(`Não consegui salvar no cadastro: ${error.message}`);
+    setClientes((cs) => cs.map((c) => (c.id === cliente.id ? { ...c, assessoria_id: selecionadaId } : c)));
+    toast.success("Assessoria salva como padrão do cliente");
+  }
+
+  function trocarCliente(id: string) {
+    setClienteId(id);
+    setDados(null);
+    setSalvoId(null);
+    setAlterado(false);
+    setPrints([]);
+    setEscolhidaId(null);
+    setConflitoIgnorado(null);
+  }
+
   function relatorioEmBranco(c: Cliente): RelatorioDados {
-    return {
-      agencia: { nome: empresa?.nome_exibicao || empresa?.name || "Agência", logo_url: empresa?.logo_url ?? null },
-      cliente: { nome: c.name, logo_url: c.logo_url },
-      local: c.city ? `${c.city}${c.state ? `/${c.state}` : ""}` : "",
+    return comIdentidade({
+      agencia: { nome: "", logo_url: null },
+      cliente: { nome: nomeNoRelatorio(c), logo_url: c.logo_url },
+      local: localDoCliente(c),
       periodo,
       manchete: "",
       subtitulo: "",
       metricas: { ...METRICAS_VAZIAS },
       blocos: [],
-    };
+    }, resolucao.assessoria);
   }
 
   function abrirRelatorio(novo: RelatorioDados, id: string | null, abrirBlocos: string[] = []) {
@@ -172,6 +241,7 @@ export function RelatorioEditor() {
 
   function criarPersonalizado() {
     if (!cliente) return toast.error("Escolha o cliente");
+    if (!identidadeProntaParaGerar()) return;
     const blocos = ["numeros", "prints", "analise", "proximos"].map(criarBloco);
     abrirRelatorio({ ...relatorioEmBranco(cliente), blocos }, null, [blocos[1].id]);
     setAlterado(true);
@@ -191,6 +261,7 @@ export function RelatorioEditor() {
   async function gerarComIA() {
     if (!cliente) return toast.error("Escolha o cliente");
     if (!prints.length) return toast.error("Adicione os prints do Gerenciador de Anúncios");
+    if (!dados && !identidadeProntaParaGerar()) return;
     setGerando(true);
     try {
       const { dados: ia = {} } = await invocar<{ dados?: Record<string, unknown> }>("relatorio-ia", {
@@ -199,7 +270,7 @@ export function RelatorioEditor() {
         periodo: dados?.periodo || periodo,
         observacoes,
       });
-      const base = dados && dados.cliente.nome === cliente.name ? dados : relatorioEmBranco(cliente);
+      const base = dados ?? relatorioEmBranco(cliente);
       const texto = (v: unknown) => (typeof v === "string" ? v : "");
       setDados({
         ...base,
@@ -339,11 +410,7 @@ export function RelatorioEditor() {
               value={clienteId}
               onValueChange={(id) => {
                 if (alterado && !window.confirm("Trocar de cliente descarta as alterações não salvas. Continuar?")) return;
-                setClienteId(id);
-                setDados(null);
-                setSalvoId(null);
-                setAlterado(false);
-                setPrints([]);
+                trocarCliente(id);
               }}
             >
               <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
@@ -356,6 +423,17 @@ export function RelatorioEditor() {
               onChange={(e) => (dados ? editar((d) => ({ ...d, periodo: e.target.value })) : setPeriodo(e.target.value))}
               placeholder="Período (ex.: Setembro de 2026)"
             />
+            {sugestaoCliente?.tipo === "unico" && (
+              <div className="flex items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-2 text-xs">
+                <span>O texto cita <strong>{sugestaoCliente.item.name}</strong>.</span>
+                <Button size="sm" variant="secondary" onClick={() => trocarCliente(sugestaoCliente.item.id)}>Usar este cliente</Button>
+              </div>
+            )}
+            {sugestaoCliente?.tipo === "ambiguo" && (
+              <p className="rounded-md border border-amber-500/40 bg-amber-500/10 px-2.5 py-2 text-xs">
+                O texto pode ser de {sugestaoCliente.itens.map((c) => c.name).join(", ")}. Escolha o cliente certo na lista.
+              </p>
+            )}
             {!dados && (
               <Button variant="outline" className="w-full" onClick={criarPersonalizado} disabled={!clienteId}>
                 <FilePlus2 className="mr-2 h-4 w-4" />
@@ -364,6 +442,19 @@ export function RelatorioEditor() {
             )}
           </CardContent>
         </Card>
+
+        {cliente && assessorias.length > 0 && (
+          <IdentidadeCard
+            cliente={cliente}
+            assessorias={assessorias}
+            resolucao={resolucao}
+            selecionadaId={selecionadaId}
+            onEscolher={escolherAssessoria}
+            onIgnorarConflito={() => setConflitoIgnorado(resolucaoBruta.conflito?.id ?? null)}
+            onSalvarPadrao={salvarComoPadrao}
+            salvandoPadrao={salvandoPadrao}
+          />
+        )}
 
         <Card>
           <CardHeader className="pb-3">
@@ -402,7 +493,7 @@ export function RelatorioEditor() {
               rows={2}
               value={observacoes}
               onChange={(e) => setObservacoes(e.target.value)}
-              placeholder="Observações para a IA (opcional). Ex.: até R$ 15 por conversa é saudável para clínicas"
+              placeholder="Observações para a IA (opcional). Ex.: relatório da Mid Log; até R$ 15 por conversa é saudável"
             />
             <Button className="w-full" onClick={gerarComIA} disabled={gerando || !clienteId || !prints.length}>
               {gerando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}

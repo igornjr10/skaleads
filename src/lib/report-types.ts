@@ -1,3 +1,4 @@
+import type { IdentidadeRelatorio } from "@/lib/identidade-relatorio";
 import type { MetricaRelatorio } from "@/lib/report-metricas";
 
 export interface ReportData {
@@ -66,7 +67,12 @@ export interface ReportData {
   }>;
   /** Metricas escolhidas, na ordem do relatorio. Catalogo em report-metricas.ts. */
   metricPreferences?: MetricaRelatorio[];
-  branding: { primaryColor: string; agencyName: string };
+  branding: {
+    primaryColor: string;
+    agencyName: string;
+    /** Assessoria e cores do relatorio; sem ela, o azul padrao. */
+    identidade?: IdentidadeRelatorio;
+  };
   /** Texto do gestor. Uma linha por item: vira lista no PDF. */
   analysis?: {
     highlights?: string;
