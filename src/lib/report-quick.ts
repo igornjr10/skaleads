@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { ReportData } from "@/lib/report-types";
 import { fetchInstagramSocial } from "@/lib/meta-insights";
 import { credencialDaPagina } from "@/lib/meta-fetch";
+import { identidadeDoCliente } from "@/lib/identidade-cliente";
 
 export type PeriodoRapido = "7d" | "14d" | "30d";
 
@@ -61,7 +62,7 @@ export async function montarReportDataDoBanco(
   const inicio = new Date(fim);
   inicio.setDate(inicio.getDate() - dias + 1);
 
-  const [{ data: cliente }, { data: diarias }, { data: campanhas }] = await Promise.all([
+  const [{ data: cliente }, { data: diarias }, { data: campanhas }, identidade] = await Promise.all([
     supabase
       .from("clients")
       .select("name, logo_url, meta_ad_account_id, meta_instagram_account_id, meta_instagram_username, meta_token_configured")
@@ -79,6 +80,7 @@ export async function montarReportDataDoBanco(
       .eq("client_id", clientId)
       .order("spend", { ascending: false })
       .limit(5),
+    identidadeDoCliente(clientId).catch(() => null),
   ]);
 
   const linhas = (diarias ?? []) as unknown as LinhaDiaria[];
@@ -178,7 +180,9 @@ export async function montarReportDataDoBanco(
       "directions",
       "leads",
     ],
-    branding: { primaryColor: "#3b82f6", agencyName: "Midsam Business" },
+    branding: identidade
+      ? { primaryColor: identidade.paleta.primaria, agencyName: identidade.nome, identidade }
+      : { primaryColor: "#3b82f6", agencyName: "Midsam Business" },
   };
 }
 

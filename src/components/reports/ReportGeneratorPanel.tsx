@@ -25,6 +25,10 @@ import { comprimirImagem, escolherCriativoDestaque, lerSugestaoDaIA } from "@/li
 import { sendChatMessage } from "@/lib/ai-service";
 import { useAuth } from "@/hooks/useAuth";
 import { nomeDaMarca } from "@/components/MarcaEmpresa";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAssessorias } from "@/hooks/useAssessorias";
+import { identidadeDoCliente } from "@/lib/identidade-cliente";
+import { paletaDe } from "@/lib/identidade-relatorio";
 
 const MAX_PRINTS = 8;
 
@@ -199,6 +203,10 @@ export function ReportGeneratorPanel({
   onReportCreated,
 }: ReportGeneratorPanelProps) {
   const { empresa } = useAuth();
+  const { assessorias } = useAssessorias();
+  // Vazio = a do cadastro do cliente. Escolher aqui vale so para este relatorio.
+  const [assessoriaEscolhida, setAssessoriaEscolhida] = useState("");
+  const [assessoriaDoCliente, setAssessoriaDoCliente] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [analise, setAnalise] = useState<Analise>({ highlights: "", attention: "", nextSteps: "", notes: "" });
   const [sugerindo, setSugerindo] = useState(false);
@@ -737,6 +745,16 @@ export function ReportGeneratorPanel({
     }
   }
 
+  useEffect(() => {
+    setAssessoriaEscolhida("");
+    supabase
+      .from("clients")
+      .select("assessoria_id" as never)
+      .eq("id", clientId)
+      .maybeSingle()
+      .then(({ data }) => setAssessoriaDoCliente((data as { assessoria_id?: string | null } | null)?.assessoria_id ?? null));
+  }, [clientId]);
+
   async function buildReportData(): Promise<ReportData> {
     const { data: clientRaw, error: clientError } = await supabase
       .from("clients")
@@ -875,7 +893,12 @@ export function ReportGeneratorPanel({
       topCampaigns,
       topAds,
       metricPreferences,
-      branding: { primaryColor: empresa?.cor_primaria || "#2563eb", agencyName: nomeDaMarca(empresa) },
+      branding: await (async () => {
+        const identidade = await identidadeDoCliente(clientId, assessoriaEscolhida || null);
+        return identidade
+          ? { primaryColor: identidade.paleta.primaria, agencyName: identidade.nome, identidade }
+          : { primaryColor: empresa?.cor_primaria || "#2563eb", agencyName: nomeDaMarca(empresa) };
+      })(),
       analysis: analise,
       featuredAd: incluirDestaque ? escolherCriativoDestaque(topAds) ?? undefined : undefined,
       screenshots: prints.map(p => ({ src: p.src, caption: p.caption.trim() || undefined })),
@@ -992,6 +1015,35 @@ export function ReportGeneratorPanel({
       </CardHeader>
 
       <CardContent className="space-y-5">
+        {assessorias.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">Assessoria</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Logo e cores do PDF. Trocar aqui vale só para este relatório; o padrão fica no cadastro do cliente.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <Select value={assessoriaEscolhida || "cadastro"} onValueChange={(v) => setAssessoriaEscolhida(v === "cadastro" ? "" : v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cadastro">
+                    Do cadastro: {assessorias.find((a) => a.id === assessoriaDoCliente)?.nome ?? (assessorias.length === 1 ? assessorias[0].nome : "nenhuma (azul padrão)")}
+                  </SelectItem>
+                  {assessorias.map((a) => (
+                    <SelectItem key={a.id} value={a.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-full border" style={{ background: paletaDe(a).primaria }} />
+                        {a.nome}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm">Período</CardTitle>
