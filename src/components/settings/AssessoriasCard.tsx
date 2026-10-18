@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { type NovaAssessoria, useAssessorias } from "@/hooks/useAssessorias";
-import { PALETAS_SUGERIDAS, type PaletaBase, hexValido, paletaDe, temaDaPaleta } from "@/lib/identidade-relatorio";
+import { type Assessoria, PALETAS_SUGERIDAS, type PaletaBase, hexValido, paletaDe, temaDaPaleta } from "@/lib/identidade-relatorio";
 import { errorMessage } from "@/lib/utils";
 
 const TIPOS = ["image/png", "image/jpeg", "image/svg+xml", "image/webp"];
@@ -37,9 +37,15 @@ function Amostra({ paleta, nome, logo }: { paleta: PaletaBase; nome: string; log
   return (
     <div className="overflow-hidden rounded-lg border bg-white">
       <div className="flex items-center gap-2 px-3 py-3 text-white" style={{ background: `linear-gradient(135deg, ${t.capa1}, ${t.capa2} 55%, ${t.capa3})` }}>
-        <span className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-md text-[10px] font-bold" style={{ background: t.primaria }}>
-          {logo ? <img src={logo} alt="" className="h-full w-full object-cover" /> : nome.slice(0, 2).toUpperCase()}
-        </span>
+        {logo ? (
+          <span className="flex h-9 max-w-[96px] shrink-0 items-center justify-center overflow-hidden rounded-md bg-white px-1.5">
+            <img src={logo} alt="" className="max-h-7 w-auto object-contain" />
+          </span>
+        ) : (
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[10px] font-bold" style={{ background: t.primaria }}>
+            {nome.slice(0, 2).toUpperCase()}
+          </span>
+        )}
         <span className="truncate text-xs font-semibold uppercase tracking-wide">{nome || "Assessoria"}</span>
       </div>
       <div className="flex items-end gap-3 px-3 py-2.5" style={{ background: t.fundo }}>
@@ -61,6 +67,7 @@ export function AssessoriasCard() {
   const [aliasesTexto, setAliasesTexto] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [enviandoLogo, setEnviandoLogo] = useState(false);
+  const [logoDireto, setLogoDireto] = useState<string | null>(null);
 
   if (carregando || !disponivel) return null;
 
@@ -69,18 +76,38 @@ export function AssessoriasCard() {
     setAliasesTexto(a.aliases.join(", "));
   }
 
-  async function enviarLogo(file: File) {
-    if (!empresa || !editando) return;
-    if (!TIPOS.includes(file.type)) return toast.error("Use PNG, JPG, SVG ou WEBP");
-    if (file.size > TAMANHO_MAXIMO) return toast.error("O logo precisa ter até 1 MB");
-    setEnviandoLogo(true);
+  async function subirLogo(file: File): Promise<string | null> {
+    if (!empresa) return null;
+    if (!TIPOS.includes(file.type)) { toast.error("Use PNG, JPG, SVG ou WEBP"); return null; }
+    if (file.size > TAMANHO_MAXIMO) { toast.error("O logo precisa ter até 1 MB"); return null; }
     const extensao = file.name.split(".").pop()?.toLowerCase() || "png";
     // Nome novo a cada envio: a CDN guardaria o logo antigo no mesmo caminho.
     const caminho = `${empresa.id}/assessoria-${Date.now()}.${extensao}`;
     const { error } = await supabase.storage.from("branding").upload(caminho, file, { contentType: file.type });
+    if (error) { toast.error(error.message); return null; }
+    return supabase.storage.from("branding").getPublicUrl(caminho).data.publicUrl;
+  }
+
+  async function enviarLogo(file: File) {
+    if (!editando) return;
+    setEnviandoLogo(true);
+    const url = await subirLogo(file);
     setEnviandoLogo(false);
-    if (error) return toast.error(error.message);
-    setEditando({ ...editando, logo_url: supabase.storage.from("branding").getPublicUrl(caminho).data.publicUrl });
+    if (url) setEditando({ ...editando, logo_url: url });
+  }
+
+  async function enviarLogoDireto(a: Assessoria, file: File) {
+    setLogoDireto(a.id);
+    try {
+      const url = await subirLogo(file);
+      if (!url) return;
+      await salvar({ ...a, logo_url: url });
+      toast.success(`Logo da ${a.nome} atualizada`);
+    } catch (err) {
+      toast.error(errorMessage(err, "Não foi possível salvar a logo"));
+    } finally {
+      setLogoDireto(null);
+    }
   }
 
   async function gravar(e: React.FormEvent) {
@@ -137,10 +164,26 @@ export function AssessoriasCard() {
                 <div className="truncate text-sm font-medium">{a.nome}</div>
                 <div className="truncate text-[11px] text-muted-foreground">
                   {a.aliases.length ? `Também: ${a.aliases.join(", ")}` : "Sem apelidos"}
-                  {!a.logo_url && " · sem logo"}
                 </div>
               </div>
-              <div className="flex shrink-0 gap-1">
+              <div className="flex shrink-0 items-center gap-1">
+                <Label className="cursor-pointer" title={a.logo_url ? "Trocar logo" : "Enviar logo"}>
+                  <span className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs hover:bg-muted ${a.logo_url ? "" : "border-primary/40 text-primary"}`}>
+                    {logoDireto === a.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImagePlus className="h-3.5 w-3.5" />}
+                    {a.logo_url ? "Trocar logo" : "Enviar logo"}
+                  </span>
+                  <input
+                    type="file"
+                    accept={TIPOS.join(",")}
+                    className="hidden"
+                    disabled={logoDireto === a.id}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) enviarLogoDireto(a, f);
+                    }}
+                  />
+                </Label>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => abrir(a)} aria-label={`Editar ${a.nome}`}><Pencil className="h-4 w-4" /></Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => excluir(a.id, a.nome)} aria-label={`Excluir ${a.nome}`}><Trash2 className="h-4 w-4" /></Button>
               </div>
