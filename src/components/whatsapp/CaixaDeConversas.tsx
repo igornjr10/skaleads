@@ -6,8 +6,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
-import type { Conversa } from "@/hooks/useConversas";
+import type { Conversa, NumeroWa } from "@/hooks/useConversas";
 import { errorMessage } from "@/lib/utils";
 import { formatarTelefone } from "@/lib/whatsapp";
 import { ChatThread } from "./ChatThread";
@@ -24,13 +25,19 @@ function previa(texto: string | null, tipo: string | null) {
 
 interface LeadResumo { id: string; contato_nome: string; empresa: string | null; cidade: string | null; segmento: string | null }
 
-export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
+export function CaixaDeConversas({ conversas, numeros, loading, onLida, onLeadCriado }: {
   conversas: Conversa[];
+  numeros: NumeroWa[];
   loading: boolean;
-  onLida: (chave: string) => void;
+  onLida: (c: Conversa) => void;
   onLeadCriado: () => void;
 }) {
   const { user } = useAuth();
+  // ADM ve os numeros da equipe: por padrao abre no proprio, se tiver.
+  const [numero, setNumero] = useState<string>("todos");
+  const meuNumero = numeros.find(n => n.meu) ?? null;
+  useEffect(() => { if (meuNumero && numeros.length > 1) setNumero(meuNumero.id); }, [meuNumero?.id, numeros.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  const donoDe = (c: Conversa) => numeros.find(n => n.id === c.instanciaId) ?? null;
   const [aberta, setAberta] = useState<string | null>(null);
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState<"todas" | "nao_lidas" | "sem_lead" | "grupos">("todas");
@@ -52,6 +59,7 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
   };
 
   const visiveis = conversas.filter(c => {
+    if (numero !== "todos" && c.instanciaId !== numero) return false;
     if (filtro === "nao_lidas" && !c.naoLidas) return false;
     if (filtro === "sem_lead" && (c.leadId || c.grupo)) return false;
     if (filtro === "grupos" && !c.grupo) return false;
@@ -61,12 +69,20 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
     return nomeDe(c).toLowerCase().includes(termo) || (!!digitos && (c.telefone ?? c.chave).includes(digitos));
   });
 
-  const atual = conversas.find(c => c.chave === aberta) ?? null;
+  const atual = conversas.find(c => c.id === aberta) ?? null;
   const leadAtual = atual?.leadId ? leads.get(atual.leadId) ?? null : null;
+  const donoAtual = atual ? donoDe(atual) : null;
+  const somenteLeitura = !atual
+    ? null
+    : !donoAtual
+      ? "Essa conversa é de um número que saiu da plataforma. Só leitura."
+      : !donoAtual.meu
+        ? `Conversa no WhatsApp de ${donoAtual.nome}. Só ${donoAtual.nome.split(" ")[0]} responde por esse número.`
+        : null;
 
   function abrir(c: Conversa) {
-    setAberta(c.chave);
-    if (c.naoLidas) onLida(c.chave);
+    setAberta(c.id);
+    if (c.naoLidas) onLida(c);
   }
 
   // Contato novo que escreveu: vira lead da prospeccao com um clique. O trigger
@@ -106,6 +122,17 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar nome ou número" className="pl-9" />
         </div>
+        {numeros.length > 1 && (
+          <Select value={numero} onValueChange={setNumero}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os números da equipe</SelectItem>
+              {numeros.map(n => (
+                <SelectItem key={n.id} value={n.id}>{n.meu ? `Meu WhatsApp (${n.nome})` : `WhatsApp de ${n.nome}`}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <div className="flex gap-1">
           {([["todas", "Todas"], ["nao_lidas", "Não lidas"], ["sem_lead", "Sem lead"], ["grupos", "Grupos"]] as const).map(([id, rotulo]) => (
             <Button key={id} size="sm" variant={filtro === id ? "secondary" : "ghost"} onClick={() => setFiltro(id)}>{rotulo}</Button>
@@ -118,11 +145,11 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
             const quando = parseISO(c.ultima.enviada_em);
             return (
               <button
-                key={c.chave}
+                key={c.id}
                 type="button"
                 onClick={() => abrir(c)}
                 className={`w-full rounded-xl border px-3 py-2 text-left transition-colors ${
-                  aberta === c.chave ? "border-primary/40 bg-primary/10" : "border-transparent hover:bg-muted/40"
+                  aberta === c.id ? "border-primary/40 bg-primary/10" : "border-transparent hover:bg-muted/40"
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -136,6 +163,9 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
                   {c.grupo
                     ? <Badge variant="outline" className="shrink-0 text-[9px]">grupo</Badge>
                     : !c.leadId && <Badge variant="outline" className="shrink-0 text-[9px]">sem lead</Badge>}
+                  {numero === "todos" && numeros.length > 1 && donoDe(c) && !donoDe(c)!.meu && (
+                    <Badge variant="outline" className="max-w-[90px] shrink-0 truncate text-[9px]">{donoDe(c)!.nome.split(" ")[0]}</Badge>
+                  )}
                   {c.naoLidas > 0 && <span className="flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">{c.naoLidas}</span>}
                 </div>
               </button>
@@ -143,7 +173,7 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
           })}
           {!loading && visiveis.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              {conversas.length ? "Nada nesse filtro." : "Nenhuma conversa ainda. Ligue a caixa na aba Configuração."}
+              {conversas.length ? "Nada nesse filtro." : "Nenhuma conversa ainda. Conecte seu WhatsApp em Configurações."}
             </p>
           )}
         </div>
@@ -155,13 +185,23 @@ export function CaixaDeConversas({ conversas, loading, onLida, onLeadCriado }: {
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold">{nomeDe(atual)}</span>
               <span className="text-xs text-muted-foreground">{atual.grupo ? "Grupo do WhatsApp" : formatarTelefone(atual.telefone ?? atual.chave)}</span>
+              {donoAtual && !donoAtual.meu && (
+                <Badge variant="outline" className="text-[10px]">WhatsApp de {donoAtual.nome}</Badge>
+              )}
               {!atual.leadId && !atual.grupo && (
                 <Button size="sm" variant="outline" className="ml-auto" onClick={() => virarLead(atual)} disabled={criando}>
                   {criando ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <UserPlus className="mr-1.5 h-4 w-4" />} Virar lead
                 </Button>
               )}
             </div>
-            <ChatThread chave={atual.chave} leadId={atual.leadId} lead={leadAtual} altura="h-[520px]" />
+            <ChatThread
+              chave={atual.chave}
+              instanciaId={atual.instanciaId}
+              somenteLeitura={somenteLeitura}
+              leadId={atual.leadId}
+              lead={leadAtual}
+              altura="h-[520px]"
+            />
           </div>
         ) : (
           <div className="flex h-[560px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/60 text-sm text-muted-foreground">

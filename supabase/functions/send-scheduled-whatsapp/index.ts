@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { sendText } from "../_shared/whatsapp.ts";
+import { remetente, sendText, type Instancia } from "../_shared/whatsapp.ts";
+import { companyIdsOf, getUser } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,7 +16,12 @@ interface ScheduledMessage {
   is_active: boolean;
   last_sent_date: string | null;
   dias_semana: number[] | null;
+  company_id: string | null;
+  created_by: string | null;
 }
+
+// Sai do WhatsApp de quem criou o agendamento; agendamento antigo, sem criador, do numero padrao.
+const remetenteDo = (item: ScheduledMessage) => remetente({ userId: item.created_by, companyId: item.company_id });
 
 function dbGet(supabaseUrl: string, svcKey: string, path: string) {
   return fetch(`${supabaseUrl}/rest/v1/${path}`, {
@@ -85,7 +91,7 @@ interface SendResult {
   error: string | null;
 }
 
-async function sendToGroups(jids: string[], text: string): Promise<SendResult[]> {
+async function sendToGroups(inst: Instancia, jids: string[], text: string): Promise<SendResult[]> {
   const results: SendResult[] = [];
 
   for (const jid of jids) {
@@ -93,7 +99,7 @@ async function sendToGroups(jids: string[], text: string): Promise<SendResult[]>
       // A checagem de `key.id` saiu junto com a Evolution: ela devolvia 200 sem
       // enfileirar e so o message id denunciava. A uazapi erra com status != 2xx
       // e corpo {error:true}, que o helper compartilhado ja transforma em throw.
-      await sendText(jid, text);
+      await sendText(inst, jid, text);
       results.push({ jid, ok: true, status: 200, error: null });
     } catch (err) {
       results.push({ jid, ok: false, status: null, error: (err as Error).message });
@@ -144,14 +150,18 @@ serve(async (req) => {
         supabaseUrl, svcKey,
         `whatsapp_scheduled_messages?id=eq.${testId}&select=*&limit=1`
       );
-      if (!scheduled) throw new Error("Mensagem agendada não encontrada");
+      // O teste dispara na hora: so quem e da empresa do agendamento.
+      const user = await getUser(req);
+      if (!scheduled || !user || !scheduled.company_id || !(await companyIdsOf(user.id)).includes(scheduled.company_id)) {
+        throw new Error("Mensagem agendada não encontrada");
+      }
 
       if (!scheduled.target_group_jids || scheduled.target_group_jids.length === 0) {
         throw new Error("Este agendamento não tem nenhum grupo de destino selecionado");
       }
 
       const results = await sendToGroups(
-        scheduled.target_group_jids, scheduled.message
+        await remetenteDo(scheduled), scheduled.target_group_jids, scheduled.message
       );
       const failed = results.filter(r => !r.ok);
 
@@ -195,7 +205,7 @@ serve(async (req) => {
         if (!item.target_group_jids || item.target_group_jids.length === 0) continue;
 
         const results = await sendToGroups(
-          item.target_group_jids, item.message
+          await remetenteDo(item), item.target_group_jids, item.message
         );
         const delivered = results.filter(r => r.ok).length;
 

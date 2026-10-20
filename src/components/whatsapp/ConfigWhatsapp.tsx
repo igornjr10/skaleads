@@ -76,7 +76,7 @@ export function ConfigWhatsapp({ limites, onSalvo }: { limites: LimitesWa; onSal
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="text-base">Caixa de conversas</CardTitle>
-          <CardDescription>Faz a Uazapi mandar cada mensagem recebida para o sistema. Só precisa ser ligada uma vez (e de novo se trocar a instância).</CardDescription>
+          <CardDescription>Faz a uazapi mandar para o sistema cada mensagem que chega no seu número. Liga sozinha quando alguém conecta o WhatsApp; use aqui só se as conversas do seu número pararam de chegar.</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center gap-3">
           {ligada === null ? <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -92,11 +92,11 @@ export function ConfigWhatsapp({ limites, onSalvo }: { limites: LimitesWa; onSal
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="text-base">Limites de envio automático</CardTitle>
-          <CardDescription>Valem para disparos e sequências; resposta manual não entra na conta. Número novo: comece baixo e suba aos poucos.</CardDescription>
+          <CardDescription>Valem para cada número da equipe, em disparos e sequências (cada um sai do WhatsApp de quem criou); resposta manual não entra na conta. Número novo: comece baixo e suba aos poucos.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
-            {numero("limite_diario", "Máximo por dia", 1, 2000, "Mensagens automáticas por dia")}
+            {numero("limite_diario", "Máximo por dia", 1, 2000, "Mensagens automáticas por dia, por número")}
             {numero("intervalo_seg", "Intervalo mínimo (s)", 10, 600, "Entre um envio e outro, com folga aleatória")}
             {numero("hora_inicio", "Começa às (h)", 0, 23, "Horário de Brasília")}
             {numero("hora_fim", "Para às (h)", 1, 24, "Não envia a partir desta hora")}

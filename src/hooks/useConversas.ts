@@ -8,6 +8,8 @@ import { buscarTudo } from "@/lib/buscar-tudo";
 export interface MensagemWa {
   id: string;
   company_id: string;
+  /** Numero (de qual pessoa da equipe) que recebeu ou enviou. */
+  instancia_id: string | null;
   lead_id: string | null;
   chave: string;
   chatid?: string | null;
@@ -27,6 +29,9 @@ export interface MensagemWa {
 }
 
 export interface Conversa {
+  /** Numero + contato: o mesmo contato falando com duas pessoas sao duas conversas. */
+  id: string;
+  instanciaId: string | null;
   chave: string;
   grupo: boolean;
   leadId: string | null;
@@ -41,14 +46,25 @@ const DIAS = 90;
 
 export const ehGrupo = (chave: string) => chave.endsWith("@g.us");
 
+export const idDaConversa = (instanciaId: string | null, chave: string) => `${instanciaId ?? "-"}|${chave}`;
+
+/** De quem e cada numero conectado (o ADM ve os da equipe; os demais, so o proprio). */
+export interface NumeroWa {
+  id: string;
+  userId: string;
+  nome: string;
+  meu: boolean;
+}
+
 export function agruparConversas(mensagens: MensagemWa[]): Conversa[] {
   const porChave = new Map<string, Conversa>();
   for (const m of mensagens) {
-    const c = porChave.get(m.chave);
+    const id = idDaConversa(m.instancia_id, m.chave);
+    const c = porChave.get(id);
     const naoLida = m.direcao === "entrada" && !m.lida_em ? 1 : 0;
     if (!c) {
-      porChave.set(m.chave, {
-        chave: m.chave, grupo: ehGrupo(m.chave), leadId: m.lead_id, nome: m.nome_contato, telefone: m.telefone, ultima: m, naoLidas: naoLida,
+      porChave.set(id, {
+        id, instanciaId: m.instancia_id, chave: m.chave, grupo: ehGrupo(m.chave), leadId: m.lead_id, nome: m.nome_contato, telefone: m.telefone, ultima: m, naoLidas: naoLida,
       });
       continue;
     }
@@ -61,23 +77,35 @@ export function agruparConversas(mensagens: MensagemWa[]): Conversa[] {
   return [...porChave.values()].sort((a, b) => (a.ultima.enviada_em < b.ultima.enviada_em ? 1 : -1));
 }
 
-export function useConversas() {
+export function useConversas(meuId?: string | null) {
   const [mensagens, setMensagens] = useState<MensagemWa[]>([]);
+  const [numeros, setNumeros] = useState<NumeroWa[]>([]);
   const [loading, setLoading] = useState(true);
 
   const carregar = useCallback(async () => {
     try {
       const desde = subDays(new Date(), DIAS).toISOString();
-      const linhas = await buscarTudo<MensagemWa>((de, ate) =>
-        supabase.from("wa_mensagens").select("*").gte("enviada_em", desde).order("enviada_em").range(de, ate)
-      );
+      const [linhas, { data: inst }] = await Promise.all([
+        buscarTudo<MensagemWa>((de, ate) =>
+          supabase.from("wa_mensagens").select("*").gte("enviada_em", desde).order("enviada_em").range(de, ate)
+        ),
+        supabase.from("wa_instancias").select("id, user_id"),
+      ]);
+      const donos = [...new Set((inst ?? []).map(i => i.user_id))];
+      const { data: perfis } = donos.length
+        ? await supabase.from("profiles").select("id, full_name, email").in("id", donos)
+        : { data: [] as { id: string; full_name: string | null; email: string | null }[] };
+      setNumeros((inst ?? []).map(i => {
+        const p = (perfis ?? []).find(x => x.id === i.user_id);
+        return { id: i.id, userId: i.user_id, nome: p?.full_name || p?.email || "Equipe", meu: i.user_id === meuId };
+      }));
       setMensagens(linhas);
     } catch (err) {
       toast.error(errorMessage(err, "Não foi possível carregar as conversas"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [meuId]);
 
   const juntar = useCallback((m: MensagemWa) => {
     setMensagens(atual => {
@@ -103,13 +131,18 @@ export function useConversas() {
 
   const conversas = useMemo(() => agruparConversas(mensagens), [mensagens]);
 
-  const marcarLida = useCallback(async (chave: string) => {
+  // So o dono do numero zera o contador (a policy de update tambem so deixa ele).
+  const marcarLida = useCallback(async (c: Conversa) => {
+    if (!c.instanciaId || !numeros.some(n => n.id === c.instanciaId && n.meu)) return;
     const agora = new Date().toISOString();
-    setMensagens(atual => atual.map(m => (m.chave === chave && m.direcao === "entrada" && !m.lida_em ? { ...m, lida_em: agora } : m)));
-    await supabase.from("wa_mensagens").update({ lida_em: agora }).eq("chave", chave).eq("direcao", "entrada").is("lida_em", null);
-  }, []);
+    setMensagens(atual => atual.map(m => (
+      m.chave === c.chave && m.instancia_id === c.instanciaId && m.direcao === "entrada" && !m.lida_em ? { ...m, lida_em: agora } : m
+    )));
+    await supabase.from("wa_mensagens").update({ lida_em: agora })
+      .eq("chave", c.chave).eq("instancia_id", c.instanciaId).eq("direcao", "entrada").is("lida_em", null);
+  }, [numeros]);
 
-  return { mensagens, conversas, loading, juntar, marcarLida, recarregar: carregar };
+  return { mensagens, conversas, numeros, loading, juntar, marcarLida, recarregar: carregar };
 }
 
 /** Manda pelo wa-enviar e devolve a mensagem gravada. */

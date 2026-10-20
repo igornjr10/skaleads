@@ -1,4 +1,5 @@
 // Provedor de WhatsApp: uazapi (substituiu a Evolution em 16/09/2026).
+// Desde 20/10/2026 cada usuario tem a propria instancia: toda chamada recebe de qual numero sai.
 //
 // Diferenca estrutural que motivou este modulo: na Evolution a instancia ia no
 // path e a chave no header `apikey`; na uazapi a instancia E o token, some da
@@ -11,9 +12,19 @@ export const corsHeaders = {
 };
 
 export class SemInstancia extends Error {
-  constructor() {
-    super("Nenhuma instancia do WhatsApp criada ainda. Clique em Gerar QR Code para criar e conectar");
+  constructor(message = "Você ainda não conectou seu WhatsApp. Vá em Configurações > WhatsApp e gere o QR Code") {
+    super(message);
   }
+}
+
+/** Um numero conectado: cada usuario tem o seu (wa_instancias). */
+export interface Instancia {
+  id: string;
+  company_id: string;
+  user_id: string;
+  nome: string;
+  token: string;
+  padrao: boolean;
 }
 
 function baseUrl() {
@@ -29,39 +40,82 @@ function banco() {
   return { url, headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" } };
 }
 
-async function tokenSalvo(): Promise<string | null> {
+const CAMPOS = "id,company_id,user_id,nome,token,padrao";
+
+async function lerInstancias(filtro: string): Promise<Instancia[]> {
   const { url, headers } = banco();
-  const res = await fetch(`${url}/rest/v1/wa_instancia?select=token&limit=1`, { headers });
-  if (!res.ok) throw new Error(`Nao consegui ler wa_instancia (${res.status})`);
-  const rows = await res.json();
-  return rows?.[0]?.token ?? null;
+  const res = await fetch(`${url}/rest/v1/wa_instancias?${filtro}&select=${CAMPOS}`, { headers });
+  if (!res.ok) throw new Error(`Nao consegui ler wa_instancias (${res.status})`);
+  return await res.json();
 }
 
-// A instancia criada pelo app (wa_instancia) vale mais que o UAZAPI_TOKEN:
-// o secret sobra como caminho para quem ainda cola o token a mao.
-export async function tokenDaInstancia(): Promise<string | null> {
-  return (await tokenSalvo()) ?? Deno.env.get("UAZAPI_TOKEN")?.trim() ?? null;
+export async function instanciaDoUsuario(userId: string): Promise<Instancia | null> {
+  const [inst] = await lerInstancias(`user_id=eq.${userId}&limit=1`);
+  return inst ?? null;
 }
 
-export async function whatsappConfig() {
-  const token = await tokenDaInstancia();
-  if (!token) throw new SemInstancia();
-  return { baseUrl: baseUrl(), token };
+export async function instanciaPorId(id: string): Promise<Instancia | null> {
+  const [inst] = await lerInstancias(`id=eq.${id}&limit=1`);
+  return inst ?? null;
 }
 
-export async function whatsappConfigurado(): Promise<boolean> {
-  if (!Deno.env.get("UAZAPI_URL")) return false;
-  return !!(await tokenDaInstancia().catch(() => null));
+/** O webhook se identifica pelo token da instancia: e ele que diz de quem e o numero. */
+export async function instanciaPorToken(token: string): Promise<Instancia | null> {
+  if (!token) return null;
+  const [inst] = await lerInstancias(`token=eq.${encodeURIComponent(token)}&limit=1`);
+  return inst ?? null;
 }
 
-/** Cria a instancia com o admintoken na primeira conexao. Devolve true se criou agora. */
-// So olha wa_instancia: um UAZAPI_TOKEN de servidor antigo nao pode impedir a criacao.
-export async function garantirInstancia(): Promise<boolean> {
-  if (await tokenSalvo()) return false;
+export async function instanciaPadrao(companyId: string): Promise<Instancia | null> {
+  const [inst] = await lerInstancias(`company_id=eq.${companyId}&padrao=eq.true&limit=1`);
+  return inst ?? null;
+}
+
+/**
+ * De onde sai um envio. Com pessoa (quem clicou ou quem criou o alerta, a
+ * rotina, o agendamento) sai do numero dela, e sem numero conectado falha:
+ * mandar de outro numero seria falar em nome de outra pessoa. Sem pessoa
+ * (cobranca, aviso de deposito) sai do numero padrao da empresa.
+ */
+export async function remetente(opts: { userId?: string | null; companyId?: string | null }): Promise<Instancia> {
+  if (opts.userId) {
+    const inst = await instanciaDoUsuario(opts.userId);
+    if (!inst) throw new SemInstancia(
+      "Quem criou este envio não tem WhatsApp conectado. Conecte em Configurações > WhatsApp"
+    );
+    return inst;
+  }
+  const inst = opts.companyId ? await instanciaPadrao(opts.companyId) : null;
+  if (!inst) throw new SemInstancia(
+    "A empresa não tem número padrão de WhatsApp. O ADM escolhe em Configurações > WhatsApp"
+  );
+  return inst;
+}
+
+export function whatsappConfigurado(): boolean {
+  return !!Deno.env.get("UAZAPI_URL");
+}
+
+function slug(texto: string) {
+  return texto
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+    .slice(0, 24);
+}
+
+/** Cria a instancia da pessoa com o admintoken na primeira conexao. */
+export async function garantirInstancia(
+  userId: string,
+  companyId: string,
+  rotulo: string
+): Promise<{ inst: Instancia; criada: boolean }> {
+  const existente = await instanciaDoUsuario(userId);
+  if (existente) return { inst: existente, criada: false };
 
   const admin = Deno.env.get("UAZAPI_ADMIN_TOKEN")?.trim();
   if (!admin) throw new Error("UAZAPI_ADMIN_TOKEN nao configurado");
-  const nome = Deno.env.get("UAZAPI_INSTANCIA")?.trim() || "midsam";
+  // O nome e unico na uazapi inteira: o pedaco do id evita colisao entre homonimos.
+  const nome = `${slug(rotulo) || "usuario"}-${userId.slice(0, 8)}`;
 
   const res = await fetch(`${baseUrl()}/instance/create`, {
     method: "POST",
@@ -78,21 +132,41 @@ export async function garantirInstancia(): Promise<boolean> {
   if (!token) throw new Error(`uazapi criou a instancia mas nao devolveu token: ${raw.slice(0, 300)}`);
 
   const { url, headers } = banco();
-  const salvo = await fetch(`${url}/rest/v1/wa_instancia`, {
+  const salvo = await fetch(`${url}/rest/v1/wa_instancias?select=${CAMPOS}`, {
     method: "POST",
-    headers: { ...headers, Prefer: "resolution=merge-duplicates,return=minimal" },
-    body: JSON.stringify({ id: true, nome, token }),
+    headers: { ...headers, Prefer: "return=representation" },
+    body: JSON.stringify({ company_id: companyId, user_id: userId, nome, token }),
   });
   if (!salvo.ok) throw new Error(`Instancia criada na uazapi, mas nao consegui salvar o token (${salvo.status})`);
-  return true;
+  const [inst] = await salvo.json();
+  return { inst, criada: true };
 }
 
-async function call(path: string, init: RequestInit = {}): Promise<any> {
-  const { baseUrl, token } = await whatsappConfig();
+/** Espelha o estado da sessao na tabela, para a tela listar os numeros sem chamar a uazapi. */
+export async function registrarEstado(
+  inst: Instancia,
+  estado: { conectado: boolean; numero?: string | null; perfil_nome?: string | null }
+) {
+  const { url, headers } = banco();
+  await fetch(`${url}/rest/v1/wa_instancias?id=eq.${inst.id}`, {
+    method: "PATCH",
+    headers: { ...headers, Prefer: "return=minimal" },
+    body: JSON.stringify({ ...estado, status_em: new Date().toISOString() }),
+  }).catch(() => undefined);
+}
 
-  const response = await fetch(`${baseUrl}${path}`, {
+/** Apaga a instancia na uazapi e no banco: a pessoa troca de numero ou sai da equipe. */
+export async function removerInstancia(inst: Instancia) {
+  await fetch(`${baseUrl()}/instance`, { method: "DELETE", headers: { token: inst.token } }).catch(() => undefined);
+  const { url, headers } = banco();
+  const res = await fetch(`${url}/rest/v1/wa_instancias?id=eq.${inst.id}`, { method: "DELETE", headers });
+  if (!res.ok) throw new Error(`Nao consegui remover o numero (${res.status})`);
+}
+
+async function call(inst: Instancia, path: string, init: RequestInit = {}): Promise<any> {
+  const response = await fetch(`${baseUrl()}${path}`, {
     ...init,
-    headers: { token, "Content-Type": "application/json", ...(init.headers ?? {}) },
+    headers: { token: inst.token, "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
 
   const raw = await response.text();
@@ -147,13 +221,13 @@ export async function resolveTargets(
   return [...new Set((rows ?? []).map((r: any) => r.whatsapp_number).filter(Boolean) as string[])];
 }
 
-export function sendText(number: string, text: string) {
-  return call("/send/text", { method: "POST", body: JSON.stringify({ number, text }) });
+export function sendText(inst: Instancia, number: string, text: string) {
+  return call(inst, "/send/text", { method: "POST", body: JSON.stringify({ number, text }) });
 }
 
 /** URL publica da midia de uma mensagem recebida. A uazapi guarda por 2 dias e gera outra a cada chamada. */
-export async function downloadMedia(messageid: string): Promise<{ url: string; mimetype: string | null }> {
-  const r = await call("/message/download", {
+export async function downloadMedia(inst: Instancia, messageid: string): Promise<{ url: string; mimetype: string | null }> {
+  const r = await call(inst, "/message/download", {
     method: "POST",
     body: JSON.stringify({ id: messageid, generate_mp3: true }),
   });
@@ -163,6 +237,7 @@ export async function downloadMedia(messageid: string): Promise<{ url: string; m
 }
 
 export function sendDocument(
+  inst: Instancia,
   number: string,
   opts: { base64: string; fileName: string; caption?: string; mimetype?: string }
 ) {
@@ -171,7 +246,7 @@ export function sendDocument(
   // `file`. Se o servidor recusar, o plano B e subir o PDF no Storage e mandar
   // a URL publica aqui — o campo aceita os dois.
   const file = opts.base64.startsWith("data:") ? opts.base64 : `data:${mime};base64,${opts.base64}`;
-  return call("/send/media", {
+  return call(inst, "/send/media", {
     method: "POST",
     body: JSON.stringify({ number, type: "document", file, docName: opts.fileName, text: opts.caption ?? "" }),
   });
@@ -189,12 +264,12 @@ export interface WhatsappGroup {
 const GRUPOS_POR_PAGINA = 100;
 const MAX_PAGINAS = 50;
 
-export async function listGroups(): Promise<WhatsappGroup[]> {
+export async function listGroups(inst: Instancia): Promise<WhatsappGroup[]> {
   const porId = new Map<string, WhatsappGroup>();
   let offset = 0;
 
   for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
-    const result = await call("/group/list", {
+    const result = await call(inst, "/group/list", {
       method: "POST",
       body: JSON.stringify({ limit: GRUPOS_POR_PAGINA, offset, noParticipants: true }),
     });
@@ -223,17 +298,17 @@ export async function listGroups(): Promise<WhatsappGroup[]> {
   return [...porId.values()];
 }
 
-export function instanceStatus() {
-  return call("/instance/status");
+export function instanceStatus(inst: Instancia) {
+  return call(inst, "/instance/status");
 }
 
 // A uazapi nao tem restart — connect reconecta e, se precisar, devolve QR novo.
-export function instanceConnect() {
-  return call("/instance/connect", { method: "POST", body: JSON.stringify({}) });
+export function instanceConnect(inst: Instancia) {
+  return call(inst, "/instance/connect", { method: "POST", body: JSON.stringify({}) });
 }
 
-export function instanceDisconnect() {
-  return call("/instance/disconnect", { method: "POST", body: JSON.stringify({}) });
+export function instanceDisconnect(inst: Instancia) {
+  return call(inst, "/instance/disconnect", { method: "POST", body: JSON.stringify({}) });
 }
 
 /**
@@ -241,8 +316,8 @@ export function instanceDisconnect() {
  * wasSentByApi fica de fora: o que o sistema envia ja e gravado por quem
  * enviou, e voltaria duplicado. Grupo entra: aparece na caixa do Comercial.
  */
-export function configureWebhook(url: string) {
-  return call("/webhook", {
+export function configureWebhook(inst: Instancia, url: string) {
+  return call(inst, "/webhook", {
     method: "POST",
     body: JSON.stringify({
       url,
@@ -253,6 +328,6 @@ export function configureWebhook(url: string) {
   });
 }
 
-export function getWebhook() {
-  return call("/webhook");
+export function getWebhook(inst: Instancia) {
+  return call(inst, "/webhook");
 }

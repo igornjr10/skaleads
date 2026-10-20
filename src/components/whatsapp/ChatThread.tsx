@@ -21,9 +21,16 @@ const ORIGEM: Record<string, string> = {
 /**
  * Historico de um contato e caixa de resposta. Carrega sozinho pela chave e
  * escuta o tempo real so daquela conversa. Abrir marca as recebidas como lidas.
+ *
+ * Com `instanciaId`, so a conversa daquele numero; sem ele (aba do lead), tudo
+ * que a pessoa enxerga com o contato. A resposta sai sempre do numero de quem
+ * escreve, entao a conversa do numero de um colega abre so para leitura.
  */
-export function ChatThread({ chave, leadId, lead, onEnviada, altura = "h-[420px]" }: {
+export function ChatThread({ chave, instanciaId, somenteLeitura, leadId, lead, onEnviada, altura = "h-[420px]" }: {
   chave: string;
+  instanciaId?: string | null;
+  /** Motivo de nao poder responder daqui (conversa no numero de outra pessoa). */
+  somenteLeitura?: string | null;
   leadId?: string | null;
   lead?: DadosDoLead | null;
   onEnviada?: (m: MensagemWa) => void;
@@ -38,16 +45,21 @@ export function ChatThread({ chave, leadId, lead, onEnviada, altura = "h-[420px]
   useEffect(() => {
     setMensagens(null);
     setTexto("");
-    supabase.from("wa_mensagens").select("*").eq("chave", chave).order("enviada_em")
-      .then(({ data }) => setMensagens((data ?? []) as MensagemWa[]));
-    supabase.from("wa_mensagens").update({ lida_em: new Date().toISOString() })
-      .eq("chave", chave).eq("direcao", "entrada").is("lida_em", null).then(() => undefined);
+    let leitura = supabase.from("wa_mensagens").select("*").eq("chave", chave);
+    if (instanciaId) leitura = leitura.eq("instancia_id", instanciaId);
+    leitura.order("enviada_em").then(({ data }) => setMensagens((data ?? []) as MensagemWa[]));
+    // A policy so deixa o dono do numero marcar: no numero do colega isto nao muda nada.
+    let lidas = supabase.from("wa_mensagens").update({ lida_em: new Date().toISOString() })
+      .eq("chave", chave).eq("direcao", "entrada").is("lida_em", null);
+    if (instanciaId) lidas = lidas.eq("instancia_id", instanciaId);
+    lidas.then(() => undefined);
 
     const canal = supabase
-      .channel(`wa_conversa_${chave}`)
+      .channel(`wa_conversa_${instanciaId ?? "todas"}_${chave}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "wa_mensagens", filter: `chave=eq.${chave}` }, payload => {
         const m = payload.new as MensagemWa;
         if (!m?.id) return;
+        if (instanciaId && m.instancia_id !== instanciaId) return;
         setMensagens(atual => {
           if (!atual) return atual;
           const i = atual.findIndex(x => x.id === m.id);
@@ -59,7 +71,7 @@ export function ChatThread({ chave, leadId, lead, onEnviada, altura = "h-[420px]
       })
       .subscribe();
     return () => { supabase.removeChannel(canal); };
-  }, [chave]);
+  }, [chave, instanciaId]);
 
   useEffect(() => {
     supabase.from("wa_modelos").select("id, nome, texto").order("nome")
@@ -135,6 +147,9 @@ export function ChatThread({ chave, leadId, lead, onEnviada, altura = "h-[420px]
         )}
       </div>
 
+      {somenteLeitura ? (
+        <p className="rounded-xl border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">{somenteLeitura}</p>
+      ) : (
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <Textarea
           value={texto}
@@ -159,6 +174,7 @@ export function ChatThread({ chave, leadId, lead, onEnviada, altura = "h-[420px]
           </Button>
         </div>
       </div>
+      )}
     </div>
   );
 }

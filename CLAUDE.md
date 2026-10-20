@@ -58,11 +58,13 @@ RLS habilitado em todas. Funcoes SECURITY DEFINER: `get_my_role()`, `has_role()`
 - Visibilidade: ADM tudo; sdr/closer/social_seller os seus + os sem dono (fila) da prospeccao; gestor os funis dos clientes da carteira
 - `crm_atividades` tipo `etapa` e `convertido` so o banco escreve. Lead vira cliente por `converter_lead_em_cliente()` (so ADM)
 
-## WhatsApp (uazapi, numero unico da agencia)
-- Instancia: o 1o "Gerar QR Code" cria a instancia com `UAZAPI_ADMIN_TOKEN` (`/instance/create`), guarda o token em `wa_instancia` (sem grant para `authenticated`) e liga o webhook. `UAZAPI_TOKEN` so vale se `wa_instancia` estiver vazia. Doc: https://docs.uazapi.com/llms-full.txt
-- Entrada: uazapi -> Edge Function `wa-webhook` (sem JWT; autentica pelo `token` da instancia no corpo). Liga-se em WhatsApp > Configuracao (`whatsapp-instance-admin`, action `webhook`)
+## WhatsApp (uazapi, um numero por usuario)
+- Cada usuario conecta o proprio numero: `wa_instancias` (uma linha por `user_id`, token so para service role; o browser le as demais colunas por grant de coluna). O 1o "Gerar QR Code" em Configuracoes cria a instancia com `UAZAPI_ADMIN_TOKEN` e ja liga o webhook. `wa_instancia` (singular) e legado, nao usar. Doc: https://docs.uazapi.com/llms-full.txt
+- Toda chamada da uazapi recebe a instancia: `remetente({ userId, companyId })` em `_shared/whatsapp.ts`. Com pessoa (quem clicou, ou o `created_by` do alerta/rotina/agendamento/relatorio, `updated_by` da automacao, `criado_por` da fila) sai do numero dela e falha se ela nao conectou. Sem pessoa (cobranca, deposito, linha antiga) sai do numero `padrao` da empresa, escolhido pelo ADM (`definir_numero_padrao_wa`)
+- Visibilidade: `wa_mensagens.instancia_id`; o dono ve as conversas do proprio numero, o ADM ve todas. Conversa = (instancia, chave). So o dono marca como lida e responde (resposta sai sempre do numero de quem escreve)
+- Entrada: uazapi -> `wa-webhook` (sem JWT; acha a instancia pelo `token` do corpo, e dela tira empresa e dono). Aviso de mensagem nova vai para o dono do numero
 - Mensagem casa com lead pela chave de telefone (pais + DDD + 8 ultimos digitos): `public.wa_chave`, `_shared/wa-crm.ts` e `src/lib/whatsapp.ts` precisam andar juntas
-- Resposta manual: `wa-enviar` (le o lead com o JWT do usuario, a RLS decide). Disparo e sequencia so enfileiram em `wa_fila`; quem envia e o cron `wa-processar-fila` (1/min), respeitando `wa_config` (teto diario, intervalo, horario)
+- Resposta manual: `wa-enviar`. Disparo e sequencia so enfileiram em `wa_fila`; quem envia e o cron `wa-processar-fila` (1/min), um numero por vez em paralelo, com teto diario e intervalo de `wa_config` valendo por numero
 - Lead que responde encerra as sequencias com `parar_se_responder`
 
 ## Deploy

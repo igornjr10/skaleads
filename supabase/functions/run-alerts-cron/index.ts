@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { resolveTargets, sendText, whatsappConfigurado } from "../_shared/whatsapp.ts";
+import { remetente, resolveTargets, sendText, whatsappConfigurado } from "../_shared/whatsapp.ts";
 
 type MetricKey = "spend" | "cpa" | "ctr" | "cpm" | "frequency" | "roas" | "status" | "balance";
 type Comparator = "gt" | "gte" | "lt" | "lte" | "eq" | "change_pct";
@@ -33,6 +33,7 @@ interface StoredAlert {
   description: string | null;
   client_id: string | null;
   company_id: string | null;
+  created_by: string | null;
   rule_json: AlertRule;
   channels: AlertChannels;
   cooldown_minutes: number;
@@ -344,7 +345,7 @@ serve(async (req) => {
 
     const alerts: StoredAlert[] = await dbGet(
       supabaseUrl, svcKey,
-      `alerts?is_active=eq.true&select=id,name,description,client_id,company_id,rule_json,channels,cooldown_minutes,last_triggered_at,is_active`
+      `alerts?is_active=eq.true&select=id,name,description,client_id,company_id,created_by,rule_json,channels,cooldown_minutes,last_triggered_at,is_active`
     );
 
     let totalFired = 0;
@@ -382,17 +383,19 @@ serve(async (req) => {
           try {
             const targets = await resolveTargets(channels.whatsappTarget || managerNumber, alert.company_id);
             const message = buildWhatsAppMessage(alert, firedEntities);
+            // Sai do WhatsApp de quem criou o alerta.
+            const inst = await remetente({ userId: alert.created_by, companyId: alert.company_id });
             // Um numero invalido nao pode calar os outros: cada envio tem o
             // proprio catch, e o que falhou vai para o log da execucao.
             for (const target of targets) {
               try {
-                await sendText(target, message);
+                await sendText(inst, target, message);
               } catch (err) {
                 alertErrors.push(`${alert.name}: WhatsApp para ${target} falhou — ${(err as Error).message}`);
               }
             }
           } catch (err) {
-            alertErrors.push(`${alert.name}: nao consegui resolver o destino — ${(err as Error).message}`);
+            alertErrors.push(`${alert.name}: WhatsApp nao saiu — ${(err as Error).message}`);
           }
         }
 

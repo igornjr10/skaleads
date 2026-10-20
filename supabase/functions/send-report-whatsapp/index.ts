@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, sendDocument, sendText } from "../_shared/whatsapp.ts";
+import { corsHeaders, remetente, sendDocument, sendText } from "../_shared/whatsapp.ts";
 import { guard } from "../_shared/auth.ts";
 
 interface RequestPayload {
@@ -9,6 +9,8 @@ interface RequestPayload {
   caption?: string;
   /** Resumo enviado como mensagem propria, ANTES do PDF. */
   text?: string;
+  /** So vale em chamada interna (agendamento): de quem e o numero que envia. */
+  remetente_id?: string | null;
 }
 
 function dbGet(supabaseUrl: string, svcKey: string, path: string) {
@@ -25,7 +27,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { client_id, file_name, media_base64, caption, text }: RequestPayload = await req.json();
+    const { client_id, file_name, media_base64, caption, text, remetente_id }: RequestPayload = await req.json();
 
     if (!client_id || !file_name || !media_base64) {
       throw new Error("client_id, file_name e media_base64 são obrigatórios");
@@ -43,23 +45,28 @@ serve(async (req) => {
 
     const [client] = await dbGet(
       supabaseUrl, svcKey,
-      `clients?id=eq.${client_id}&select=id,name,whatsapp_number,whatsapp_group_jid&limit=1`
+      `clients?id=eq.${client_id}&select=id,name,company_id,whatsapp_number,whatsapp_group_jid&limit=1`
     );
 
     if (!client) throw new Error("Cliente não encontrado");
     const target = client.whatsapp_group_jid || client.whatsapp_number;
     if (!target) throw new Error("Cliente sem número ou grupo de WhatsApp cadastrado");
+    // Pessoa logada envia do proprio numero; o agendamento (service role) diz de quem e.
+    const inst = await remetente({
+      userId: acesso.user?.id ?? (acesso.service ? remetente_id ?? null : null),
+      companyId: client.company_id,
+    });
 
     // O resumo vai como mensagem separada e ANTES do anexo, nao como legenda:
     // no WhatsApp a legenda de documento fica escondida atras do nome do
     // arquivo, e o cliente teria que abrir o PDF para ver qualquer numero.
     let textoEnviado = false;
     if (text?.trim()) {
-      await sendText(target, text.trim());
+      await sendText(inst, target, text.trim());
       textoEnviado = true;
     }
 
-    const result = await sendDocument(target, {
+    const result = await sendDocument(inst, target, {
       base64: media_base64,
       fileName: file_name,
       caption: caption ?? "",

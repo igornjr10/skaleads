@@ -1,11 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, sendText } from "../_shared/whatsapp.ts";
-import { guard, hasAnyRole, jsonResponse } from "../_shared/auth.ts";
+import { corsHeaders, instanciaDoUsuario, SemInstancia, sendText } from "../_shared/whatsapp.ts";
+import { guard, jsonResponse } from "../_shared/auth.ts";
 import { chaveTelefone, inserir, numeroParaEnvio } from "../_shared/wa-crm.ts";
 
 // Resposta manual de dentro do sistema (caixa de conversas e aba do lead).
-// A leitura do lead e da conversa usa o JWT de quem envia: a RLS decide se a
-// pessoa pode falar com aquele contato, sem uma segunda regra aqui.
+// Sai sempre do WhatsApp de quem envia: o ADM que le a conversa de um colega
+// nao responde por ele. A leitura do lead usa o JWT de quem envia (a RLS
+// decide), e conversa sem lead precisa existir no numero da propria pessoa.
 
 const LIMITE_TEXTO = 4000;
 
@@ -37,6 +38,9 @@ serve(async (req) => {
     if (!texto) return json({ error: "Mensagem vazia" }, 400);
     if (texto.length > LIMITE_TEXTO) return json({ error: `Mensagem acima de ${LIMITE_TEXTO} caracteres` }, 400);
 
+    const inst = await instanciaDoUsuario(user.id);
+    if (!inst) throw new SemInstancia();
+
     let lead: any = null;
     let chave: string | null = null;
     let companyId: string | null = null;
@@ -52,19 +56,17 @@ serve(async (req) => {
       if (!chave) return json({ error: "O lead não tem WhatsApp cadastrado" }, 400);
     } else if (/@g\.us$/.test(String(body.chave ?? ""))) {
       // Grupo: a chave e o proprio JID, e e para ele que a uazapi manda.
-      if (!(await hasAnyRole(user.id, ["owner", "admin", "sdr", "closer", "social_seller"]))) {
-        return json({ error: "Só o time comercial responde grupos" }, 403);
-      }
       const jid = String(body.chave);
       const [ultimaDoGrupo] = await comoUsuario<any[]>(
         req,
-        `wa_mensagens?chave=eq.${encodeURIComponent(jid)}&select=company_id&limit=1`
+        `wa_mensagens?chave=eq.${encodeURIComponent(jid)}&instancia_id=eq.${inst.id}&select=company_id&limit=1`
       );
-      if (!ultimaDoGrupo) return json({ error: "Grupo não encontrado" }, 404);
+      if (!ultimaDoGrupo) return json({ error: "Seu WhatsApp não participa desse grupo" }, 404);
 
-      const enviado = await sendText(jid, texto);
+      const enviado = await sendText(inst, jid, texto);
       const [mensagem] = await inserir<any[]>("wa_mensagens", {
         company_id: ultimaDoGrupo.company_id,
+        instancia_id: inst.id,
         chave: jid,
         chatid: jid,
         messageid: enviado?.messageid ?? enviado?.id ?? null,
@@ -79,27 +81,25 @@ serve(async (req) => {
     } else {
       chave = chaveTelefone(body.chave);
       if (!chave) return json({ error: "Informe o lead ou a conversa" }, 400);
-      if (!(await hasAnyRole(user.id, ["owner", "admin", "sdr", "closer", "social_seller"]))) {
-        return json({ error: "Só o time comercial responde conversas sem lead" }, 403);
-      }
     }
 
     // O numero que o proprio WhatsApp usou por ultimo e o mais confiavel: o
     // cadastro pode ter o 9 a mais ou a menos que a conta de verdade.
     const [ultima] = await comoUsuario<any[]>(
       req,
-      `wa_mensagens?chave=eq.${chave}&telefone=not.is.null&select=telefone,company_id,lead_id&order=enviada_em.desc&limit=1`
+      `wa_mensagens?chave=eq.${chave}&instancia_id=eq.${inst.id}&telefone=not.is.null&select=telefone,company_id,lead_id&order=enviada_em.desc&limit=1`
     );
-    if (!lead && !ultima) return json({ error: "Conversa não encontrada" }, 404);
+    if (!lead && !ultima) return json({ error: "Essa conversa não está no seu WhatsApp" }, 404);
     companyId = companyId ?? ultima.company_id;
     const numero = numeroParaEnvio(ultima?.telefone ?? lead?.whatsapp ?? lead?.telefone);
     if (!numero) return json({ error: "Número inválido" }, 400);
 
-    const enviado = await sendText(numero, texto);
+    const enviado = await sendText(inst, numero, texto);
     const leadId = lead?.id ?? ultima?.lead_id ?? null;
 
     const [mensagem] = await inserir<any[]>("wa_mensagens", {
       company_id: companyId,
+      instancia_id: inst.id,
       lead_id: leadId,
       chave,
       telefone: numero,
@@ -124,6 +124,6 @@ serve(async (req) => {
 
     return json({ mensagem });
   } catch (err) {
-    return json({ error: (err as Error).message }, 500);
+    return json({ error: (err as Error).message }, err instanceof SemInstancia ? 409 : 500);
   }
 });

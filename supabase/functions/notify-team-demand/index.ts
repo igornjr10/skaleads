@@ -7,7 +7,7 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { getUser, isUuid, jsonResponse } from "../_shared/auth.ts";
-import { sendText } from "../_shared/whatsapp.ts";
+import { remetente, sendText, type Instancia } from "../_shared/whatsapp.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -172,10 +172,12 @@ async function sendEmail(demand: Demand, member: Member, siteUrl: string): Promi
   return { sent: true };
 }
 
-async function sendWhatsapp(demand: Demand, member: Member, siteUrl: string): Promise<ChannelResult> {
+// Sai do WhatsApp de quem etiquetou a demanda.
+async function sendWhatsapp(demand: Demand, member: Member, siteUrl: string, autorId: string): Promise<ChannelResult> {
   if (!member.whatsapp) return { sent: false, skipped: "Membro sem WhatsApp" };
   try {
-    await sendText(normalizePhone(member.whatsapp), buildWhatsApp(demand, member, siteUrl));
+    const inst: Instancia = await remetente({ userId: autorId });
+    await sendText(inst, normalizePhone(member.whatsapp), buildWhatsApp(demand, member, siteUrl));
     return { sent: true };
   } catch (err) {
     return { sent: false, error: (err as Error).message };
@@ -245,7 +247,7 @@ serve(async (req) => {
 
     const [email, whatsapp, app] = await Promise.all([
       sendEmail(demand, member, siteUrl),
-      sendWhatsapp(demand, member, siteUrl),
+      sendWhatsapp(demand, member, siteUrl, user.id),
       notifyInApp(supabaseUrl, svcKey, demand, member),
     ]);
 

@@ -1,10 +1,12 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { atualizar, chaveTelefone, db, inserir } from "../_shared/wa-crm.ts";
-import { tokenDaInstancia } from "../_shared/whatsapp.ts";
+import { instanciaPorToken, type Instancia } from "../_shared/whatsapp.ts";
 
 // Recebe os eventos da uazapi (configurados por whatsapp-instance-admin,
 // action "webhook"). Nao ha JWT: quem chama e o servidor da uazapi, e o que
 // prova a origem e o `token` da instancia que vem no corpo de todo evento.
+// Cada usuario tem a sua instancia, todas apontando para esta mesma URL: o
+// token diz de quem e o numero, e com isso a empresa e o dono da conversa.
 //
 // Responde 200 mesmo quando ignora o evento: erro faz a uazapi reenviar, e
 // canal ou numero sem cara de telefone nunca vao virar conversa.
@@ -14,15 +16,6 @@ import { tokenDaInstancia } from "../_shared/whatsapp.ts";
 
 const IGNORAR_CHAT = /@(newsletter|broadcast)$/;
 const GRUPO = /@g\.us$/;
-
-let empresaEmCache: string | null = null;
-
-async function empresaDoNumero(): Promise<string | null> {
-  if (empresaEmCache) return empresaEmCache;
-  const rows = await db<{ value: string }[]>("app_config?key=eq.whatsapp_company_id&select=value");
-  empresaEmCache = rows?.[0]?.value ?? null;
-  return empresaEmCache;
-}
 
 function textoDa(m: any): string {
   if (typeof m.text === "string" && m.text.trim()) return m.text;
@@ -42,13 +35,12 @@ function quando(ts: unknown): string {
   return new Date(n < 1e12 ? n * 1000 : n).toISOString();
 }
 
-async function registrarGrupo(body: any, m: any, chatid: string) {
-  const companyId = await empresaDoNumero();
-  if (!companyId) throw new Error("app_config.whatsapp_company_id nao configurado");
+async function registrarGrupo(inst: Instancia, body: any, m: any, chatid: string) {
   const entrada = !m.fromMe;
 
-  await inserir("wa_mensagens?on_conflict=messageid", {
-    company_id: companyId,
+  await inserir("wa_mensagens?on_conflict=instancia_id,messageid", {
+    company_id: inst.company_id,
+    instancia_id: inst.id,
     lead_id: null,
     chave: chatid,
     chatid,
@@ -68,13 +60,13 @@ async function registrarGrupo(body: any, m: any, chatid: string) {
   return "gravada (grupo)";
 }
 
-async function registrarMensagem(body: any) {
+async function registrarMensagem(inst: Instancia, body: any) {
   const m = body.message;
   if (!m) return "ignorada: sem mensagem";
 
   const chatid: string = m.chatid ?? body.chat?.wa_chatid ?? "";
   if (IGNORAR_CHAT.test(chatid)) return "ignorada: canal/lista";
-  if (m.isGroup || GRUPO.test(chatid)) return registrarGrupo(body, m, chatid);
+  if (m.isGroup || GRUPO.test(chatid)) return registrarGrupo(inst, body, m, chatid);
   // Chat por LID (id anonimo) nao tem o numero no id: usa o que vier resolvido.
   const origemNumero = chatid.endsWith("@lid")
     ? (m.sender_pn ?? body.chat?.phone ?? "")
@@ -82,16 +74,16 @@ async function registrarMensagem(body: any) {
   const chave = chaveTelefone(String(origemNumero).split("@")[0]);
   if (!chave) return "ignorada: sem telefone";
 
-  const companyId = await empresaDoNumero();
-  if (!companyId) throw new Error("app_config.whatsapp_company_id nao configurado");
+  const companyId = inst.company_id;
 
   const [lead] = await db<any[]>(
     `crm_leads?company_id=eq.${companyId}&wa_chave=eq.${chave}&select=id,responsavel_id,closer_id,contato_nome,empresa&order=created_at.desc&limit=1`
   );
   const entrada = !m.fromMe;
 
-  const gravadas = await inserir<any[]>("wa_mensagens?on_conflict=messageid", {
+  const gravadas = await inserir<any[]>("wa_mensagens?on_conflict=instancia_id,messageid", {
     company_id: companyId,
+    instancia_id: inst.id,
     lead_id: lead?.id ?? null,
     chave,
     chatid: chatid || null,
@@ -109,10 +101,10 @@ async function registrarMensagem(body: any) {
     if (String(err).includes("23505")) return [];
     throw err;
   });
-  if (!gravadas?.length || !entrada || !lead) return "gravada";
+  if (!gravadas?.length || !entrada) return "gravada";
 
   // Lead respondeu: a cadencia que manda parar na resposta para aqui.
-  const inscricoes = await db<any[]>(
+  const inscricoes = !lead ? [] : await db<any[]>(
     `wa_inscricoes?lead_id=eq.${lead.id}&status=eq.ativa&select=id,wa_sequencias(parar_se_responder)`
   );
   const parar = inscricoes.filter(i => i.wa_sequencias?.parar_se_responder !== false).map(i => i.id);
@@ -126,21 +118,23 @@ async function registrarMensagem(body: any) {
   // o sino ja tocou.
   const meiaHora = new Date(Date.now() - 30 * 60 * 1000).toISOString();
   const recentes = await db<any[]>(
-    `wa_mensagens?chave=eq.${chave}&company_id=eq.${companyId}&direcao=eq.entrada&lida_em=is.null&enviada_em=gte.${meiaHora}&select=id&limit=2`
+    `wa_mensagens?chave=eq.${chave}&instancia_id=eq.${inst.id}&direcao=eq.entrada&lida_em=is.null&enviada_em=gte.${meiaHora}&select=id&limit=2`
   );
-  const destino = lead.responsavel_id ?? lead.closer_id;
-  if (destino && recentes.length <= 1) {
+  // A conversa chegou no celular de alguem: o aviso e do dono do numero.
+  const destino = inst.user_id;
+  if (recentes.length <= 1) {
+    const quem = lead?.empresa || lead?.contato_nome || body.chat?.wa_contactName || body.chat?.wa_name || m.senderName || chave;
     await inserir("notifications", {
       user_id: destino,
       type: "whatsapp",
-      title: `WhatsApp de ${lead.empresa || lead.contato_nome}`,
+      title: `WhatsApp de ${quem}`,
       body: textoDa(m).slice(0, 140),
     }, false);
   }
   return "gravada e avisada";
 }
 
-async function atualizarStatus(body: any) {
+async function atualizarStatus(inst: Instancia, body: any) {
   // O formato do messages_update nao e documentado campo a campo: aceita a
   // mensagem inteira (message.messageid + status) ou a lista de ids do evento.
   const m = body.message ?? {};
@@ -148,7 +142,7 @@ async function atualizarStatus(body: any) {
   const status = String(m.status ?? ev.Type ?? ev.type ?? body.state ?? "").toLowerCase();
   const ids: string[] = [m.messageid, m.id, ...(Array.isArray(ev.MessageIDs) ? ev.MessageIDs : [])].filter(Boolean);
   if (!status || !ids.length) return "ignorada: sem id/status";
-  await atualizar(`wa_mensagens?messageid=in.(${ids.map(i => `"${i}"`).join(",")})`, { status });
+  await atualizar(`wa_mensagens?instancia_id=eq.${inst.id}&messageid=in.(${ids.map(i => `"${i}"`).join(",")})`, { status });
   return `status ${status}`;
 }
 
@@ -156,9 +150,9 @@ serve(async (req) => {
   if (req.method !== "POST") return new Response("ok");
 
   const body = await req.json().catch(() => null);
-  const esperado = (await tokenDaInstancia().catch(() => null))?.trim();
   const recebido = typeof body?.token === "string" ? body.token.trim() : "";
-  if (!body || !esperado || recebido !== esperado) {
+  const inst = recebido ? await instanciaPorToken(recebido).catch(() => null) : null;
+  if (!body || !inst) {
     // O painel da uazapi mostra esta resposta: sem ela nao da para saber se o
     // token veio ausente, em outro campo ou de outra instancia. So o final do
     // token recebido, nunca o esperado.
@@ -166,7 +160,7 @@ serve(async (req) => {
       error: "token invalido",
       campos: body ? Object.keys(body) : null,
       token_recebido: recebido ? `...${recebido.slice(-4)} (${recebido.length} chars)` : "ausente",
-      secret_configurado: !!esperado,
+      motivo: recebido ? "nenhum numero cadastrado com esse token" : "evento sem token",
     };
     console.warn("wa-webhook 401", JSON.stringify(diagnostico));
     return new Response(JSON.stringify(diagnostico), { status: 401 });
@@ -175,8 +169,8 @@ serve(async (req) => {
   try {
     const tipo = body.EventType;
     const resultado =
-      tipo === "messages" ? await registrarMensagem(body)
-      : tipo === "messages_update" ? await atualizarStatus(body)
+      tipo === "messages" ? await registrarMensagem(inst, body)
+      : tipo === "messages_update" ? await atualizarStatus(inst, body)
       : `ignorado: ${tipo}`;
     return new Response(JSON.stringify({ ok: true, resultado }), { headers: { "Content-Type": "application/json" } });
   } catch (err) {
