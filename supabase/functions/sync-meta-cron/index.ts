@@ -5,6 +5,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { sendText, whatsappConfigurado } from "../_shared/whatsapp.ts";
 import { tokensDosClientes } from "../_shared/meta-token.ts";
+import { fimDaCampanha, statusComPrazo } from "../_shared/prazo-campanha.ts";
 
 const META_BASE = "https://graph.facebook.com/v21.0";
 
@@ -113,6 +114,8 @@ interface MetaCampaign {
   name: string;
   status: string;
   objective?: string;
+  start_time?: string;
+  stop_time?: string;
 }
 
 interface MetaAdSet {
@@ -120,6 +123,7 @@ interface MetaAdSet {
   name: string;
   status: string;
   campaign_id: string;
+  end_time?: string;
 }
 
 interface MetaAd {
@@ -497,9 +501,19 @@ async function syncClientData(
   const checkedAt = new Date().toISOString();
 
   const metaCampaigns = await metaFetchAll<MetaCampaign>(`act_${accountId}/campaigns`, {
-    fields: "id,name,status,objective",
+    fields: "id,name,status,objective,start_time,stop_time",
     access_token: token,
   }, 200);
+
+  // Os conjuntos vem antes porque a data de fim da campanha pode depender deles.
+  const metaAdSets = await metaFetchAll<MetaAdSet>(`act_${accountId}/adsets`, {
+    fields: "id,name,status,campaign_id,end_time",
+    access_token: token,
+  }, 200);
+  const fimDosConjuntos = new Map<string, (string | undefined)[]>();
+  for (const adSet of metaAdSets) {
+    fimDosConjuntos.set(adSet.campaign_id, [...(fimDosConjuntos.get(adSet.campaign_id) ?? []), adSet.end_time]);
+  }
 
   const campaignInsights = await fetchInsightsByLevel(accountId, token, "campaign");
 
@@ -510,12 +524,15 @@ async function syncClientData(
 
   for (const campaign of metaCampaigns) {
     const insight = campaignInsights.get(campaign.id);
+    const fim = fimDaCampanha(campaign.stop_time, fimDosConjuntos.get(campaign.id) ?? []);
     const payload = {
       client_id: clientId,
       meta_campaign_id: campaign.id,
       name: campaign.name,
-      status: campaign.status,
+      status: statusComPrazo(campaign.status, fim),
       objective: campaign.objective ?? null,
+      start_time: campaign.start_time ?? null,
+      end_time: fim,
       spend: n(insight?.spend),
       impressions: ni(insight?.impressions),
       clicks: ni(insight?.clicks),
@@ -534,11 +551,6 @@ async function syncClientData(
       if (row) campaignMap.set(campaign.id, row.id);
     }
   }
-
-  const metaAdSets = await metaFetchAll<MetaAdSet>(`act_${accountId}/adsets`, {
-    fields: "id,name,status,campaign_id",
-    access_token: token,
-  }, 200);
 
   const adSetInsights = await fetchInsightsByLevel(accountId, token, "adset");
 

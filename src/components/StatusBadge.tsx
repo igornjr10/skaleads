@@ -6,12 +6,14 @@ const styles: Record<string, string> = {
   ACTIVE: "bg-success/15 text-success border-success/30",
   PAUSED: "bg-warning/15 text-warning border-warning/30",
   DELETED: "bg-destructive/15 text-destructive border-destructive/30",
+  COMPLETED: "bg-sky-500/15 text-sky-400 border-sky-500/30",
 };
 
 const labels: Record<string, string> = {
   ACTIVE: "Ativo",
   PAUSED: "Pausado",
   DELETED: "Excluído",
+  COMPLETED: "Concluída",
 };
 
 export function StatusBadge({ status }: { status: Status }) {

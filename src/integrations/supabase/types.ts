@@ -907,6 +907,7 @@ export type Database = {
           cpm: number
           created_at: string
           ctr: number
+          end_time: string | null
           id: string
           impressions: number
           messages: number
@@ -914,6 +915,7 @@ export type Database = {
           name: string
           objective: string | null
           spend: number
+          start_time: string | null
           status: string
           updated_at: string
         }
@@ -925,6 +927,7 @@ export type Database = {
           cpm?: number
           created_at?: string
           ctr?: number
+          end_time?: string | null
           id?: string
           impressions?: number
           messages?: number
@@ -932,6 +935,7 @@ export type Database = {
           name: string
           objective?: string | null
           spend?: number
+          start_time?: string | null
           status?: string
           updated_at?: string
         }
@@ -943,6 +947,7 @@ export type Database = {
           cpm?: number
           created_at?: string
           ctr?: number
+          end_time?: string | null
           id?: string
           impressions?: number
           messages?: number
@@ -950,6 +955,7 @@ export type Database = {
           name?: string
           objective?: string | null
           spend?: number
+          start_time?: string | null
           status?: string
           updated_at?: string
         }
