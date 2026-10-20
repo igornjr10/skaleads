@@ -20,6 +20,7 @@ import {
   BrainCircuit,
   ChevronRight,
   CircleDollarSign,
+  CalendarClock,
   Eye,
   Filter,
   Flag,
@@ -60,6 +61,7 @@ import {
 } from "@/lib/analise-campanhas";
 import { CartaoAchado, KpisDaCampanha, PainelInteligencia } from "@/components/campanhas/PainelInteligencia";
 import { useDadosInteligencia } from "@/components/campanhas/useDadosInteligencia";
+import { STATUS_CONCLUIDA, prazoDaCampanha, statusComPrazo, type TomPrazo } from "@/lib/prazo-campanha";
 
 interface Ad {
   id: string;
@@ -97,6 +99,8 @@ interface Campaign {
   cpm: number;
   conversions: number;
   messages: number;
+  start_time: string | null;
+  end_time: string | null;
   ad_sets: AdSet[];
   client?: {
     name: string;
@@ -111,7 +115,7 @@ interface Client {
 }
 
 type PerformanceFilter = "all" | "healthy" | "monitor" | "warning" | "critical" | "no-conversions";
-type SortOption = "spend" | "ctr" | "clicks" | "conversions" | "cpc" | "name";
+type SortOption = "spend" | "ctr" | "clicks" | "conversions" | "cpc" | "name" | "prazo";
 type Tone = "healthy" | "monitor" | "warning" | "critical" | "neutral";
 
 const VAZIA: AnaliseCampanha["achados"] = [];
@@ -134,6 +138,9 @@ function paraEntrada(c: Campaign): CampanhaEntrada {
 
 /** Saude da linha = pior achado da inteligencia, entao lista e painel nunca discordam. */
 function getHealth(c: CampanhaEntrada, achados: AnaliseCampanha["achados"]): { tone: Tone; label: string; detail: string } {
+  if (c.status === STATUS_CONCLUIDA) {
+    return { tone: "neutral", label: "Concluída", detail: "Prazo encerrado. Fica no histórico." };
+  }
   if (c.status !== "ACTIVE") {
     return { tone: "neutral", label: c.status === "PAUSED" ? "Em pausa" : "Fora do ar", detail: "Não está rodando no momento." };
   }
@@ -154,6 +161,30 @@ function getHealthBadgeClass(tone: Tone) {
   if (tone === "critical") return "border-rose-500/30 bg-rose-500/10 text-rose-400";
   if (tone === "monitor") return "border-sky-500/30 bg-sky-500/10 text-sky-400";
   return "border-border bg-muted text-muted-foreground";
+}
+
+const PRAZO_CLASSE: Record<TomPrazo, string> = {
+  urgente: "border-rose-500/30 bg-rose-500/10 text-rose-400",
+  proximo: "border-amber-500/30 bg-amber-500/10 text-amber-400",
+  tranquilo: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
+  concluida: "border-sky-500/30 bg-sky-500/10 text-sky-400",
+  sem_data: "border-border bg-muted text-muted-foreground",
+};
+
+function PrazoDaCampanha({ campaign }: { campaign: Campaign }) {
+  const prazo = prazoDaCampanha(campaign.end_time, campaign.status);
+  if (prazo.tom === "sem_data") {
+    return <span className="text-xs text-muted-foreground">Sem data de término</span>;
+  }
+  return (
+    <div className="space-y-1">
+      <div className="whitespace-nowrap text-xs tabular-nums">{prazo.data}</div>
+      <Badge variant="outline" className={`${PRAZO_CLASSE[prazo.tom]} whitespace-nowrap rounded-full text-[11px]`}>
+        <CalendarClock className="mr-1 h-3 w-3" />
+        {prazo.aviso}
+      </Badge>
+    </div>
+  );
 }
 
 const PROXIMA_ACAO: Record<Tone, string> = {
@@ -181,6 +212,13 @@ function sortAds(ads: Ad[], messaging: boolean) {
     }
     return b.spend - a.spend;
   });
+}
+
+/** Em andamento por data de fim, depois as sem data, e as concluidas no fim (mais recente primeiro). */
+function ordemDoPrazo(c: Campaign) {
+  if (!c.end_time) return c.status === STATUS_CONCLUIDA ? 3e15 : 2e15;
+  const t = Date.parse(c.end_time);
+  return c.status === STATUS_CONCLUIDA ? 4e15 - t : t;
 }
 
 /** Indicadores de apoio do objetivo: os que nao sao gasto, resultado ou custo do resultado. */
@@ -268,7 +306,9 @@ export default function Campaigns() {
       setLoadError(error.message);
       toast.error(error.message);
     }
-    setCampaigns((data as unknown as Campaign[]) ?? []);
+    // O cron conclui de 15 em 15 minutos; aqui a lista ja reflete o prazo no instante em que abre.
+    const lista = ((data as unknown as Campaign[]) ?? []).map((c) => ({ ...c, status: statusComPrazo(c.status, c.end_time) }));
+    setCampaigns(lista);
     setLoading(false);
   }
 
@@ -400,6 +440,7 @@ export default function Campaigns() {
     const volume = (c: Campaign) => resultadoDaCampanha(entradaPorId.get(c.id)!).volume ?? 0;
     return lista.sort((a, b) => {
       if (sortBy === "name") return a.name.localeCompare(b.name);
+      if (sortBy === "prazo") return ordemDoPrazo(a) - ordemDoPrazo(b);
       if (sortBy === "ctr") return (valorKpi(b, "ctr") ?? 0) - (valorKpi(a, "ctr") ?? 0);
       if (sortBy === "clicks") return b.clicks - a.clicks;
       if (sortBy === "conversions") return volume(b) - volume(a);
@@ -422,9 +463,10 @@ export default function Campaigns() {
         if (tone === "warning" || tone === "critical") acc.alerts += 1;
         if (tone === "healthy" && severidadeDaCampanha(achadosDe(campaign.id)) === "oportunidade") acc.scale += 1;
         if (semResultado(e)) acc.noResults += 1;
+        if (prazoDaCampanha(campaign.end_time, campaign.status).tom === "urgente") acc.endingSoon += 1;
         return acc;
       },
-      { spend: 0, clicks: 0, messages: 0, conversions: 0, active: 0, alerts: 0, scale: 0, noResults: 0 }
+      { spend: 0, clicks: 0, messages: 0, conversions: 0, active: 0, alerts: 0, scale: 0, noResults: 0, endingSoon: 0 }
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredCampaigns, entradaPorId, analisePorId]);
@@ -528,7 +570,7 @@ export default function Campaigns() {
           icon={<Sparkles className="h-5 w-5" />}
           titulo="Campanhas ativas"
           valor={formatNumber(summary.active)}
-          detalhe={`${filteredCampaigns.length} no filtro · ${summary.scale} candidata(s) a escalar`}
+          detalhe={`${filteredCampaigns.length} no filtro · ${summary.scale} candidata(s) a escalar${summary.endingSoon ? ` · ${summary.endingSoon} encerra(m) em até 3 dias` : ""}`}
         />
         <ResumoCard
           icon={<CircleDollarSign className="h-5 w-5" />}
@@ -612,6 +654,7 @@ export default function Campaigns() {
                     <SelectItem value="all">Todos os status</SelectItem>
                     <SelectItem value="ACTIVE">Ativas</SelectItem>
                     <SelectItem value="PAUSED">Pausadas</SelectItem>
+                    <SelectItem value={STATUS_CONCLUIDA}>Concluídas</SelectItem>
                     <SelectItem value="DELETED">Excluídas</SelectItem>
                   </SelectContent>
                 </Select>
@@ -652,6 +695,7 @@ export default function Campaigns() {
                     <SelectItem value="clicks">Mais cliques</SelectItem>
                     <SelectItem value="ctr">Maior CTR</SelectItem>
                     <SelectItem value="cpc">Menor CPC</SelectItem>
+                    <SelectItem value="prazo">Encerra primeiro</SelectItem>
                     <SelectItem value="name">Nome A-Z</SelectItem>
                   </SelectContent>
                 </Select>
@@ -695,6 +739,7 @@ export default function Campaigns() {
                       <TableHead>Cliente</TableHead>
                       <TableHead>Saúde</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Encerramento</TableHead>
                       <TableHead>Objetivo</TableHead>
                       <TableHead className="text-right">Gasto</TableHead>
                       <TableHead className="text-right">Resultado</TableHead>
@@ -748,6 +793,9 @@ export default function Campaigns() {
                               </TableCell>
                               <TableCell>
                                 <StatusBadge status={campaign.status} />
+                              </TableCell>
+                              <TableCell className="min-w-[170px]">
+                                <PrazoDaCampanha campaign={campaign} />
                               </TableCell>
                               <TableCell className="max-w-[180px]">
                                 <Badge variant="outline" className="rounded-full text-[11px]">{labelGrupo(res.grupo)}</Badge>
@@ -814,7 +862,7 @@ export default function Campaigns() {
 
                             <CollapsibleContent asChild>
                               <TableRow>
-                                <TableCell colSpan={11} className="bg-muted/20 p-0">
+                                <TableCell colSpan={12} className="bg-muted/20 p-0">
                                   <div id={`campaign-structure-${campaign.id}`} className="grid gap-4 p-4 xl:grid-cols-[1.1fr_1.4fr]">
                                     <div className="min-w-0 rounded-2xl border border-border bg-background/80 p-4">
                                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -840,7 +888,9 @@ export default function Campaigns() {
                                         </div>
                                         {achados.length === 0 ? (
                                           <p className="rounded-xl border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
-                                            {campaign.status !== "ACTIVE"
+                                            {campaign.status === STATUS_CONCLUIDA
+                                              ? "Campanha concluída: fica no histórico e não entra na análise."
+                                              : campaign.status !== "ACTIVE"
                                               ? "Campanha fora do ar: não entra na análise."
                                               : Number(campaign.spend) < GASTO_MINIMO
                                                 ? `Menos de ${formatCurrency(GASTO_MINIMO)} investidos: ainda cedo para julgar.`
