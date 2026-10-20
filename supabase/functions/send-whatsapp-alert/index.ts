@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, resolveTargets, sendText } from "../_shared/whatsapp.ts";
+import { corsHeaders, remetente, resolveTargets, sendText } from "../_shared/whatsapp.ts";
 import { companyIdsOf, guard } from "../_shared/auth.ts";
 
 interface FiredEntity {
@@ -74,10 +74,11 @@ serve(async (req) => {
     }
 
     const message = buildMessage(payload);
+    const inst = await remetente({ userId: acesso.user?.id ?? null, companyId });
 
     // Envia para todos e so falha se ninguem recebeu — um numero quebrado nao
     // pode fazer o teste parecer que nada foi enviado.
-    const results = await Promise.allSettled(targets.map(t => sendText(t, message)));
+    const results = await Promise.allSettled(targets.map(t => sendText(inst, t, message)));
     const enviados = results.filter(r => r.status === "fulfilled").length;
 
     if (enviados === 0) {

@@ -2704,6 +2704,7 @@ export type Database = {
         Row: {
           client_id: string
           created_at: string
+          created_by: string | null
           cron: string
           email_recipients: Json
           id: string
@@ -2722,6 +2723,7 @@ export type Database = {
         Insert: {
           client_id: string
           created_at?: string
+          created_by?: string | null
           cron: string
           email_recipients?: Json
           id?: string
@@ -2740,6 +2742,7 @@ export type Database = {
         Update: {
           client_id?: string
           created_at?: string
+          created_by?: string | null
           cron?: string
           email_recipients?: Json
           id?: string
@@ -3828,6 +3831,48 @@ export type Database = {
         }
         Relationships: []
       }
+      wa_instancias: {
+        Row: {
+          company_id: string
+          conectado: boolean
+          criada_em: string
+          id: string
+          nome: string
+          numero: string | null
+          padrao: boolean
+          perfil_nome: string | null
+          status_em: string | null
+          token: string
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          conectado?: boolean
+          criada_em?: string
+          id?: string
+          nome: string
+          numero?: string | null
+          padrao?: boolean
+          perfil_nome?: string | null
+          status_em?: string | null
+          token: string
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          conectado?: boolean
+          criada_em?: string
+          id?: string
+          nome?: string
+          numero?: string | null
+          padrao?: boolean
+          perfil_nome?: string | null
+          status_em?: string | null
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       wa_mensagens: {
         Row: {
           autor_id: string | null
@@ -3838,6 +3883,7 @@ export type Database = {
           direcao: string
           enviada_em: string
           fila_id: string | null
+          instancia_id: string | null
           id: string
           lead_id: string | null
           lida_em: string | null
@@ -3859,6 +3905,7 @@ export type Database = {
           direcao: string
           enviada_em?: string
           fila_id?: string | null
+          instancia_id?: string | null
           id?: string
           lead_id?: string | null
           lida_em?: string | null
@@ -3880,6 +3927,7 @@ export type Database = {
           direcao?: string
           enviada_em?: string
           fila_id?: string | null
+          instancia_id?: string | null
           id?: string
           lead_id?: string | null
           lida_em?: string | null
@@ -4184,6 +4232,7 @@ export type Database = {
         Args: { p_share_token: string }
         Returns: undefined
       }
+      definir_numero_padrao_wa: { Args: { _instancia: string }; Returns: undefined }
       inscrever_em_sequencia: {
         Args: { _lead_ids: string[]; _sequencia_id: string }
         Returns: number

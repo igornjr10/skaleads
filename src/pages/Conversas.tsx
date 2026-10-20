@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CaixaDeConversas } from "@/components/whatsapp/CaixaDeConversas";
@@ -15,7 +17,7 @@ import { LIMITES_PADRAO, type LimitesWa } from "@/lib/whatsapp-fila";
 export default function Conversas() {
   const { user, role, empresa } = useAuth();
   const isAdmin = veTodosOsClientes(role);
-  const { conversas, loading, marcarLida, recarregar } = useConversas();
+  const { conversas, numeros, loading, marcarLida, recarregar } = useConversas(user?.id);
   const [limites, setLimites] = useState<LimitesWa>(LIMITES_PADRAO);
 
   const carregarLimites = useCallback(async () => {
@@ -35,9 +37,16 @@ export default function Conversas() {
         </div>
         <div>
           <h1 className="text-3xl font-bold tracking-tight">WhatsApp</h1>
-          <p className="text-sm text-muted-foreground">Conversas com os leads, disparos e sequências de follow-up pelo número da agência.</p>
+          <p className="text-sm text-muted-foreground">Conversas, disparos e sequências pelo seu próprio WhatsApp.</p>
         </div>
       </div>
+
+      {!loading && !numeros.some(n => n.meu) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+          <span>Você ainda não conectou o seu WhatsApp. Sem ele, suas respostas, disparos e sequências não saem.</span>
+          <Button asChild size="sm" variant="outline"><Link to="/settings">Conectar meu WhatsApp</Link></Button>
+        </div>
+      )}
 
       <Tabs defaultValue="conversas">
         <TabsList className="flex-wrap">
@@ -48,7 +57,7 @@ export default function Conversas() {
           {isAdmin && <TabsTrigger value="config">Configuração</TabsTrigger>}
         </TabsList>
         <TabsContent value="conversas">
-          <CaixaDeConversas conversas={conversas} loading={loading} onLida={marcarLida} onLeadCriado={recarregar} />
+          <CaixaDeConversas conversas={conversas} numeros={numeros} loading={loading} onLida={marcarLida} onLeadCriado={recarregar} />
         </TabsContent>
         <TabsContent value="disparos">
           <DisparosTab meuId={user?.id} isAdmin={isAdmin} limites={limites} />

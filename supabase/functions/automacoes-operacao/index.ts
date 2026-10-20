@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, sendText } from "../_shared/whatsapp.ts";
+import { corsHeaders, remetente, sendText, type Instancia } from "../_shared/whatsapp.ts";
 import { getUser, hasAnyRole, isServiceRole, jsonResponse } from "../_shared/auth.ts";
 import { db, numeroParaEnvio } from "../_shared/wa-crm.ts";
 import {
@@ -138,7 +138,7 @@ async function processarEmpresa(companyId: string, siteUrl: string) {
   const hora = Math.floor(minuto / 60);
   const dentroDoHorario = hora >= HORA_INICIO && hora < HORA_FIM;
 
-  const linhas = await db<any[]>(`automacoes?company_id=eq.${companyId}&select=chave,ativa,whatsapp,config`);
+  const linhas = await db<any[]>(`automacoes?company_id=eq.${companyId}&select=chave,ativa,whatsapp,config,updated_by`);
   const cfg = (chave: ChaveAutomacao) => configDe(linhas, chave);
   const { dados, whatsapp } = await dadosDaEmpresa(companyId, hoje, minuto);
 
@@ -189,6 +189,15 @@ async function processarEmpresa(companyId: string, siteUrl: string) {
     }).catch(err => erros.push(`sino: ${(err as Error).message}`));
   }
 
+  // O aviso sai do WhatsApp de quem configurou a automacao; sem ninguem, do numero padrao.
+  const numeros = new Map<string, Promise<Instancia>>();
+  const numeroDe = (chave: string) => {
+    const autor = linhas.find(l => l.chave === chave)?.updated_by ?? null;
+    const k = autor ?? "";
+    if (!numeros.has(k)) numeros.set(k, remetente({ userId: autor, companyId }));
+    return numeros.get(k)!;
+  };
+
   let enviados = 0;
   for (const a of paraPessoas.filter(x => x.whatsapp)) {
     const numero = numeroParaEnvio(whatsapp.get(a.user_id!));
@@ -196,7 +205,7 @@ async function processarEmpresa(companyId: string, siteUrl: string) {
     if (!numero) canal = "sem_numero";
     else {
       try {
-        await sendText(numero, textoWhatsapp(a, siteUrl));
+        await sendText(await numeroDe(a.chave), numero, textoWhatsapp(a, siteUrl));
         canal = "enviado";
         enviados += 1;
       } catch (err) {

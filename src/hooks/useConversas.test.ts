@@ -3,7 +3,7 @@ import { agruparConversas, type MensagemWa } from "./useConversas";
 
 function msg(parcial: Partial<MensagemWa>): MensagemWa {
   return {
-    id: Math.random().toString(36).slice(2), company_id: "c", lead_id: null, chave: "551188887777",
+    id: Math.random().toString(36).slice(2), company_id: "c", instancia_id: "num-1", lead_id: null, chave: "551188887777",
     telefone: null, nome_contato: null, messageid: null, direcao: "entrada", tipo: "text", texto: "oi",
     origem: "contato", status: null, autor_id: null, enviada_em: "2026-09-29T10:00:00Z", lida_em: null,
     ...parcial,
@@ -32,5 +32,16 @@ describe("agruparConversas", () => {
       msg({ enviada_em: "2026-09-29T10:10:00Z", lead_id: "lead-x" }),
     ]);
     expect(c.leadId).toBe("lead-x");
+  });
+
+  it("o mesmo contato falando com dois numeros da equipe vira duas conversas", () => {
+    const conversas = agruparConversas([
+      msg({ chave: "A", instancia_id: "num-1", enviada_em: "2026-09-29T10:00:00Z" }),
+      msg({ chave: "A", instancia_id: "num-2", enviada_em: "2026-09-29T10:05:00Z" }),
+      msg({ chave: "A", instancia_id: "num-1", enviada_em: "2026-09-29T10:06:00Z" }),
+    ]);
+    expect(conversas).toHaveLength(2);
+    expect(conversas.map(c => c.instanciaId)).toEqual(["num-1", "num-2"]);
+    expect(conversas[0].naoLidas).toBe(2);
   });
 });

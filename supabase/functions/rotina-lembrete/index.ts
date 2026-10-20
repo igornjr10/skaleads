@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, sendText } from "../_shared/whatsapp.ts";
+import { corsHeaders, remetente, sendText } from "../_shared/whatsapp.ts";
 import { guard, isUuid, jsonResponse } from "../_shared/auth.ts";
 import { numeroParaEnvio } from "../_shared/wa-crm.ts";
 
@@ -24,13 +24,14 @@ const STATUS: Record<string, string> = {
 
 const DIAS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
 
-const COLUNAS_ROTINA = "id,titulo,descricao,assigned_to,company_id,prioridade,horario_limite,client:clients(name)";
+const COLUNAS_ROTINA = "id,titulo,descricao,assigned_to,created_by,company_id,prioridade,horario_limite,client:clients(name)";
 
 interface RotinaLida {
   id: string;
   titulo: string;
   descricao: string | null;
   assigned_to: string | null;
+  created_by: string | null;
   company_id: string;
   prioridade: string;
   horario_limite: string | null;
@@ -121,7 +122,9 @@ async function lembrar(
     .filter((linha) => linha !== null)
     .join("\n");
 
-  await sendText(numero, texto);
+  // Manual sai de quem clicou; automatico, de quem criou a demanda.
+  const inst = await remetente({ userId: remetenteId ?? rotina.created_by, companyId: rotina.company_id });
+  await sendText(inst, numero, texto);
   return nomeDe(rotina.assigned_to);
 }
 
@@ -202,7 +205,7 @@ serve(async (req) => {
     return json({ success: true, enviado_em: enviadoEm, responsavel });
   } catch (err) {
     const mensagem = err instanceof Error ? err.message : "Erro ao enviar o lembrete";
-    const doUsuario = /responsável|WhatsApp cadastrado/.test(mensagem);
+    const doUsuario = /responsável|WhatsApp cadastrado|WhatsApp conectado/.test(mensagem);
     return json({ error: mensagem }, doUsuario ? 400 : 500);
   }
 });

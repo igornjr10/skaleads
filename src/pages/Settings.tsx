@@ -13,6 +13,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Copy, Loader2, RefreshCw, Users, CircleCheck, CircleX, CircleAlert, QrCode, RotateCw, Power, Trash2 } from "lucide-react";
+import { NumerosDaEquipe } from "@/components/whatsapp/NumerosDaEquipe";
 import { EquipeCard } from "@/components/settings/EquipeCard";
 import { EmpresaCard } from "@/components/settings/EmpresaCard";
 import { AssessoriasCard } from "@/components/settings/AssessoriasCard";
@@ -189,7 +190,7 @@ export default function Settings() {
           // Instância já conectada não precisa de QR — a uazapi devolve só o
           // estado. Para trocar o número é preciso Desconectar antes.
           toast.info(
-            "A instância já está conectada, por isso não veio QR. " +
+            "Seu WhatsApp já está conectado, por isso não veio QR. " +
             "Para parear outro número, use Desconectar e gere o QR de novo.",
             { duration: 15000 }
           );
@@ -198,7 +199,7 @@ export default function Settings() {
         }
         setQrImage(image);
         setPairingCode(code);
-        toast.success("QR Code gerado — leia com o WhatsApp do número da instância");
+        toast.success("QR Code gerado — leia com o WhatsApp do seu celular");
         return;
       }
 
@@ -210,7 +211,7 @@ export default function Settings() {
         return;
       }
 
-      toast.success("Instância reiniciada — reconectando o socket");
+      toast.success("Reconectando o seu WhatsApp");
       // O socket do Baileys leva alguns segundos para subir; consultar na hora
       // devolveria o estado antigo
       await new Promise((r) => setTimeout(r, 4000));
@@ -528,10 +529,11 @@ export default function Settings() {
 
       <Card className="shadow-card">
         <CardHeader>
-          <CardTitle>WhatsApp — Conexão e grupos (uazapi)</CardTitle>
+          <CardTitle>Meu WhatsApp</CardTitle>
           <CardDescription>
-            Reinicie, reconecte ou pareie a instância sem sair do sistema. Abaixo, os grupos ativos no número conectado —
-            copie o JID para usar como destino de alertas/relatórios.
+            Conecte o seu próprio número: as conversas que chegam nele aparecem para você (e para o ADM), e o que você
+            configurar (alertas, relatórios, lembretes, disparos) sai dele. Abaixo, os grupos do seu número — copie o JID
+            para usar como destino.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -559,12 +561,12 @@ export default function Settings() {
             <div className="min-w-0 flex-1 space-y-0.5">
               <p className="text-sm font-medium">
                 {loadingStatus || (!instanceStatus && !statusError)
-                  ? "Verificando a instância..."
+                  ? "Verificando o seu WhatsApp..."
                   : statusError
-                    ? "Não foi possível consultar a instância"
+                    ? "Não foi possível consultar o seu WhatsApp"
                     : instanceStatus?.connected
-                      ? "WhatsApp conectado"
-                      : "WhatsApp desconectado"}
+                      ? "Seu WhatsApp está conectado"
+                      : "Seu WhatsApp não está conectado"}
               </p>
               <p className="text-xs text-muted-foreground break-words">
                 {statusError ?? instanceStatus?.message ?? "Consultando a uazapi"}
@@ -573,7 +575,6 @@ export default function Settings() {
                 <p className="text-xs text-muted-foreground">
                   {instanceStatus.profileName ?? "Número"}
                   {instanceStatus.ownerJid ? ` · ${instanceStatus.ownerJid.split("@")[0]}` : ""}
-                  {` · instância ${instanceStatus.instance}`}
                 </p>
               )}
             </div>
@@ -589,8 +590,7 @@ export default function Settings() {
             </Button>
           </div>
 
-          {isOwner ? (
-            <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
               <Button
                 onClick={() => runAdminAction("restart")}
                 disabled={adminBusy !== null}
@@ -600,7 +600,7 @@ export default function Settings() {
                 {adminBusy === "restart"
                   ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   : <RotateCw className="mr-2 h-4 w-4" />}
-                Reiniciar instância
+                Reconectar
               </Button>
 
               <Button
@@ -626,11 +626,11 @@ export default function Settings() {
                 </AlertDialogTrigger>
                 <AlertDialogContent>
                   <AlertDialogHeader>
-                    <AlertDialogTitle>Desconectar a instância {instanceStatus?.instance ?? "WhatsApp"}?</AlertDialogTitle>
+                    <AlertDialogTitle>Desconectar o seu WhatsApp?</AlertDialogTitle>
                     <AlertDialogDescription>
-                      Isso encerra a sessão do WhatsApp e exige ler o QR Code de novo, com o celular em mãos.
-                      A instância é compartilhada com outro sistema — ele também para de enviar mensagens até o novo pareamento.
-                      Se o objetivo é só destravar um socket caído, prefira <strong>Reiniciar instância</strong>.
+                      Isso encerra a sessão e exige ler o QR Code de novo, com o celular em mãos. Até lá, nada do que
+                      você configurou (alertas, relatórios, disparos) sai, e as conversas novas não chegam aqui.
+                      Se o objetivo é só destravar uma conexão caída, prefira <strong>Reconectar</strong>.
                     </AlertDialogDescription>
                   </AlertDialogHeader>
                   <AlertDialogFooter>
@@ -639,12 +639,7 @@ export default function Settings() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              Apenas Owners podem reiniciar, desconectar ou reparear a instância.
-            </p>
-          )}
+          </div>
 
           {qrImage && (
             <div className="flex flex-col items-center gap-3 rounded-lg border border-border bg-muted/40 p-4">
@@ -707,6 +702,8 @@ export default function Settings() {
           )}
         </CardContent>
       </Card>
+
+      {gereEquipe && <NumerosDaEquipe onMudou={checkInstanceStatus} />}
     </div>
   );
 }

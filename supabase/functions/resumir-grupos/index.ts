@@ -12,7 +12,7 @@
 // palavras. A pergunta do cliente aparece com as palavras dele, ou nao aparece.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, whatsappConfig } from "../_shared/whatsapp.ts";
+import { corsHeaders, instanciaDoUsuario, instanciaPadrao, type Instancia } from "../_shared/whatsapp.ts";
 import { companyIdsOf, getUser, ownsClient } from "../_shared/auth.ts";
 
 const FUSO = "-03:00"; // America/Sao_Paulo, sem horario de verao desde 2019
@@ -34,6 +34,7 @@ interface ClienteComGrupo {
   id: string;
   name: string;
   whatsapp_group_jid: string;
+  company_id: string | null;
 }
 
 interface Mensagem {
@@ -113,12 +114,13 @@ function ehDaAgencia(m: MensagemBruta, numerosAgencia: Set<string>): boolean {
   return NOME_DA_AGENCIA.test((m.senderName ?? "").toString());
 }
 
-async function lerMensagens(chatid: string, desde: number): Promise<MensagemBruta[]> {
-  const { baseUrl, token } = await whatsappConfig();
+async function lerMensagens(inst: Instancia, chatid: string, desde: number): Promise<MensagemBruta[]> {
+  const baseUrl = (Deno.env.get("UAZAPI_URL") ?? "").replace(/\/$/, "");
+  if (!baseUrl) throw new Error("UAZAPI_URL nao configurado");
 
   const res = await fetch(`${baseUrl}/message/find`, {
     method: "POST",
-    headers: { token, "Content-Type": "application/json" },
+    headers: { token: inst.token, "Content-Type": "application/json" },
     body: JSON.stringify({ chatid, limit: 400, messageTimestamp: { gte: desde } }),
   });
   if (!res.ok) throw new Error(`uazapi /message/find respondeu ${res.status}`);
@@ -262,7 +264,7 @@ serve(async (req) => {
     const filtroCliente = (corpo.clientId ? `&id=eq.${corpo.clientId}` : "&status=eq.active") + filtroEmpresa;
     const clientes = await dbGet<ClienteComGrupo>(
       supabaseUrl, svcKey,
-      `clients?whatsapp_group_jid=not.is.null${filtroCliente}&select=id,name,whatsapp_group_jid`
+      `clients?whatsapp_group_jid=not.is.null${filtroCliente}&select=id,name,whatsapp_group_jid,company_id`
     );
 
     // Numero de gestor define quem e agencia. O `fromMe` sozinho nao resolve: o
@@ -271,6 +273,24 @@ serve(async (req) => {
       supabaseUrl, svcKey, `managers?whatsapp_number=not.is.null&select=whatsapp_number`
     );
     const numerosAgencia = new Set(gestores.map(g => soDigitos(g.whatsapp_number)).filter(Boolean));
+    // Cada pessoa da equipe com WhatsApp conectado tambem fala pela agencia.
+    const conectados = await dbGet<{ numero: string | null }>(
+      supabaseUrl, svcKey, `wa_instancias?numero=not.is.null&select=numero`
+    );
+    for (const c of conectados) if (soDigitos(c.numero ?? "")) numerosAgencia.add(soDigitos(c.numero ?? ""));
+
+    // O grupo e lido pelo numero padrao da empresa (quem acompanha os clientes);
+    // sem padrao, pelo numero de quem pediu o resumo.
+    const leitores = new Map<string, Promise<Instancia | null>>();
+    const leitorDa = (companyId: string | null) => {
+      const k = companyId ?? "";
+      if (!leitores.has(k)) {
+        leitores.set(k, (async () =>
+          (companyId ? await instanciaPadrao(companyId) : null)
+          ?? (acesso.userId ? await instanciaDoUsuario(acesso.userId) : null))());
+      }
+      return leitores.get(k)!;
+    };
 
     const erros: string[] = [];
     // Quem aparece falando sem ser reconhecido como agencia. Se um nome da
@@ -282,7 +302,9 @@ serve(async (req) => {
 
     const tarefas = clientes.map((cliente) => async () => {
       try {
-        const brutas = await lerMensagens(cliente.whatsapp_group_jid, desde);
+        const leitor = await leitorDa(cliente.company_id);
+        if (!leitor) throw new Error("Nenhum WhatsApp conectado para ler o grupo (defina o número padrão da empresa)");
+        const brutas = await lerMensagens(leitor, cliente.whatsapp_group_jid, desde);
 
         const todas: Mensagem[] = brutas
           .map((m) => {

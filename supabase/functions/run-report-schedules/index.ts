@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, sendText } from "../_shared/whatsapp.ts";
+import { corsHeaders, remetente, sendText } from "../_shared/whatsapp.ts";
 import { guard, jsonResponse } from "../_shared/auth.ts";
 import { momentoEmSaoPaulo, periodoPadraoDaFrequencia, venceNestaHora } from "./agendamento.ts";
 import { hojeEmSaoPaulo, normalizarPeriodo, periodoDoModelo, resolverPeriodo, type PeriodoSpec } from "./periodo.ts";
@@ -31,6 +31,8 @@ interface ReportSchedule {
   metricas?: unknown;
   mensagem?: string | null;
   nome?: string | null;
+  /** Quem criou o agendamento: o relatorio sai do WhatsApp dele. Sem criador, do numero padrao. */
+  created_by?: string | null;
 }
 
 interface Cliente {
@@ -134,6 +136,7 @@ async function enviarUltimoPdf(s: ReportSchedule): Promise<Resultado> {
       file_name: `${report.name}.pdf`,
       media_base64: report.pdf_base64,
       caption,
+      remetente_id: s.created_by ?? null,
       ...(s.mensagem?.trim() ? { text: s.mensagem.trim() } : {}),
     }),
   });
@@ -317,7 +320,8 @@ async function enviarAtualizado(s: ReportSchedule, hoje: string): Promise<Result
   ].join("\n");
 
   try {
-    await sendText(destino, texto);
+    const inst = await remetente({ userId: s.created_by ?? null, companyId: cliente.company_id });
+    await sendText(inst, destino, texto);
   } catch (err) {
     const erro = (err as Error).message || "Falha no envio pelo WhatsApp";
     await dbPatch(`reports?id=eq.${linha.id}`, { status: "error", erro_envio: erro.slice(0, 500) }).catch(() => {});
@@ -335,7 +339,7 @@ function processar(s: ReportSchedule, hoje: string) {
 // Colunas novas podem nao existir ainda (migration 20261012150000 pendente):
 // cai para a selecao antiga e tudo segue no modo de reenvio do ultimo PDF.
 async function lerAgendamentos(filtro: string): Promise<ReportSchedule[]> {
-  const novas = "id,tenant_id,client_id,cron,last_run_at,is_active,modo,periodo,metricas,mensagem,nome";
+  const novas = "id,tenant_id,client_id,cron,last_run_at,is_active,modo,periodo,metricas,mensagem,nome,created_by";
   try {
     return await dbGet<ReportSchedule[]>(`report_schedules?${filtro}&select=${novas}`);
   } catch {

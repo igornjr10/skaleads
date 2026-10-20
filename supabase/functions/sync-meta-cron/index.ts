@@ -3,7 +3,7 @@
 // run-alerts-cron e run-report-schedules. Sem o Authorization no cron
 // registrado, o gateway rejeita a chamada com 401 antes do handler rodar.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { sendText, whatsappConfigurado } from "../_shared/whatsapp.ts";
+import { remetente, sendText, whatsappConfigurado } from "../_shared/whatsapp.ts";
 import { tokensDosClientes } from "../_shared/meta-token.ts";
 import { fimDaCampanha, statusComPrazo } from "../_shared/prazo-campanha.ts";
 
@@ -715,13 +715,14 @@ function depositMessage(clientName: string, deposits: NewDeposit[], balanceCents
 }
 
 /** Numero do gestor da conta; cai no numero padrao quando o cliente nao tem gestor. */
-async function resolveManagerNumber(url: string, key: string, clientId: string): Promise<string | null> {
-  const [client] = await dbGet(url, key, `clients?id=eq.${clientId}&select=manager_id&limit=1`);
+async function resolveManagerNumber(url: string, key: string, clientId: string): Promise<{ number: string | null; companyId: string | null }> {
+  const [client] = await dbGet(url, key, `clients?id=eq.${clientId}&select=manager_id,company_id&limit=1`);
+  const companyId = (client?.company_id as string | undefined) ?? null;
   if (client?.manager_id) {
     const [manager] = await dbGet(url, key, `managers?id=eq.${client.manager_id}&select=whatsapp_number,is_active&limit=1`);
-    if (manager?.is_active && manager.whatsapp_number) return manager.whatsapp_number as string;
+    if (manager?.is_active && manager.whatsapp_number) return { number: manager.whatsapp_number as string, companyId };
   }
-  return Deno.env.get("MANAGER_WHATSAPP_NUMBER") || null;
+  return { number: Deno.env.get("MANAGER_WHATSAPP_NUMBER") || null, companyId };
 }
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
@@ -812,9 +813,11 @@ serve(async (req) => {
         // gravacao ele seria reenviado a cada hora.
         if (result.newDeposits.length > 0 && whatsappConfigured) {
           try {
-            const number = await resolveManagerNumber(supabaseUrl, svcKey, client.id);
+            const { number, companyId } = await resolveManagerNumber(supabaseUrl, svcKey, client.id);
             if (number) {
-              await sendText(number, depositMessage(client.name, result.newDeposits, result.balanceCents));
+              // Deposito nao tem criador: sai do numero padrao da empresa.
+              const inst = await remetente({ companyId });
+              await sendText(inst, number, depositMessage(client.name, result.newDeposits, result.balanceCents));
             }
           } catch (_err) { /* nao-bloqueante */ }
         }

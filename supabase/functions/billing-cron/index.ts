@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { sendText } from "../_shared/whatsapp.ts";
+import { remetente, sendText, type Instancia } from "../_shared/whatsapp.ts";
 import { getUser, hasAnyRole } from "../_shared/auth.ts";
 
 const corsHeaders = {
@@ -69,6 +69,23 @@ serve(async (req) => {
       throw new Error(`billing_due_reminders devolveu ${JSON.stringify(lembretes).slice(0, 200)}`);
     }
 
+    // Cobranca nao tem criador: sai do numero padrao da empresa do cliente.
+    const empresaDaFatura = new Map<string, string>();
+    if (lembretes.length) {
+      const ids = [...new Set(lembretes.map(l => l.invoice_id))].join(",");
+      const faturas = await fetch(
+        `${supabaseUrl}/rest/v1/invoices?id=in.(${ids})&select=id,client:clients(company_id)`,
+        { headers }
+      ).then(r => r.json()).catch(() => []);
+      for (const f of Array.isArray(faturas) ? faturas : []) if (f.client?.company_id) empresaDaFatura.set(f.id, f.client.company_id);
+    }
+    const numeros = new Map<string, Promise<Instancia>>();
+    const numeroDa = (invoiceId: string) => {
+      const empresa = empresaDaFatura.get(invoiceId) ?? "";
+      if (!numeros.has(empresa)) numeros.set(empresa, remetente({ companyId: empresa || null }));
+      return numeros.get(empresa)!;
+    };
+
     let enviados = 0;
     let falhas = 0;
     const detalhes: Array<{ cliente: string; offset: number; ok: boolean; erro?: string }> = [];
@@ -97,7 +114,7 @@ serve(async (req) => {
       let erro: string | null = null;
 
       try {
-        await sendText(item.destino, item.mensagem);
+        await sendText(await numeroDa(item.invoice_id), item.destino, item.mensagem);
         enviados++;
       } catch (err) {
         sucesso = false;

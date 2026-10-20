@@ -13,7 +13,7 @@
 // reimplementar o layout rico aqui e ficar com dois relatorios divergindo.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { corsHeaders, sendDocument, sendText } from "../_shared/whatsapp.ts";
+import { corsHeaders, remetente, sendDocument, sendText } from "../_shared/whatsapp.ts";
 import { encode as base64Encode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 import { PDFDocument, StandardFonts, rgb } from "npm:pdf-lib@1.17.1";
 import { guard } from "../_shared/auth.ts";
@@ -182,13 +182,14 @@ serve(async (req) => {
     // ── 1. Buscar cliente ─────────────────────────────────────────────────────
     const [client] = await dbGet(
       supabaseUrl, svcKey,
-      `clients?id=eq.${client_id}&select=id,name,whatsapp_number,whatsapp_group_jid,report_template&limit=1`
+      `clients?id=eq.${client_id}&select=id,name,company_id,whatsapp_number,whatsapp_group_jid,report_template&limit=1`
     );
 
     if (!client) throw new Error("Cliente não encontrado");
     const defaultTarget = client.whatsapp_group_jid || client.whatsapp_number;
     const targets = (targetsOverride && targetsOverride.length > 0) ? targetsOverride : (defaultTarget ? [defaultTarget] : []);
     if (targets.length === 0) throw new Error("Cliente sem número ou grupo de WhatsApp cadastrado");
+    const inst = await remetente({ userId: acesso.user?.id ?? null, companyId: client.company_id });
 
     const savedTemplate: ReportTemplate = client.report_template ?? {};
     const tpl: ReportTemplate = {
@@ -226,7 +227,7 @@ serve(async (req) => {
           success: false,
           error: `Sem metrica sincronizada para ${client.name} no periodo (${PERIOD_LABEL[tpl.period]}). Sincronize a conta antes de enviar: um relatorio zerado diz ao cliente que nao houve investimento.`,
         }),
-        { status: 409, headers: { ...cors, "Content-Type": "application/json" } }
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -331,7 +332,7 @@ serve(async (req) => {
     const textErrors: string[] = [];
     for (const target of targets) {
       try {
-        const result = await sendText(target, message);
+        const result = await sendText(inst, target, message);
         lastMessageId = result?.messageid ?? result?.id ?? lastMessageId;
       } catch (err) {
         textErrors.push(`${target}: ${(err as Error).message}`);
@@ -365,7 +366,7 @@ serve(async (req) => {
       const mediaBase64 = base64Encode(new Uint8Array(pdfBytes).buffer);
 
       for (const target of targets) {
-        await sendDocument(target, { base64: mediaBase64, fileName, caption: "" });
+        await sendDocument(inst, target, { base64: mediaBase64, fileName, caption: "" });
         pdfSent = true;
       }
     } catch (err) {
