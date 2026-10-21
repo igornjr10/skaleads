@@ -21,7 +21,9 @@ interface ScheduledMessage {
 }
 
 // Sai do WhatsApp de quem criou o agendamento; agendamento antigo, sem criador, do numero padrao.
-const remetenteDo = (item: ScheduledMessage) => remetente({ userId: item.created_by, companyId: item.company_id });
+const remetenteDo = (item: ScheduledMessage) => remetente({
+  userId: item.created_by, companyId: item.company_id, destino: item.target_group_jids,
+});
 
 function dbGet(supabaseUrl: string, svcKey: string, path: string) {
   return fetch(`${supabaseUrl}/rest/v1/${path}`, {

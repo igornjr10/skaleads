@@ -297,8 +297,8 @@ export default function WhatsappScheduled() {
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2">{item.message}</p>
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Users className="h-3 w-3" />
-                    <span className="truncate">{groupNames(item.target_group_jids)}</span>
+                    <Users className="h-3 w-3 shrink-0" />
+                    <span className="min-w-0 truncate">{groupNames(item.target_group_jids)}</span>
                   </div>
                   {item.last_sent_date && (
                     <p className="text-xs text-muted-foreground">Último envio: {item.last_sent_date}</p>

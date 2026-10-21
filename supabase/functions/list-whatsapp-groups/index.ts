@@ -1,9 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, listGroups, remetente } from "../_shared/whatsapp.ts";
-import { guard } from "../_shared/auth.ts";
+import { companyIdsOf, guard } from "../_shared/auth.ts";
 
 // Grupos do WhatsApp de quem pergunta: e desse numero que sai o que for
-// configurado com o grupo (alerta, relatorio, agendamento).
+// configurado com o grupo (alerta, relatorio, agendamento). Quem nao conectou
+// ve os do numero padrao, que e de onde o envio para grupo dele vai sair.
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -15,7 +16,8 @@ serve(async (req) => {
 
   try {
     if (!acesso.user) throw new Error("Listar grupos precisa de uma pessoa logada");
-    const groups = await listGroups(await remetente({ userId: acesso.user.id }));
+    const [companyId] = await companyIdsOf(acesso.user.id);
+    const groups = await listGroups(await remetente({ userId: acesso.user.id, companyId, destino: "@g.us" }));
     return new Response(
       JSON.stringify({ success: true, groups }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

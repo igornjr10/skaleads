@@ -74,7 +74,7 @@ serve(async (req) => {
     }
 
     const message = buildMessage(payload);
-    const inst = await remetente({ userId: acesso.user?.id ?? null, companyId });
+    const inst = await remetente({ userId: acesso.user?.id ?? null, companyId, destino: targets });
 
     // Envia para todos e so falha se ninguem recebeu — um numero quebrado nao
     // pode fazer o teste parecer que nada foi enviado.

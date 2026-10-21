@@ -320,7 +320,7 @@ async function enviarAtualizado(s: ReportSchedule, hoje: string): Promise<Result
   ].join("\n");
 
   try {
-    const inst = await remetente({ userId: s.created_by ?? null, companyId: cliente.company_id });
+    const inst = await remetente({ userId: s.created_by ?? null, companyId: cliente.company_id, destino });
     await sendText(inst, destino, texto);
   } catch (err) {
     const erro = (err as Error).message || "Falha no envio pelo WhatsApp";
