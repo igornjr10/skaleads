@@ -384,7 +384,7 @@ serve(async (req) => {
             const targets = await resolveTargets(channels.whatsappTarget || managerNumber, alert.company_id);
             const message = buildWhatsAppMessage(alert, firedEntities);
             // Sai do WhatsApp de quem criou o alerta.
-            const inst = await remetente({ userId: alert.created_by, companyId: alert.company_id });
+            const inst = await remetente({ userId: alert.created_by, companyId: alert.company_id, destino: targets });
             // Um numero invalido nao pode calar os outros: cada envio tem o
             // proprio catch, e o que falhou vai para o log da execucao.
             for (const target of targets) {

@@ -55,6 +55,7 @@ serve(async (req) => {
     const inst = await remetente({
       userId: acesso.user?.id ?? (acesso.service ? remetente_id ?? null : null),
       companyId: client.company_id,
+      destino: target,
     });
 
     // O resumo vai como mensagem separada e ANTES do anexo, nao como legenda:

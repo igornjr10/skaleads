@@ -189,7 +189,7 @@ serve(async (req) => {
     const defaultTarget = client.whatsapp_group_jid || client.whatsapp_number;
     const targets = (targetsOverride && targetsOverride.length > 0) ? targetsOverride : (defaultTarget ? [defaultTarget] : []);
     if (targets.length === 0) throw new Error("Cliente sem número ou grupo de WhatsApp cadastrado");
-    const inst = await remetente({ userId: acesso.user?.id ?? null, companyId: client.company_id });
+    const inst = await remetente({ userId: acesso.user?.id ?? null, companyId: client.company_id, destino: targets });
 
     const savedTemplate: ReportTemplate = client.report_template ?? {};
     const tpl: ReportTemplate = {

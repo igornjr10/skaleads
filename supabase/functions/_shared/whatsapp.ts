@@ -75,15 +75,24 @@ export async function instanciaPadrao(companyId: string): Promise<Instancia | nu
  * De onde sai um envio. Com pessoa (quem clicou ou quem criou o alerta, a
  * rotina, o agendamento) sai do numero dela, e sem numero conectado falha:
  * mandar de outro numero seria falar em nome de outra pessoa. Sem pessoa
- * (cobranca, aviso de deposito) sai do numero padrao da empresa.
+ * (cobranca, aviso de deposito) sai do numero padrao da empresa. Para grupo,
+ * quem nao conectou cai no padrao da empresa.
  */
-export async function remetente(opts: { userId?: string | null; companyId?: string | null }): Promise<Instancia> {
+export async function remetente(opts: {
+  userId?: string | null;
+  companyId?: string | null;
+  destino?: string | string[] | null;
+}): Promise<Instancia> {
   if (opts.userId) {
     const inst = await instanciaDoUsuario(opts.userId);
-    if (!inst) throw new SemInstancia(
+    if (inst) return inst;
+    // Grupo do cliente era falado pelo numero da agencia antes de cada um ter o seu.
+    const destinos = [opts.destino ?? []].flat();
+    const padrao = destinos.some(ehGrupo) && opts.companyId ? await instanciaPadrao(opts.companyId) : null;
+    if (padrao) return padrao;
+    throw new SemInstancia(
       "Quem criou este envio não tem WhatsApp conectado. Conecte em Configurações > WhatsApp"
     );
-    return inst;
   }
   const inst = opts.companyId ? await instanciaPadrao(opts.companyId) : null;
   if (!inst) throw new SemInstancia(
@@ -221,8 +230,24 @@ export async function resolveTargets(
   return [...new Set((rows ?? []).map((r: any) => r.whatsapp_number).filter(Boolean) as string[])];
 }
 
+export const ehGrupo = (destino: string) => destino.endsWith("@g.us");
+
+// O grupo foi escolhido na lista de um numero: se o de quem criou nao participa
+// dele, a uazapi recusa e o numero padrao da empresa (o antigo da agencia) envia.
+async function enviar(inst: Instancia, destino: string, path: string, body: object) {
+  const init = { method: "POST", body: JSON.stringify(body) };
+  try {
+    return await call(inst, path, init);
+  } catch (err) {
+    if (!ehGrupo(destino) || inst.padrao) throw err;
+    const padrao = await instanciaPadrao(inst.company_id);
+    if (!padrao || padrao.id === inst.id) throw err;
+    return await call(padrao, path, init);
+  }
+}
+
 export function sendText(inst: Instancia, number: string, text: string) {
-  return call(inst, "/send/text", { method: "POST", body: JSON.stringify({ number, text }) });
+  return enviar(inst, number, "/send/text", { number, text });
 }
 
 /** URL publica da midia de uma mensagem recebida. A uazapi guarda por 2 dias e gera outra a cada chamada. */
@@ -246,10 +271,7 @@ export function sendDocument(
   // `file`. Se o servidor recusar, o plano B e subir o PDF no Storage e mandar
   // a URL publica aqui — o campo aceita os dois.
   const file = opts.base64.startsWith("data:") ? opts.base64 : `data:${mime};base64,${opts.base64}`;
-  return call(inst, "/send/media", {
-    method: "POST",
-    body: JSON.stringify({ number, type: "document", file, docName: opts.fileName, text: opts.caption ?? "" }),
-  });
+  return enviar(inst, number, "/send/media", { number, type: "document", file, docName: opts.fileName, text: opts.caption ?? "" });
 }
 
 export interface WhatsappGroup {
