@@ -90,7 +90,7 @@ export function AppLayout() {
 
         <AppSidebar />
 
-        <div className="relative flex min-h-screen flex-1 flex-col">
+        <div className="relative flex min-h-screen min-w-0 flex-1 flex-col">
           {/* ── Top bar ───────────────────────────────────────── */}
           <header className="sticky top-0 z-30 mx-2 mt-2 flex h-14 items-center gap-3 rounded-2xl border border-white/[0.06] bg-background/65 px-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-xl">
             <SidebarTrigger className="shrink-0 rounded-xl text-muted-foreground hover:bg-white/[0.04] hover:text-foreground" />
