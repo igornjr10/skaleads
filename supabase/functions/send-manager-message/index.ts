@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { corsHeaders, remetente, sendText } from "../_shared/whatsapp.ts";
-import { getUser, isServiceRole } from "../_shared/auth.ts";
+import { companyIdsOf, getUser, isServiceRole } from "../_shared/auth.ts";
 
 interface RequestPayload {
   targets: string[];
@@ -26,8 +26,8 @@ serve(async (req) => {
     const { targets, text, remetente_id, company_id }: RequestPayload = await req.json();
     // Pessoa logada fala sempre do proprio numero; so chamada interna escolhe.
     const inst = user
-      ? await remetente({ userId: user.id })
-      : await remetente({ userId: remetente_id ?? null, companyId: company_id ?? null });
+      ? await remetente({ userId: user.id, companyId: (await companyIdsOf(user.id))[0] ?? null, destino: targets })
+      : await remetente({ userId: remetente_id ?? null, companyId: company_id ?? null, destino: targets });
     if (!targets || targets.length === 0) throw new Error("Selecione ao menos um destino");
     if (!text || !text.trim()) throw new Error("Mensagem vazia");
 

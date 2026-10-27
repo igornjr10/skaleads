@@ -4228,6 +4228,17 @@ export type Database = {
         }
         Returns: boolean
       }
+      relatorio_compartilhado: {
+        Args: { _token: string }
+        Returns: {
+          data: Json
+          id: string
+          name: string
+          period: Json
+          share_token: string
+          view_count: number
+        }[]
+      }
       increment_report_views: {
         Args: { p_share_token: string }
         Returns: undefined

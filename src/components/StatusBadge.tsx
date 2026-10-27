@@ -7,6 +7,7 @@ const styles: Record<string, string> = {
   PAUSED: "bg-warning/15 text-warning border-warning/30",
   DELETED: "bg-destructive/15 text-destructive border-destructive/30",
   COMPLETED: "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  ARCHIVED: "bg-muted text-muted-foreground border-border",
 };
 
 const labels: Record<string, string> = {
@@ -14,6 +15,7 @@ const labels: Record<string, string> = {
   PAUSED: "Pausado",
   DELETED: "Excluído",
   COMPLETED: "Concluída",
+  ARCHIVED: "Arquivado",
 };
 
 export function StatusBadge({ status }: { status: Status }) {

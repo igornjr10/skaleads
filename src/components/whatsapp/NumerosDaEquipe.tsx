@@ -79,7 +79,16 @@ export function NumerosDaEquipe({ onMudou }: { onMudou?: () => void }) {
     }
   }, [empresa?.id]);
 
-  useEffect(() => { carregar(); }, [carregar]);
+  // O "conectado" do banco so muda quando alguem consulta: confere todos ao abrir,
+  // senao o painel mostra conectado um numero que caiu dias atras (e vice-versa).
+  useEffect(() => {
+    carregar().then(async () => {
+      const { data } = await supabase.from("wa_instancias").select("id").eq("company_id", empresa?.id ?? "");
+      if (!data?.length) return;
+      await Promise.allSettled(data.map((n) => chamar("whatsapp-instance-status", { instancia_id: n.id })));
+      await carregar();
+    });
+  }, [carregar]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function agir(id: string, rotulo: string, fazer: () => Promise<unknown>) {
     setOcupado(id);

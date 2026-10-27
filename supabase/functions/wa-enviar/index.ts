@@ -63,7 +63,7 @@ serve(async (req) => {
       );
       if (!ultimaDoGrupo) return json({ error: "Seu WhatsApp não participa desse grupo" }, 404);
 
-      const enviado = await sendText(inst, jid, texto);
+      const enviado = await sendText(inst, jid, texto, { semPadrao: true });
       const [mensagem] = await inserir<any[]>("wa_mensagens", {
         company_id: ultimaDoGrupo.company_id,
         instancia_id: inst.id,
@@ -94,7 +94,7 @@ serve(async (req) => {
     const numero = numeroParaEnvio(ultima?.telefone ?? lead?.whatsapp ?? lead?.telefone);
     if (!numero) return json({ error: "Número inválido" }, 400);
 
-    const enviado = await sendText(inst, numero, texto);
+    const enviado = await sendText(inst, numero, texto, { semPadrao: true });
     const leadId = lead?.id ?? ultima?.lead_id ?? null;
 
     const [mensagem] = await inserir<any[]>("wa_mensagens", {

@@ -234,20 +234,21 @@ export const ehGrupo = (destino: string) => destino.endsWith("@g.us");
 
 // O grupo foi escolhido na lista de um numero: se o de quem criou nao participa
 // dele, a uazapi recusa e o numero padrao da empresa (o antigo da agencia) envia.
-async function enviar(inst: Instancia, destino: string, path: string, body: object) {
+// Resposta manual passa `semPadrao`: ela fica gravada no numero de quem escreveu.
+async function enviar(inst: Instancia, destino: string, path: string, body: object, semPadrao = false) {
   const init = { method: "POST", body: JSON.stringify(body) };
   try {
     return await call(inst, path, init);
   } catch (err) {
-    if (!ehGrupo(destino) || inst.padrao) throw err;
+    if (semPadrao || !ehGrupo(destino) || inst.padrao) throw err;
     const padrao = await instanciaPadrao(inst.company_id);
     if (!padrao || padrao.id === inst.id) throw err;
     return await call(padrao, path, init);
   }
 }
 
-export function sendText(inst: Instancia, number: string, text: string) {
-  return enviar(inst, number, "/send/text", { number, text });
+export function sendText(inst: Instancia, number: string, text: string, opts: { semPadrao?: boolean } = {}) {
+  return enviar(inst, number, "/send/text", { number, text }, opts.semPadrao);
 }
 
 /** URL publica da midia de uma mensagem recebida. A uazapi guarda por 2 dias e gera outra a cada chamada. */
