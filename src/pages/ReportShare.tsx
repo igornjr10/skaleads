@@ -63,11 +63,9 @@ export default function ReportShare() {
   }, [token]);
 
   async function fetchReport() {
-    const { data, error } = await supabase
-      .from("reports")
-      .select("id, name, data, period, share_token, view_count")
-      .eq("share_token", token!)
-      .single();
+    // So por funcao: a tabela nao abre para o anon, senao qualquer um listaria todos os links.
+    const { data: linhas, error } = await supabase.rpc("relatorio_compartilhado", { _token: token! });
+    const data = linhas?.[0];
 
     if (error || !data) {
       setNotFound(true);
@@ -75,7 +73,7 @@ export default function ReportShare() {
       return;
     }
 
-    setReport(data as SharedReport);
+    setReport(data as unknown as SharedReport);
     setLoading(false);
 
     supabase.rpc("increment_report_views", { p_share_token: token! }).then(() => {});

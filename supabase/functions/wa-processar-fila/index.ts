@@ -58,7 +58,7 @@ async function processarRemetente(companyId: string, criadoPor: string | null, i
   const itens = await db<any[]>(
     `wa_fila?company_id=eq.${companyId}&${filtroDoRemetente}&status=eq.pendente&enviar_apos=lte.${new Date().toISOString()}` +
       `&select=*,crm_leads(id,contato_nome,empresa,cidade,segmento,whatsapp,telefone),wa_disparos(nome,status),wa_inscricoes(status,sequencia_id,wa_sequencias(nome,ativa))` +
-      `&order=enviar_apos&limit=${Math.min(restante, 20)}`
+      `&order=enviar_apos&limit=200`
   );
 
   let enviados = 0;

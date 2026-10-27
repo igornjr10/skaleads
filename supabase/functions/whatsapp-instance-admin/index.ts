@@ -64,8 +64,14 @@ serve(async (req) => {
       if (!empresas.length) return json({ error: "Seu usuário não está em nenhuma empresa" }, 400);
       const garantida = await garantirInstancia(user.id, empresas[0], user.email?.split("@")[0] ?? "usuario");
       inst = garantida.inst;
-      // Instancia nova sem webhook conecta mas nao recebe nada na caixa.
-      if (garantida.criada) await configureWebhook(inst, webhookUrl());
+      // Sem webhook o numero conecta mas nada chega na caixa. Religa a cada
+      // conexao (e idempotente): se falhou na criacao, a proxima tentativa conserta.
+      try {
+        await configureWebhook(inst, webhookUrl());
+      } catch (err) {
+        if (garantida.criada) throw err;
+        console.warn("whatsapp-instance-admin: webhook", (err as Error).message);
+      }
     } else {
       inst = await instanciaDoUsuario(user.id);
       if (!inst) throw new SemInstancia();

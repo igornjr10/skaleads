@@ -136,7 +136,7 @@ serve(async (req) => {
     // ── Chamada de cron (sem test_id): exige o segredo do pg_cron ──────────────
     if (!testId) {
       const cronSecret = Deno.env.get("CRON_SECRET");
-      if (cronSecret && req.headers.get("x-cron-secret") !== cronSecret) {
+      if (!cronSecret || req.headers.get("x-cron-secret") !== cronSecret) {
         runSuccess = false;
         runError = "Unauthorized";
         return new Response(JSON.stringify({ error: "Unauthorized" }), {
